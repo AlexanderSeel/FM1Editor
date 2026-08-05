@@ -12,8 +12,6 @@
 ## 2. Application foundation
 
 - [ ] Add ESLint and accessibility checks.
-- [ ] Add a timestamped incoming/outgoing MIDI monitor with filtering and export.
-- [ ] Persist selected ports and reconnect them safely when browser/device state changes.
 - [ ] Add application-level undo/redo and unsaved-change protection.
 - [ ] Add installable PWA metadata and offline application caching.
 
