@@ -15,8 +15,6 @@ Interoperability references:
 - Yamaha DX7 SysEx format documentation and implementations
 - Yamaha Black Boxes DX7 patch archive: https://yamahablackboxes.com/collection/yamaha-dx7-synthesizer/patches/
 
-Third-party patch files are not vendored or redistributed by this project.
-
 ## Documented channel behavior
 
 - **Note channel:** defaults to All/Omni and receives musical/performance messages.
@@ -98,13 +96,20 @@ Implemented by `encodeFm1ParameterWrite()` in `src/midi/fm1Protocol.ts`.
 
 ### Critical limitation
 
-The official two-page MIDI document does **not** provide a semantic table mapping parameter IDs 0–155 to operator, envelope, algorithm, LFO or performance fields. The code can generate the documented frame, but the current DX7 edit-buffer-byte-to-FM-1-parameter mapping is intentionally named and presented as experimental. It must not be enabled as a normal live-edit workflow until verified on real hardware.
+The official MIDI document does **not** provide a semantic table mapping parameter IDs 0–155 to operator, envelope, algorithm, LFO or performance fields. A DX7 unpacked byte offset must not be assumed to be the same thing as an FM-1 parameter ID.
 
-## Hardware observation: isolated single-voice bulk dump
+Individual live voice edits remain disabled until a semantic map is documented or captured and verified on physical hardware.
 
-On 2026-08-05, a physical FM-1 became silent after the editor sent a standard 163-byte Yamaha DX7 single-voice message. The exact FM-1 firmware version was not recorded, so this is an observed compatibility failure rather than a complete firmware matrix.
+## Rejected immediate single-voice approaches
 
-The application no longer uses that message for immediate audition. The recovery UI sends a documented Program Change to recall a known preset, and the replacement experimental push sends the 155 edit-buffer values as individually paced FM-1 parameter-write messages. The parameter-ID semantics still require hardware verification.
+Two approaches were tested on a physical FM-1 on 2026-08-05. Both left the active sound silent:
+
+1. a standard 163-byte Yamaha DX7 single-voice message;
+2. 155 individually paced FM-1 parameter-write messages populated from DX7 unpacked edit-buffer byte offsets 0–154.
+
+The exact FM-1 firmware version was not recorded and remains required for the compatibility record. Regardless, both transports are removed from the normal UI and transfer module. They must not be reintroduced without a verified protocol.
+
+Recovery remains limited to documented Program Change preset recall and normal MIDI note testing.
 
 ## DX7 voice and bank interoperability
 
@@ -116,7 +121,34 @@ The application implements standard Yamaha DX7 data structures:
 - 4,096-byte bank payload / 4,104-byte complete SysEx message;
 - Yamaha seven-bit checksum validation.
 
-The FM-1 manual is reported to support importing standard 32-voice Yamaha DX7 banks and placing them into destination banks A, B, C or D. This must still be verified against a physical FM-1 and recorded with the device firmware version before the web UI exposes a destructive bank-send action as verified.
+The FM-1 manual describes importing a standard 32-voice Yamaha DX7 bank and then choosing destination bank A, B, C or D on the device.
+
+### Guarded bank-merge workflow
+
+The editor now supports the only credible single-voice replacement workflow available without a device edit-buffer protocol:
+
+1. load an exact 32-voice base or backup bank in the app;
+2. select a slot and edit its voice;
+3. merge the edited voice into that same slot while preserving the other 31 app-side voices;
+4. export the unchanged base bank as a recovery copy;
+5. optionally export the merged bank for inspection;
+6. send one checksum-valid 4,104-byte DX7 bank message after explicit whole-bank overwrite confirmation;
+7. choose the matching A/B/C/D destination on the FM-1;
+8. recall the derived preset after the device confirms the save.
+
+Bank A/B/C/D plus slot 1–32 maps to presets 1–128 in the editor.
+
+### Remaining hardware boundary
+
+The FM-1 does not expose a documented bank-read request. Therefore the application cannot automatically recall the current 32 voices from the device. The loaded base bank must be the exact bank that should be preserved.
+
+Physical verification is still required for:
+
+- the destination prompt and A/B/C/D mapping;
+- preservation of the other 31 voices;
+- target-preset playback after save;
+- transfer acknowledgements or completion detection;
+- any device-originated bank dump capability.
 
 ## Sequencer boundary
 
