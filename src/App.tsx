@@ -1,8 +1,9 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { BankBrowser } from './components/BankBrowser'
 import { CollapsibleSection } from './components/CollapsibleSection'
 import { ConnectionPanel } from './components/ConnectionPanel'
 import { EffectsEditor } from './components/EffectsEditor'
+import { HistoryControls } from './components/HistoryControls'
 import { MidiMonitor } from './components/MidiMonitor'
 import { PatchCatalogBrowser } from './components/PatchCatalogBrowser'
 import { PatchLibrary } from './components/PatchLibrary'
@@ -10,26 +11,78 @@ import { SequenceEditor } from './components/SequenceEditor'
 import { SysexToolbar } from './components/SysexToolbar'
 import { VoiceAuditionPanel } from './components/VoiceAuditionPanel'
 import { VoiceEditor } from './components/VoiceEditor'
-import { createInitializedFxState, type Fm1FxState } from './domain/fx'
-import { createInitializedSequence, type Fm1Sequence } from './domain/sequence'
+import { createInitializedFxState } from './domain/fx'
+import { createInitializedSequence } from './domain/sequence'
 import { createInitializedVoice, type Dx7Voice } from './domain/voice'
 import { useMidi } from './hooks/useMidi'
 import { usePatchLibrary } from './hooks/usePatchLibrary'
+import { useUndoableState } from './hooks/useUndoableState'
 
 type Workspace = 'voice' | 'library' | 'effects' | 'sequencer'
+
+function isTextEditingTarget(target: EventTarget | null): boolean {
+  return target instanceof HTMLInputElement
+    || target instanceof HTMLTextAreaElement
+    || target instanceof HTMLSelectElement
+    || (target instanceof HTMLElement && target.isContentEditable)
+}
 
 export default function App() {
   const midi = useMidi()
   const patchLibrary = usePatchLibrary()
   const [workspace, setWorkspace] = useState<Workspace>('voice')
-  const [voice, setVoice] = useState<Dx7Voice>(() => createInitializedVoice())
+  const voiceHistory = useUndoableState(() => createInitializedVoice())
+  const effectsHistory = useUndoableState(() => createInitializedFxState())
+  const sequenceHistory = useUndoableState(() => createInitializedSequence())
   const [bank, setBank] = useState<readonly Dx7Voice[]>([])
   const [selectedBankSlot, setSelectedBankSlot] = useState<number | null>(null)
-  const [effects, setEffects] = useState<Fm1FxState>(() => createInitializedFxState())
-  const [sequence, setSequence] = useState<Fm1Sequence>(() => createInitializedSequence())
 
-  const selectVoiceForAudition = (nextVoice: Dx7Voice, bankSlot: number | null = null) => {
-    setVoice(nextVoice)
+  const voice = voiceHistory.value
+  const effects = effectsHistory.value
+  const sequence = sequenceHistory.value
+  const activeHistory = workspace === 'voice'
+    ? voiceHistory
+    : workspace === 'effects'
+      ? effectsHistory
+      : workspace === 'sequencer'
+        ? sequenceHistory
+        : null
+  const hasUnsavedChanges = voiceHistory.dirty || effectsHistory.dirty || sequenceHistory.dirty
+
+  useEffect(() => {
+    const handleBeforeUnload = (event: BeforeUnloadEvent) => {
+      if (!hasUnsavedChanges) return
+      event.preventDefault()
+      event.returnValue = ''
+    }
+    window.addEventListener('beforeunload', handleBeforeUnload)
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload)
+  }, [hasUnsavedChanges])
+
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (!activeHistory || !(event.ctrlKey || event.metaKey) || event.altKey || isTextEditingTarget(event.target)) return
+      const key = event.key.toLowerCase()
+      const wantsUndo = key === 'z' && !event.shiftKey
+      const wantsRedo = key === 'y' || (key === 'z' && event.shiftKey)
+      if (wantsUndo && activeHistory.canUndo) {
+        event.preventDefault()
+        activeHistory.undo()
+      } else if (wantsRedo && activeHistory.canRedo) {
+        event.preventDefault()
+        activeHistory.redo()
+      }
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [activeHistory])
+
+  const confirmDiscardVoiceChanges = (action: string): boolean => !voiceHistory.dirty || window.confirm(
+    `The current voice has unsaved changes. ${action} will discard those changes. Continue?`,
+  )
+
+  const loadVoiceDocument = (nextVoice: Dx7Voice, bankSlot: number | null = null) => {
+    voiceHistory.reset(nextVoice)
     setSelectedBankSlot(bankSlot)
   }
 
@@ -50,15 +103,18 @@ export default function App() {
         : `${sequence.length} steps · ${sequence.bpm} BPM · MIDI channel ${sequence.midiChannel}`
 
   const loadCatalogBank = (voices: readonly Dx7Voice[]) => {
+    if (!confirmDiscardVoiceChanges('Loading another bank')) return
     setBank(voices)
     const first = voices[0]
-    if (first) selectVoiceForAudition(first, 0)
+    if (first) loadVoiceDocument(first, 0)
+    else setSelectedBankSlot(null)
     setWorkspace('voice')
   }
 
   const loadCatalogVoice = (nextVoice: Dx7Voice) => {
+    if (!confirmDiscardVoiceChanges('Loading another voice')) return
     setBank([])
-    selectVoiceForAudition(nextVoice)
+    loadVoiceDocument(nextVoice)
     setWorkspace('voice')
   }
 
@@ -125,30 +181,46 @@ export default function App() {
                   <h2 className="mt-1 truncate text-2xl font-bold text-white">{workspaceTitle}</h2>
                   <p className="mt-1 text-sm text-slate-500">{workspaceSummary}</p>
                 </div>
-                {workspace === 'voice' && (
-                  <SysexToolbar
-                    onImportBank={(voices) => {
-                      setBank(voices)
-                      const first = voices[0]
-                      if (first) selectVoiceForAudition(first, 0)
-                    }}
-                    onImportToLibrary={(voices, filename) => patchLibrary.importVoices(voices, {
-                      kind: 'file',
-                      label: 'Local SysEx import',
-                      importedAt: new Date().toISOString(),
-                      filename,
-                    })}
-                    onImportVoice={(nextVoice) => {
-                      setBank([])
-                      selectVoiceForAudition(nextVoice)
-                    }}
-                    onNewVoice={() => {
-                      setBank([])
-                      selectVoiceForAudition(createInitializedVoice())
-                    }}
-                    voice={voice}
-                  />
-                )}
+                <div className="flex min-w-0 flex-wrap items-start justify-end gap-3">
+                  {activeHistory && (
+                    <HistoryControls
+                      canRedo={activeHistory.canRedo}
+                      canUndo={activeHistory.canUndo}
+                      dirty={activeHistory.dirty}
+                      onRedo={activeHistory.redo}
+                      onUndo={activeHistory.undo}
+                    />
+                  )}
+                  {workspace === 'voice' && (
+                    <SysexToolbar
+                      onExportVoice={voiceHistory.markSaved}
+                      onImportBank={(voices) => {
+                        if (!confirmDiscardVoiceChanges('Importing another bank')) return
+                        setBank(voices)
+                        const first = voices[0]
+                        if (first) loadVoiceDocument(first, 0)
+                        else setSelectedBankSlot(null)
+                      }}
+                      onImportToLibrary={(voices, filename) => patchLibrary.importVoices(voices, {
+                        kind: 'file',
+                        label: 'Local SysEx import',
+                        importedAt: new Date().toISOString(),
+                        filename,
+                      })}
+                      onImportVoice={(nextVoice) => {
+                        if (!confirmDiscardVoiceChanges('Importing another voice')) return
+                        setBank([])
+                        loadVoiceDocument(nextVoice)
+                      }}
+                      onNewVoice={() => {
+                        if (!confirmDiscardVoiceChanges('Creating a new patch')) return
+                        setBank([])
+                        loadVoiceDocument(createInitializedVoice())
+                      }}
+                      voice={voice}
+                    />
+                  )}
+                </div>
               </div>
             </div>
 
@@ -163,7 +235,10 @@ export default function App() {
                     >
                       <BankBrowser
                         onChange={setBank}
-                        onSelect={(nextVoice, index) => selectVoiceForAudition(nextVoice, index)}
+                        onSelect={(nextVoice, index) => {
+                          if (!confirmDiscardVoiceChanges(`Loading bank slot ${index + 1}`)) return
+                          loadVoiceDocument(nextVoice, index)
+                        }}
                         selectedIndex={selectedBankSlot}
                         voices={bank}
                       />
@@ -187,7 +262,7 @@ export default function App() {
                     storageKey="voice-editor"
                     title="Voice editor"
                   >
-                    <VoiceEditor onChange={setVoice} voice={voice} />
+                    <VoiceEditor onChange={voiceHistory.setValue} voice={voice} />
                   </CollapsibleSection>
                 </>
               ) : workspace === 'library' ? (
@@ -216,7 +291,11 @@ export default function App() {
                       onExportBackup={patchLibrary.exportBackup}
                       onLoad={loadCatalogVoice}
                       onRestoreBackup={patchLibrary.restoreBackup}
-                      onSaveCurrent={patchLibrary.saveCurrentVoice}
+                      onSaveCurrent={async (currentVoice) => {
+                        const result = await patchLibrary.saveCurrentVoice(currentVoice)
+                        voiceHistory.markSaved()
+                        return result
+                      }}
                       onToggleFavorite={patchLibrary.toggleFavorite}
                       onUpdateTags={patchLibrary.updateTags}
                       records={patchLibrary.records}
@@ -229,7 +308,7 @@ export default function App() {
                   storageKey="effects-controls"
                   title="Effects controls"
                 >
-                  <EffectsEditor onChange={setEffects} output={midi.output} state={effects} />
+                  <EffectsEditor onChange={effectsHistory.setValue} output={midi.output} state={effects} />
                 </CollapsibleSection>
               ) : (
                 <CollapsibleSection
@@ -237,14 +316,14 @@ export default function App() {
                   storageKey="sequencer-editor"
                   title="Sequence editor"
                 >
-                  <SequenceEditor onChange={setSequence} output={midi.output} sequence={sequence} />
+                  <SequenceEditor onChange={sequenceHistory.setValue} output={midi.output} sequence={sequence} />
                 </CollapsibleSection>
               )}
             </div>
           </section>
 
           <footer className="flex flex-wrap items-center justify-between gap-2 px-2 text-xs text-slate-500">
-            <span>Current milestone: viewport-safe layout, tracked SysEx catalog, explicit bank merge transfer and virtual piano.</span>
+            <span>Current milestone: collapsible workspaces, application history, guarded bank merge transfer and virtual piano.</span>
             <span>Physical FM-1 bank-import verification and device readback remain pending.</span>
           </footer>
         </main>
