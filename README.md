@@ -13,16 +13,45 @@ A TypeScript web editor and librarian for the **M-VAVE FM-1** pocket FM synthesi
 - drag-and-drop, multi-file and folder ingestion for `.syx` and `.sysex` files;
 - `.syx` single-voice export plus draggable 32-slot bank reordering and bank export;
 - persistent IndexedDB patch library with semantic duplicate detection, tags, favorites, search and A/B parameter comparison;
-- attributed external source registry with a Yamaha Black Boxes browser entry;
-- guarded user-triggered direct HTTPS SysEx URL imports with CORS, extension and 2 MB size checks;
+- direct in-app browser for the `sysexFinal.zip` collection, indexed by source folder, bank and voice name;
+- build-time parser for the Yamaha Black Boxes DX7 page and mirror of every discovered direct `.syx` link;
+- merged ZIP/website catalog: matching website banks use the ZIP copy while website-only banks use the mirrored source file;
+- catalog checksum diagnostics, archive SHA-256 verification, source/availability filters and paginated bank grid;
 - graphical six-operator voice editor with amplitude/pitch envelope views, operator frequency/level/scaling controls, algorithm, feedback and LFO controls;
 - documented FM-1 parameter-write, CC, note, program and real-time message encoders;
+- documented FM-1 effects workspace for filter, reverb, delay, distortion, chorus and phaser CC 0–23;
 - local 16-step sequence editor with note/rest/tie, velocity, gate, tempo, swing, length and MIDI channel;
 - versioned sequence JSON load/save and scheduled Web MIDI playback through the monitored output adapter;
-- Vitest coverage for DX7 codecs, FM-1 message framing, sequence scheduling, library logic, bank reordering, MIDI monitoring and remote-import safeguards;
+- Vitest coverage for DX7 codecs, FM-1 message framing, effects, sequence scheduling, library logic, catalog merging, bank reordering, MIDI monitoring and remote-import safeguards;
 - GitHub Actions workflow for typecheck, tests and production build.
 
 See [`PLAN.md`](./PLAN.md) for unresolved work.
+
+## Merged patch catalog
+
+The catalog uses the supplied `sysexFinal.zip` archive as its base and merges it with the banks parsed from the Yamaha Black Boxes DX7 patch page.
+
+Current archive audit:
+
+- 1,304 `.syx` files after excluding macOS metadata;
+- 1,288 checksum-valid standard DX7 32-voice banks;
+- 14 standard-size banks with checksum diagnostics;
+- 2 unsupported 4,084-byte files retained only for diagnostics;
+- 35 Yamaha Black Boxes bank links represented in the catalog;
+- 28 website banks matched to a ZIP bank by filename;
+- 7 website-only banks represented by mirrored/direct source files.
+
+The application does not show a button that sends the user to the Yamaha patch page. Banks appear directly in the application grid and load into the voice workspace and local library.
+
+Generated catalog files are not checked into Git because they are derived third-party assets. Synchronize them with:
+
+```bash
+npm run catalog:sync
+```
+
+The production `prebuild` hook performs the same synchronization in best-effort mode. It parses the provider page rather than relying only on a manually maintained list, mirrors discovered files into `public/catalog`, and keeps the original source URLs in the generated manifest. See [`docs/research/patch-catalog.md`](./docs/research/patch-catalog.md).
+
+Patch ownership and usage permissions vary across the archive. FM1 Editor preserves source metadata and does not claim that every included bank is public domain. Review the generated manifest and source terms before publishing a hosted catalog.
 
 ## Hardware verification boundary
 
@@ -30,6 +59,7 @@ The official FM-1 MIDI document defines a single-parameter write frame and param
 
 - `.syx` file parsing, editing and export are normal supported workflows;
 - MIDI note/transport playback uses documented messages;
+- the effects workspace uses the documented FX-channel CC 0–23 map, but physical-device behavior is not yet recorded;
 - live voice parameter writes remain explicitly experimental;
 - destructive FM-1 bank transfer is not exposed as verified yet;
 - internal FM-1 sequencer dump/restore is not implemented because no documented pattern protocol was found.
@@ -42,37 +72,34 @@ Detailed protocol findings are recorded in [`docs/research/fm1-midi-protocol.md`
 
 - connect through Web MIDI with SysEx access;
 - design and audition six-operator FM voices;
-- import, inspect, edit and export DX7-compatible `.syx` patches and banks;
+- import, browse, inspect, edit and export DX7-compatible `.syx` patches and banks;
 - organize a searchable local patch library;
-- browse attributed external patch sources without redistributing third-party collections;
 - transfer verified banks to FM-1 destinations A/B/C/D;
 - control documented FM-1 filter and effects CCs;
 - create, save and play sequences from the browser;
 - add device-side pattern transfer only if a stable protocol is documented or hardware-verified.
 
-## External sources and downloads
-
-The built-in source registry links to providers rather than mirroring their files. A direct URL import is only attempted after explicit user action and only for an HTTPS URL ending in `.syx` or `.sysex`. Browser CORS policy still applies.
+## Sources
 
 Official product and firmware documentation:
 
 - https://www.m-vave.com/product?id=fm-1
 - https://www.m-vave.com/download
 
-Reference DX7 patch archive used for interoperability research:
+Patch catalog sources:
 
+- https://github.com/probonopd/MiniDexed/files/11312517/sysexFinal.zip
 - https://yamahablackboxes.com/collection/yamaha-dx7-synthesizer/patches/
-
-The application does **not** redistribute third-party patch collections. Users import files they are permitted to use, or use source/provider-approved catalog endpoints configured by the application.
 
 ## Technology
 
 - React + TypeScript + Vite
 - Tailwind CSS
 - Web MIDI API with `sysex: true`
+- `fflate` for browser-side ZIP indexing and selective bank extraction
 - framework-independent DX7/FM-1 protocol and file-format modules
 - IndexedDB-backed local patch library
-- Vitest for protocol, codec, scheduling, library and import tests
+- Vitest for protocol, codec, scheduling, library and catalog tests
 
 A desktop wrapper such as Tauri remains possible because device protocol, storage and UI state are kept behind adapters.
 
@@ -84,6 +111,7 @@ Web MIDI and SysEx require a compatible Chromium-based browser, a secure context
 
 ```bash
 npm install
+npm run catalog:sync
 npm run dev
 ```
 
@@ -97,4 +125,4 @@ npm run build
 
 ## License
 
-MIT. Yamaha, DX7, M-VAVE and FM-1 are trademarks of their respective owners. This is an independent community project and is not affiliated with or endorsed by them.
+Application source code is MIT licensed. Yamaha, DX7, M-VAVE and FM-1 are trademarks of their respective owners. Third-party patch banks are not covered by the application source-code license. This is an independent community project and is not affiliated with or endorsed by the referenced manufacturers or patch providers.
