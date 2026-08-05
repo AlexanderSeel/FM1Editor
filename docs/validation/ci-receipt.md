@@ -1,13 +1,14 @@
 # CI validation receipt
 
-- Validated commit: `30a2ad80ad683d6b9c1c32109eea102150a6581a`
+- Validation revision: `3`
+- Validated commit: `b44ac9c0344bea7c7ce329b0b7c62dba66ae8763`
 - Node: `v22.23.1`
 - npm install: **PASS**
 - tracked archive SHA-256: **PASS**
 - tracked archive ZIP integrity: **PASS**
-- npm run typecheck: **FAIL (2)**
-- npm run test: **FAIL (1)**
-- npm run build: **FAIL (2)**
+- npm run typecheck: **PASS**
+- npm run test: **PASS**
+- npm run build: **PASS**
 
 Expected archive SHA-256: `fde5aad29b215aa3ea67e9f57bf55d4443cc6efe7562d6cb6dc375b3c780b263`
 
@@ -17,7 +18,7 @@ Actual archive SHA-256: `fde5aad29b215aa3ea67e9f57bf55d4443cc6efe7562d6cb6dc375b
 
 ```text
 
-added 70 packages in 9s
+added 70 packages in 10s
 
 ```
 
@@ -194,7 +195,6 @@ No errors detected in compressed data of public/catalog/sysexFinal.zip.
 > fm1-editor@0.1.0 typecheck
 > tsc -b --pretty false
 
-tsconfig.node.json(7,35): error TS5096: Option 'allowImportingTsExtensions' can only be used when either 'noEmit' or 'emitDeclarationOnly' is set.
 
 ```
 
@@ -208,50 +208,23 @@ tsconfig.node.json(7,35): error TS5096: Option 'allowImportingTsExtensions' can 
 
 [1m[30m[46m RUN [49m[39m[22m [36mv4.1.10 [39m[90m/home/runner/work/FM1Editor/FM1Editor[39m
 
- [31m❯[39m src/sysex/dx7.test.ts [2m([22m[2m5 tests[22m[2m | [22m[31m1 failed[39m[2m)[22m[32m 20[2mms[22m[39m
-     [32m✓[39m returns the masked two-complement checksum[32m 2[2mms[22m[39m
-[31m     [31m×[31m round-trips the editable voice model[39m[32m 7[2mms[22m[39m
-     [32m✓[39m rejects a modified payload with a stale checksum[32m 1[2mms[22m[39m
-     [32m✓[39m encodes and decodes 32 packed voices[32m 5[2mms[22m[39m
-     [32m✓[39m extracts multiple messages and classifies known DX7 formats[32m 3[2mms[22m[39m
- [32m✓[39m src/library/model.test.ts [2m([22m[2m4 tests[22m[2m)[22m[32m 30[2mms[22m[39m
- [32m✓[39m src/catalog/patchCatalog.test.ts [2m([22m[2m3 tests[22m[2m)[22m[32m 37[2mms[22m[39m
- [32m✓[39m src/midi/monitor.test.ts [2m([22m[2m3 tests[22m[2m)[22m[32m 6[2mms[22m[39m
- [32m✓[39m src/catalog/catalogManifest.test.ts [2m([22m[2m2 tests[22m[2m)[22m[32m 18[2mms[22m[39m
- [32m✓[39m src/midi/fxProtocol.test.ts [2m([22m[2m3 tests[22m[2m)[22m[32m 7[2mms[22m[39m
+ [32m✓[39m src/library/model.test.ts [2m([22m[2m4 tests[22m[2m)[22m[32m 26[2mms[22m[39m
+ [32m✓[39m src/sysex/dx7.test.ts [2m([22m[2m5 tests[22m[2m)[22m[32m 19[2mms[22m[39m
+ [32m✓[39m src/catalog/patchCatalog.test.ts [2m([22m[2m3 tests[22m[2m)[22m[32m 25[2mms[22m[39m
+ [32m✓[39m src/catalog/catalogManifest.test.ts [2m([22m[2m2 tests[22m[2m)[22m[32m 14[2mms[22m[39m
+ [32m✓[39m src/midi/monitor.test.ts [2m([22m[2m3 tests[22m[2m)[22m[32m 8[2mms[22m[39m
+ [32m✓[39m src/midi/fxProtocol.test.ts [2m([22m[2m3 tests[22m[2m)[22m[32m 10[2mms[22m[39m
  [32m✓[39m src/midi/fm1Protocol.test.ts [2m([22m[2m4 tests[22m[2m)[22m[32m 7[2mms[22m[39m
- [32m✓[39m src/catalog/remoteSysex.test.ts [2m([22m[2m2 tests[22m[2m)[22m[32m 98[2mms[22m[39m
  [32m✓[39m src/midi/sequenceScheduler.test.ts [2m([22m[2m1 test[22m[2m)[22m[32m 5[2mms[22m[39m
- [32m✓[39m src/catalog/trackedArchive.test.ts [2m([22m[2m1 test[22m[2m)[22m[33m 308[2mms[22m[39m
-     [33m[2m✓[22m[39m is the exact audited ZIP and indexes all supported banks [33m 306[2mms[22m[39m
- [32m✓[39m src/domain/bank.test.ts [2m([22m[2m2 tests[22m[2m)[22m[32m 4[2mms[22m[39m
+ [32m✓[39m src/catalog/trackedArchive.test.ts [2m([22m[2m1 test[22m[2m)[22m[32m 223[2mms[22m[39m
+ [32m✓[39m src/domain/bank.test.ts [2m([22m[2m2 tests[22m[2m)[22m[32m 5[2mms[22m[39m
+ [32m✓[39m src/catalog/remoteSysex.test.ts [2m([22m[2m2 tests[22m[2m)[22m[32m 267[2mms[22m[39m
 
-[31m⎯⎯⎯⎯⎯⎯⎯[39m[1m[41m Failed Tests 1 [49m[22m[31m⎯⎯⎯⎯⎯⎯⎯[39m
+[2m Test Files [22m [1m[32m11 passed[39m[22m[90m (11)[39m
+[2m      Tests [22m [1m[32m30 passed[39m[22m[90m (30)[39m
+[2m   Start at [22m 09:16:32
+[2m   Duration [22m 1.27s[2m (transform 590ms, setup 0ms, import 826ms, tests 609ms, environment 2ms)[22m
 
-[41m[1m FAIL [22m[49m src/sysex/dx7.test.ts[2m > [22mDX7 single voice[2m > [22mround-trips the editable voice model
-[31m[1mAssertionError[22m: expected 'TEST VOICE' to be 'TEST VOIC' // Object.is equality[39m
-
-Expected: [32m"TEST VOIC"[39m
-Received: [31m"TEST VOIC[7mE[27m"[39m
-
-[36m [2m❯[22m src/sysex/dx7.test.ts:[2m27:32[22m[39m
-    [90m 25|[39m     [34mexpect[39m(message)[33m.[39m[34mtoHaveLength[39m([34m163[39m)
-    [90m 26|[39m     [34mexpect[39m(decoded[33m.[39mchannel)[33m.[39m[34mtoBe[39m([34m3[39m)
-    [90m 27|[39m     [34mexpect[39m(decoded[33m.[39mvoice[33m.[39mname)[33m.[39m[34mtoBe[39m([32m'TEST VOIC'[39m)
-    [90m   |[39m                                [31m^[39m
-    [90m 28|[39m     [34mexpect[39m(decoded[33m.[39mvoice[33m.[39malgorithm)[33m.[39m[34mtoBe[39m([34m1[39m)
-    [90m 29|[39m     [34mexpect[39m(decoded[33m.[39mvoice[33m.[39moperators[[34m0[39m][33m.[39moutputLevel)[33m.[39m[34mtoBe[39m([34m99[39m)
-
-[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯[22m[39m
-
-
-[2m Test Files [22m [1m[31m1 failed[39m[22m[2m | [22m[1m[32m10 passed[39m[22m[90m (11)[39m
-[2m      Tests [22m [1m[31m1 failed[39m[22m[2m | [22m[1m[32m29 passed[39m[22m[90m (30)[39m
-[2m   Start at [22m 09:14:22
-[2m   Duration [22m 1.04s[2m (transform 290ms, setup 0ms, import 563ms, tests 540ms, environment 2ms)[22m
-
-
-::error file=/home/runner/work/FM1Editor/FM1Editor/src/sysex/dx7.test.ts,title=src/sysex/dx7.test.ts > DX7 single voice > round-trips the editable voice model,line=27,column=32::AssertionError: expected 'TEST VOICE' to be 'TEST VOIC' // Object.is equality%0A%0AExpected: "TEST VOIC"%0AReceived: "TEST VOICE"%0A%0A ❯ src/sysex/dx7.test.ts:27:32%0A%0A
 
 ```
 
@@ -267,6 +240,14 @@ Patch catalog synchronized: 35 website banks merged with the tracked sysexFinal.
 > fm1-editor@0.1.0 build
 > tsc -b && vite build
 
-tsconfig.node.json(7,35): error TS5096: Option 'allowImportingTsExtensions' can only be used when either 'noEmit' or 'emitDeclarationOnly' is set.
+[36mvite v8.2.0 [32mbuilding client environment for production...[36m[39m
+[2Ktransforming...✓ 50 modules transformed.
+rendering chunks...
+computing gzip size...
+dist/index.html                   0.55 kB │ gzip:  0.34 kB
+dist/assets/index-C2pRH41v.css   30.01 kB │ gzip:  6.05 kB
+dist/assets/index-DKb61b4R.js   281.74 kB │ gzip: 86.62 kB
+
+[32m✓ built in 192ms[39m
 
 ```
