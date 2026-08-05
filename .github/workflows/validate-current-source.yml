@@ -15,7 +15,7 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  VALIDATION_REVISION: '7'
+  VALIDATION_REVISION: '8'
 
 jobs:
   validate:
