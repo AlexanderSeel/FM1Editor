@@ -58,13 +58,13 @@ The Yamaha Black Boxes overlay currently represents:
 
 The application does not show a button that sends the user to the Yamaha patch page. Banks appear directly in the application grid and load into the voice workspace and local library.
 
-`npm run catalog:sync` validates the tracked ZIP, parses the provider page, mirrors discovered website-only SysEx files into `public/catalog/yamaha-black-boxes`, and writes `public/catalog/sync-manifest.json`. It never replaces or downloads `sysexFinal.zip`.
+`npm run catalog:sync` validates the tracked ZIP, parses the provider page, validates every downloaded website bank, mirrors valid website-only SysEx files into `public/catalog/yamaha-black-boxes`, and writes `public/catalog/sync-manifest.json`. It never replaces or downloads `sysexFinal.zip`.
 
 ```bash
 npm run catalog:sync
 ```
 
-The production `prebuild` hook performs the website synchronization in best-effort mode. The tracked ZIP remains available even when the provider page is temporarily unavailable. See [`docs/research/patch-catalog.md`](./docs/research/patch-catalog.md).
+Both `npm run dev` and `npm run build` execute the synchronization in best-effort mode before Vite starts. This prevents a missing `.syx` mirror path from being answered by Vite's SPA fallback `index.html`. When no validated sync manifest exists, runtime loading skips the local mirror and attempts the direct source instead.
 
 Patch ownership and usage permissions vary across the archive. FM1 Editor preserves source metadata and does not claim that every included bank is public domain. Review the generated manifest and source terms before publishing a hosted catalog.
 
@@ -78,106 +78,3 @@ The Voice workspace therefore uses this guarded workflow:
 2. Select the slot to edit in the bank grid.
 3. Edit the selected voice.
 4. Choose destination bank A/B/C/D. The selected slot and bank determine preset 1–128.
-5. Export the unchanged base bank as a recovery copy.
-6. Optionally export the merged bank for inspection.
-7. Click **Send merged 32-voice bank** and accept the whole-bank overwrite confirmation.
-8. On the FM-1 destination screen, choose the same A/B/C/D bank.
-9. After the FM-1 confirms the save, use **Recall target preset**, **Test C4** or the virtual piano.
-
-The application replaces exactly one selected slot and preserves the other 31 voices from the loaded base bank. It cannot retrieve those voices from the FM-1, so the loaded base bank must be correct.
-
-Both attempted isolated-voice methods are disabled after physical tests left the FM-1 active sound silent:
-
-- a 163-byte Yamaha DX7 single-voice bulk message;
-- a guessed byte-index stream through FM-1 parameter IDs 0–154.
-
-Neither method will be re-enabled without a verified semantic FM-1 parameter map or documented edit-buffer protocol.
-
-## SysEx diagnostics
-
-The import analyzer scans every complete `F0 … F7` message and reports:
-
-- ignored bytes outside messages;
-- stray `F7` bytes and nested `F0` starts;
-- trailing incomplete messages;
-- unsupported message lengths, manufacturer IDs and format bytes;
-- DX7 decoding and checksum failures with exact offsets.
-
-The UI displays these diagnostics per file while still importing valid complete voices from a mixed file. The strict `importSysexFile` API remains available for callers that must reject structurally incomplete input.
-
-## Hardware verification boundary
-
-The official FM-1 MIDI document defines a single-parameter write frame and parameter IDs 0–155, but it does not publish a semantic parameter map. Consequently:
-
-- `.syx` parsing, editing, local storage and export are normal supported workflows;
-- MIDI note/transport playback and preset recall use documented messages;
-- the effects workspace uses the documented FX-channel CC 0–23 map, but physical-device behavior is not yet fully recorded;
-- isolated single-voice and guessed byte-index parameter transfers are disabled;
-- the guarded standard 32-voice bank merge/send workflow is implemented but still requires physical verification on the user's FM-1 and firmware;
-- device-originated bank readback/backup is unavailable until a supported dump request is identified;
-- internal FM-1 sequencer dump/restore is not implemented because no documented pattern protocol was found.
-
-Physical-device tests must record the FM-1 firmware version and must not be reported as passed unless actually executed.
-
-Detailed protocol findings are recorded in [`docs/research/fm1-midi-protocol.md`](./docs/research/fm1-midi-protocol.md).
-
-## Intended complete workflow
-
-- connect through Web MIDI with SysEx access;
-- design and audition six-operator FM voices;
-- import, browse, inspect, edit and export DX7-compatible `.syx` patches and banks;
-- organize, back up and restore a searchable local patch library;
-- merge one edited voice into an exact 32-voice base bank and transfer it to FM-1 destination A/B/C/D;
-- control documented FM-1 filter and effects CCs;
-- create, save and play sequences from the browser;
-- add device-originated backup and pattern transfer only if stable protocols are documented or hardware-verified.
-
-## Sources
-
-Official product and firmware documentation:
-
-- https://www.m-vave.com/product?id=fm-1
-- https://www.m-vave.com/download
-
-Catalog provenance:
-
-- tracked archive: [`public/catalog/sysexFinal.zip`](./public/catalog/sysexFinal.zip)
-- source-compatible archive reference: https://github.com/probonopd/MiniDexed/files/11312517/sysexFinal.zip
-- website overlay: https://yamahablackboxes.com/collection/yamaha-dx7-synthesizer/patches/
-
-## Technology
-
-- React + TypeScript + Vite
-- Tailwind CSS
-- Web MIDI API with `sysex: true`
-- `fflate` for browser-side ZIP indexing and selective bank extraction
-- framework-independent DX7/FM-1 protocol and file-format modules
-- IndexedDB-backed local patch library
-- Vitest for protocol, codec, scheduling, library and catalog tests
-
-A desktop wrapper such as Tauri remains possible because device protocol, storage and UI state are kept behind adapters.
-
-## Browser requirements
-
-Web MIDI and SysEx require a compatible Chromium-based browser, a secure context (`https://` or `localhost`) and explicit user permission. Browser support and device behavior will be documented from real hardware tests.
-
-## Development
-
-```bash
-npm install
-npm run catalog:sync
-npm run dev
-```
-
-Quality checks:
-
-```bash
-npm run typecheck
-npm run lint
-npm run test
-npm run build
-```
-
-## License
-
-Application source code is MIT licensed. Yamaha, DX7, M-VAVE and FM-1 are trademarks of their respective owners. Third-party patch banks are not covered by the application source-code license. This is an independent community project and is not affiliated with or endorsed by the referenced manufacturers or patch providers.
