@@ -13,9 +13,10 @@ A TypeScript web editor and librarian for the **M-VAVE FM-1** pocket FM synthesi
 - drag-and-drop, multi-file and folder ingestion for `.syx` and `.sysex` files;
 - `.syx` single-voice export plus draggable 32-slot bank reordering and bank export;
 - persistent IndexedDB patch library with semantic duplicate detection, tags, favorites, search and A/B parameter comparison;
-- direct in-app browser for the `sysexFinal.zip` collection, indexed by source folder, bank and voice name;
+- the supplied `public/catalog/sysexFinal.zip` tracked directly in the repository as the catalog source;
+- direct in-app ZIP browser indexed by source folder, bank and voice name;
 - build-time parser for the Yamaha Black Boxes DX7 page and mirror of every discovered direct `.syx` link;
-- merged ZIP/website catalog: matching website banks use the ZIP copy while website-only banks use the mirrored source file;
+- merged ZIP/website catalog: matching website banks use the tracked ZIP copy while website-only banks use the mirrored source file;
 - catalog checksum diagnostics, archive SHA-256 verification, source/availability filters and paginated bank grid;
 - graphical six-operator voice editor with amplitude/pitch envelope views, operator frequency/level/scaling controls, algorithm, feedback and LFO controls;
 - documented FM-1 parameter-write, CC, note, program and real-time message encoders;
@@ -29,27 +30,32 @@ See [`PLAN.md`](./PLAN.md) for unresolved work.
 
 ## Merged patch catalog
 
-The catalog uses the supplied `sysexFinal.zip` archive as its base and merges it with the banks parsed from the Yamaha Black Boxes DX7 patch page.
+The catalog uses the supplied [`public/catalog/sysexFinal.zip`](./public/catalog/sysexFinal.zip) file as its only ZIP source. The browser does not download or substitute a remote archive at runtime.
 
-Current archive audit:
+Tracked archive identity:
 
+- size: 2,785,215 bytes;
+- SHA-256: `fde5aad29b215aa3ea67e9f57bf55d4443cc6efe7562d6cb6dc375b3c780b263`;
 - 1,304 `.syx` files after excluding macOS metadata;
 - 1,288 checksum-valid standard DX7 32-voice banks;
 - 14 standard-size banks with checksum diagnostics;
-- 2 unsupported 4,084-byte files retained only for diagnostics;
-- 35 Yamaha Black Boxes bank links represented in the catalog;
-- 28 website banks matched to a ZIP bank by filename;
+- 2 unsupported 4,084-byte files retained only for diagnostics.
+
+The Yamaha Black Boxes overlay currently represents:
+
+- 35 website bank links;
+- 28 banks matched to a ZIP bank by filename;
 - 7 website-only banks represented by mirrored/direct source files.
 
 The application does not show a button that sends the user to the Yamaha patch page. Banks appear directly in the application grid and load into the voice workspace and local library.
 
-Generated catalog files are not checked into Git because they are derived third-party assets. Synchronize them with:
+`npm run catalog:sync` validates the tracked ZIP, parses the provider page, mirrors discovered website-only SysEx files into `public/catalog/yamaha-black-boxes`, and writes `public/catalog/sync-manifest.json`. It never replaces or downloads `sysexFinal.zip`.
 
 ```bash
 npm run catalog:sync
 ```
 
-The production `prebuild` hook performs the same synchronization in best-effort mode. It parses the provider page rather than relying only on a manually maintained list, mirrors discovered files into `public/catalog`, and keeps the original source URLs in the generated manifest. See [`docs/research/patch-catalog.md`](./docs/research/patch-catalog.md).
+The production `prebuild` hook performs the website synchronization in best-effort mode. The tracked ZIP remains available even when the provider page is temporarily unavailable. See [`docs/research/patch-catalog.md`](./docs/research/patch-catalog.md).
 
 Patch ownership and usage permissions vary across the archive. FM1 Editor preserves source metadata and does not claim that every included bank is public domain. Review the generated manifest and source terms before publishing a hosted catalog.
 
@@ -86,10 +92,11 @@ Official product and firmware documentation:
 - https://www.m-vave.com/product?id=fm-1
 - https://www.m-vave.com/download
 
-Patch catalog sources:
+Catalog provenance:
 
-- https://github.com/probonopd/MiniDexed/files/11312517/sysexFinal.zip
-- https://yamahablackboxes.com/collection/yamaha-dx7-synthesizer/patches/
+- tracked archive: [`public/catalog/sysexFinal.zip`](./public/catalog/sysexFinal.zip)
+- source-compatible archive reference: https://github.com/probonopd/MiniDexed/files/11312517/sysexFinal.zip
+- website overlay: https://yamahablackboxes.com/collection/yamaha-dx7-synthesizer/patches/
 
 ## Technology
 
