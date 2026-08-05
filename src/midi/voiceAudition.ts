@@ -18,6 +18,7 @@ export interface Fm1VoiceParameterWrite {
 }
 
 export interface VoiceSendOptions {
+  noteChannel?: number
   parameterIntervalMs?: number
   onProgress?: (completed: number, total: number) => void
   wait?: (milliseconds: number) => Promise<void>
@@ -79,14 +80,16 @@ export async function sendVoiceToFm1(
   voice: Dx7Voice,
   options: VoiceSendOptions = {},
 ): Promise<VoiceSendResult> {
+  const noteChannel = options.noteChannel ?? 1
   const parameterIntervalMs = options.parameterIntervalMs ?? DEFAULT_PARAMETER_INTERVAL_MS
   const wait = options.wait ?? defaultWait
+  assertMidiChannel(noteChannel)
   assertParameterInterval(parameterIntervalMs)
 
   const writes = buildFm1VoiceParameterWrites(voice)
   await output.open()
   output.clear?.()
-  output.send(encodeAllNotesOff(1))
+  output.send(encodeAllNotesOff(noteChannel))
 
   const startedAt = performance.now()
   for (let index = 0; index < writes.length; index += 1) {
