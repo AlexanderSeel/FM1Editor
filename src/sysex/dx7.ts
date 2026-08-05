@@ -311,17 +311,17 @@ export function encodePackedVoice(voice: Dx7Voice): Uint8Array {
     data[offset + 9] = operator.keyboardScaling.leftDepth
     data[offset + 10] = operator.keyboardScaling.rightDepth
     data[offset + 11] =
-      (data[offset + 11] & 0x80) |
+      ((data[offset + 11] ?? 0) & 0x80) |
       writeCurve(operator.keyboardScaling.leftCurve) |
       (writeCurve(operator.keyboardScaling.rightCurve) << 2) |
       (operator.keyboardScaling.rateScaling << 4)
     data[offset + 12] =
-      (data[offset + 12] & 0x60) |
+      ((data[offset + 12] ?? 0) & 0x60) |
       operator.amplitudeModulationSensitivity |
       (operator.keyVelocitySensitivity << 2)
     data[offset + 13] = operator.outputLevel
     data[offset + 14] =
-      (data[offset + 14] & 0x40) |
+      ((data[offset + 14] ?? 0) & 0x40) |
       (operator.oscillatorMode === 'fixed' ? 1 : 0) |
       (operator.frequencyCoarse << 1)
     data[offset + 15] = operator.frequencyFine
@@ -331,13 +331,13 @@ export function encodePackedVoice(voice: Dx7Voice): Uint8Array {
   writeRange(data, 102, voice.pitchEnvelope.rates)
   writeRange(data, 106, voice.pitchEnvelope.levels)
   data[110] = voice.algorithm - 1
-  data[111] = (data[111] & 0x70) | voice.feedback | (voice.oscillatorKeySync ? 0x08 : 0)
+  data[111] = ((data[111] ?? 0) & 0x70) | voice.feedback | (voice.oscillatorKeySync ? 0x08 : 0)
   data[112] = voice.lfo.speed
   data[113] = voice.lfo.delay
   data[114] = voice.lfo.pitchModulationDepth
   data[115] = voice.lfo.amplitudeModulationDepth
   data[116] =
-    (data[116] & 0x80) |
+    ((data[116] ?? 0) & 0x80) |
     (voice.lfo.keySync ? 1 : 0) |
     (writeWaveform(voice.lfo.waveform) << 1) |
     (voice.lfo.pitchModulationSensitivity << 4)
