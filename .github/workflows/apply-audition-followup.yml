@@ -1,0 +1,93 @@
+name: Apply audition protocol follow-up
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/apply-audition-followup.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: apply-audition-followup
+  cancel-in-progress: false
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Update protocol boundary and callback dependencies
+        shell: python
+        run: |
+          from pathlib import Path
+
+          panel = Path('src/components/VoiceAuditionPanel.tsx')
+          text = panel.read_text(encoding='utf-8')
+          text = text.replace(
+              "  const beginAction = (action: Exclude<BusyAction, null>) => {\n    setBusyAction(action)\n    setError(null)\n    setStatus(null)\n  }\n\n  const requireOutput = (): MidiOutputTarget | null => {\n    if (output) return output\n    setError('Connect and select an FM-1 MIDI output first.')\n    return null\n  }\n",
+              "  const beginAction = useCallback((action: Exclude<BusyAction, null>) => {\n    setBusyAction(action)\n    setError(null)\n    setStatus(null)\n  }, [])\n\n  const requireOutput = useCallback((): MidiOutputTarget | null => {\n    if (output) return output\n    setError('Connect and select an FM-1 MIDI output first.')\n    return null\n  }, [output])\n",
+          )
+          text = text.replace(
+              "  }, [busyAction, midiChannel, output, sysexEnabled, voice])\n",
+              "  }, [beginAction, busyAction, midiChannel, requireOutput, sysexEnabled, voice])\n",
+          )
+          panel.write_text(text, encoding='utf-8')
+
+          readme = Path('README.md')
+          text = readme.read_text(encoding='utf-8')
+          text = text.replace('persistent IndexedDB schema-v2 patch library', 'persistent IndexedDB schema-v3 patch library')
+          text = text.replace(
+              '- experimental push of the current voice as a standard 163-byte Yamaha single-voice SysEx message;',
+              '- experimental paced push of 155 DX7 edit-buffer values through the documented FM-1 single-parameter SysEx frame;',
+          )
+          text = text.replace(
+              '3. Use **Push voice to FM-1**, or enable **Auto-push selections**.\n4. Play notes on the virtual piano with mouse, touch or the focused A–; computer-key range.\n5. Use **All notes off** if a note remains active after a device or browser interruption.\n\nVoice push sends a checksum-valid Yamaha single-voice message on the selected MIDI channel. This transport is intentionally marked experimental because physical FM-1 acceptance has not yet been recorded. The virtual piano uses normal MIDI note-on, note-off and CC 123 all-notes-off messages.',
+              '3. Recall a known preset and use **Test C4** to verify the selected output and note channel.\n4. Use **Push voice parameters**, or enable **Auto-push bank/library selections**.\n5. Play notes on the virtual piano with mouse, touch or the focused A–; computer-key range.\n6. Use **Recall preset** or **All notes off** to recover from an invalid edit buffer or stuck note.\n\nThe former 163-byte Yamaha single-voice bulk send was removed after a physical FM-1 became silent after receiving it. Voice push now emits 155 individually paced `F0 43 10 pp qq vv F7` parameter writes. The byte-index mapping remains experimental until confirmed against the device. Preset recall uses documented Program Change messages; the virtual piano uses normal MIDI note-on, note-off and CC 123 all-notes-off messages.',
+          )
+          text = text.replace(
+              '- Yamaha single-voice push is implemented but remains explicitly experimental until tested on the FM-1;\n- live voice parameter writes remain explicitly experimental;',
+              '- isolated Yamaha single-voice bulk push is disabled after it produced a silent active sound on physical hardware;\n- the paced FM-1 parameter stream remains explicitly experimental until its 0–154 byte-index mapping is verified;',
+          )
+          readme.write_text(text, encoding='utf-8')
+
+          research = Path('docs/research/fm1-midi-protocol.md')
+          text = research.read_text(encoding='utf-8')
+          marker = '## DX7 voice and bank interoperability\n'
+          observation = """## Hardware observation: isolated single-voice bulk dump\n\nOn 2026-08-05, a physical FM-1 became silent after the editor sent a standard 163-byte Yamaha DX7 single-voice message. The exact FM-1 firmware version was not recorded, so this is an observed compatibility failure rather than a complete firmware matrix.\n\nThe application no longer uses that message for immediate audition. The recovery UI sends a documented Program Change to recall a known preset, and the replacement experimental push sends the 155 edit-buffer values as individually paced FM-1 parameter-write messages. The parameter-ID semantics still require hardware verification.\n\n"""
+          if observation not in text:
+              text = text.replace(marker, observation + marker)
+          research.write_text(text, encoding='utf-8')
+
+          plan = Path('PLAN.md')
+          text = plan.read_text(encoding='utf-8')
+          text = text.replace(
+              '- [ ] Verify on physical FM-1 hardware whether Yamaha DX7 single-voice dumps are accepted into the active edit buffer and become immediately playable; document the tested firmware version.\n',
+              '- [ ] Record the firmware version and reproduce/recover the observed silent edit buffer caused by an isolated Yamaha DX7 single-voice dump; keep that transport disabled.\n- [ ] Verify whether the paced 0–154 FM-1 parameter stream recreates a selected voice correctly and remains playable after all writes complete.\n',
+          )
+          text = text.replace(
+              '- [ ] Capture FM-1 MIDI traffic for live parameter edits, program changes, single-voice pushes, bank imports and A/B/C/D destination selection.',
+              '- [ ] Capture FM-1 MIDI traffic for live parameter edits, program changes, paced parameter streams, bank imports and A/B/C/D destination selection.',
+          )
+          text = text.replace(
+              '- [ ] Add hardware-safe pacing, retry, cancellation and recovery behavior for long SysEx transfers.',
+              '- [ ] Add cancellation and retry around the paced parameter stream and long bank transfers; preset recall and progress are implemented.',
+          )
+          plan.write_text(text, encoding='utf-8')
+
+      - name: Commit follow-up
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add src/components/VoiceAuditionPanel.tsx README.md docs/research/fm1-midi-protocol.md PLAN.md
+          git commit -m 'docs(audition): record FM-1 single-voice failure'
+          git push origin HEAD:main
