@@ -2,8 +2,9 @@
 
 ## 1. FM-1 protocol verification
 
+- [ ] Verify on physical FM-1 hardware whether Yamaha DX7 single-voice dumps are accepted into the active edit buffer and become immediately playable; document the tested firmware version.
 - [ ] Verify on physical FM-1 hardware whether standard Yamaha DX7 32-voice bulk dumps are accepted byte-for-byte and document the tested firmware version.
-- [ ] Capture FM-1 MIDI traffic for live parameter edits, program changes, bank imports and A/B/C/D destination selection.
+- [ ] Capture FM-1 MIDI traffic for live parameter edits, program changes, single-voice pushes, bank imports and A/B/C/D destination selection.
 - [ ] Derive and verify the semantic meaning of FM-1 parameter IDs 0–155; keep byte-index live editing experimental until proven.
 - [ ] Determine whether the FM-1 can transmit voice dumps or only receive them.
 - [ ] Determine whether sequencer patterns expose a stable MIDI/SysEx dump and restore protocol.
@@ -11,13 +12,12 @@
 
 ## 2. Application foundation
 
-- [ ] Add ESLint and accessibility checks.
+- [ ] Add ESLint and automated accessibility checks.
 - [ ] Add application-level undo/redo and unsaved-change protection.
 - [ ] Add installable PWA metadata and offline application caching.
 
 ## 3. Voice library and SysEx explorer
 
-- [ ] Add IndexedDB schema migration and local library backup/restore.
 - [ ] Add adapters for additional providers only when they publish stable, permission-compatible machine-readable catalogs.
 - [ ] Add a catalog release audit that records source hashes, changed files and unresolved rights metadata before deployment.
 
@@ -49,6 +49,7 @@
 
 - [ ] Add legal/public-domain or user-provided SysEx fixtures and broader codec compatibility tests.
 - [ ] Add property-based round-trip tests for all valid parameter ranges and preserved reserved bits.
-- [ ] Test Chrome and Edge on Windows with a physical FM-1 over USB MIDI; test BLE MIDI where browser/platform support permits.
+- [ ] Test the viewport-safe sidebar and virtual piano in Chrome and Edge at desktop, tablet and narrow mobile widths.
+- [ ] Test Chrome and Edge on Windows with a physical FM-1 over USB MIDI, including voice push, note-off recovery and channel selection; test BLE MIDI where browser/platform support permits.
 - [ ] Add GitHub Pages deployment after secure-context routing and Web MIDI behavior are verified.
 - [ ] Document firmware-specific limitations, recovery steps and tested hardware/browser combinations.
