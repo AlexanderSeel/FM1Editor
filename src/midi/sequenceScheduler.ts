@@ -1,6 +1,6 @@
 import type { Fm1Sequence } from '../domain/sequence'
 import { validateSequence } from '../domain/sequence'
-import { encodeNoteOff, encodeNoteOn, encodeRealtimeMessage } from './fm1Protocol'
+import { encodeAllNotesOff, encodeNoteOff, encodeNoteOn, encodeRealtimeMessage } from './fm1Protocol'
 import type { MidiOutputTarget } from './output'
 
 export interface ScheduledMidiEvent {
@@ -66,11 +66,6 @@ export function scheduleSequence(output: MidiOutputTarget, sequence: Fm1Sequence
 
 export function stopSequence(output: MidiOutputTarget, midiChannel: number): void {
   output.clear?.()
-  output.send(encodeControlAllNotesOff(midiChannel))
+  output.send(encodeAllNotesOff(midiChannel))
   output.send(encodeRealtimeMessage('stop'))
-}
-
-function encodeControlAllNotesOff(channel: number): Uint8Array {
-  if (!Number.isInteger(channel) || channel < 1 || channel > 16) throw new RangeError('MIDI channel must be from 1 to 16.')
-  return Uint8Array.of(0xb0 | (channel - 1), 123, 0)
 }
