@@ -17,7 +17,6 @@
 
 ## 3. Voice library and SysEx explorer
 
-- [ ] Add richer per-message diagnostics for malformed and mixed multi-message SysEx imports.
 - [ ] Add IndexedDB schema migration and local library backup/restore.
 - [ ] Add adapters for additional providers only when they publish stable, permission-compatible machine-readable catalogs.
 - [ ] Add a catalog release audit that records source hashes, changed files and unresolved rights metadata before deployment.
