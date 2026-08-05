@@ -2,13 +2,14 @@
 
 ## 1. FM-1 protocol verification
 
-- [ ] Verify on physical FM-1 hardware whether Yamaha DX7 single-voice dumps are accepted into the active edit buffer and become immediately playable; document the tested firmware version.
+- [ ] Record the firmware version and reproduce/recover the observed silent edit buffer caused by an isolated Yamaha DX7 single-voice dump; keep that transport disabled.
+- [ ] Verify whether the paced 0–154 FM-1 parameter stream recreates a selected voice correctly and remains playable after all writes complete.
 - [ ] Verify on physical FM-1 hardware whether standard Yamaha DX7 32-voice bulk dumps are accepted byte-for-byte and document the tested firmware version.
-- [ ] Capture FM-1 MIDI traffic for live parameter edits, program changes, single-voice pushes, bank imports and A/B/C/D destination selection.
+- [ ] Capture FM-1 MIDI traffic for live parameter edits, program changes, paced parameter streams, bank imports and A/B/C/D destination selection.
 - [ ] Derive and verify the semantic meaning of FM-1 parameter IDs 0–155; keep byte-index live editing experimental until proven.
 - [ ] Determine whether the FM-1 can transmit voice dumps or only receive them.
 - [ ] Determine whether sequencer patterns expose a stable MIDI/SysEx dump and restore protocol.
-- [ ] Add hardware-safe pacing, retry, cancellation and recovery behavior for long SysEx transfers.
+- [ ] Add cancellation and retry around the paced parameter stream and long bank transfers; preset recall and progress are implemented.
 
 ## 2. Application foundation
 

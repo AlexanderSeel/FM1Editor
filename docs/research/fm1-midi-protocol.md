@@ -100,6 +100,12 @@ Implemented by `encodeFm1ParameterWrite()` in `src/midi/fm1Protocol.ts`.
 
 The official two-page MIDI document does **not** provide a semantic table mapping parameter IDs 0–155 to operator, envelope, algorithm, LFO or performance fields. The code can generate the documented frame, but the current DX7 edit-buffer-byte-to-FM-1-parameter mapping is intentionally named and presented as experimental. It must not be enabled as a normal live-edit workflow until verified on real hardware.
 
+## Hardware observation: isolated single-voice bulk dump
+
+On 2026-08-05, a physical FM-1 became silent after the editor sent a standard 163-byte Yamaha DX7 single-voice message. The exact FM-1 firmware version was not recorded, so this is an observed compatibility failure rather than a complete firmware matrix.
+
+The application no longer uses that message for immediate audition. The recovery UI sends a documented Program Change to recall a known preset, and the replacement experimental push sends the 155 edit-buffer values as individually paced FM-1 parameter-write messages. The parameter-ID semantics still require hardware verification.
+
 ## DX7 voice and bank interoperability
 
 The application implements standard Yamaha DX7 data structures:

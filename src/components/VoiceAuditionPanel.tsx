@@ -34,17 +34,17 @@ export function VoiceAuditionPanel({
   const [error, setError] = useState<string | null>(null)
   const lastSelectionVersionRef = useRef(selectionVersion)
 
-  const beginAction = (action: Exclude<BusyAction, null>) => {
+  const beginAction = useCallback((action: Exclude<BusyAction, null>) => {
     setBusyAction(action)
     setError(null)
     setStatus(null)
-  }
+  }, [])
 
-  const requireOutput = (): MidiOutputTarget | null => {
+  const requireOutput = useCallback((): MidiOutputTarget | null => {
     if (output) return output
     setError('Connect and select an FM-1 MIDI output first.')
     return null
-  }
+  }, [output])
 
   const pushVoice = useCallback(async (automatic = false) => {
     if (busyAction !== null) return
@@ -68,7 +68,7 @@ export function VoiceAuditionPanel({
     } finally {
       setBusyAction(null)
     }
-  }, [busyAction, midiChannel, output, sysexEnabled, voice])
+  }, [beginAction, busyAction, midiChannel, requireOutput, sysexEnabled, voice])
 
   const recallPreset = async () => {
     if (busyAction !== null) return

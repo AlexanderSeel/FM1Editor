@@ -15,7 +15,7 @@ A TypeScript web editor and librarian for the **M-VAVE FM-1** pocket FM synthesi
 - salvage of complete supported messages from mixed files that also contain padding, unsupported messages or incomplete trailing data;
 - drag-and-drop, multi-file and folder ingestion for `.syx` and `.sysex` files;
 - `.syx` single-voice export plus draggable 32-slot bank reordering and bank export;
-- persistent IndexedDB schema-v2 patch library with semantic duplicate detection, tags, favorites, search and A/B comparison;
+- persistent IndexedDB schema-v3 patch library with semantic duplicate detection, tags, favorites, search and A/B comparison;
 - portable JSON library backup with merge restore and explicitly confirmed full replacement;
 - the supplied `public/catalog/sysexFinal.zip` tracked directly in the repository as the catalog source;
 - direct in-app ZIP browser indexed by source folder, bank and voice name;
@@ -23,7 +23,7 @@ A TypeScript web editor and librarian for the **M-VAVE FM-1** pocket FM synthesi
 - merged ZIP/website catalog: matching website banks use the tracked ZIP copy while website-only banks use the mirrored source file;
 - catalog checksum diagnostics, archive SHA-256 verification, source/availability filters and paginated bank grid;
 - graphical six-operator voice editor with amplitude/pitch envelope views, operator frequency/level/scaling controls, algorithm, feedback and LFO controls;
-- experimental push of the current voice as a standard 163-byte Yamaha single-voice SysEx message;
+- experimental paced push of 155 DX7 edit-buffer values through the documented FM-1 single-parameter SysEx frame;
 - opt-in auto-push when a bank or library voice is selected, without resending every editor slider change;
 - two-octave virtual piano for mouse, touch and focused computer-key input, with channel, velocity, octave and all-notes-off controls;
 - documented FM-1 parameter-write, CC, note, program and real-time message encoders;
@@ -72,11 +72,12 @@ The Voice workspace contains an FM-1 audition panel:
 
 1. Connect Web MIDI with SysEx permission and select the FM-1 output.
 2. Load or select a voice from a bank or the local library.
-3. Use **Push voice to FM-1**, or enable **Auto-push selections**.
-4. Play notes on the virtual piano with mouse, touch or the focused A–; computer-key range.
-5. Use **All notes off** if a note remains active after a device or browser interruption.
+3. Recall a known preset and use **Test C4** to verify the selected output and note channel.
+4. Use **Push voice parameters**, or enable **Auto-push bank/library selections**.
+5. Play notes on the virtual piano with mouse, touch or the focused A–; computer-key range.
+6. Use **Recall preset** or **All notes off** to recover from an invalid edit buffer or stuck note.
 
-Voice push sends a checksum-valid Yamaha single-voice message on the selected MIDI channel. This transport is intentionally marked experimental because physical FM-1 acceptance has not yet been recorded. The virtual piano uses normal MIDI note-on, note-off and CC 123 all-notes-off messages.
+The former 163-byte Yamaha single-voice bulk send was removed after a physical FM-1 became silent after receiving it. Voice push now emits 155 individually paced `F0 43 10 pp qq vv F7` parameter writes. The byte-index mapping remains experimental until confirmed against the device. Preset recall uses documented Program Change messages; the virtual piano uses normal MIDI note-on, note-off and CC 123 all-notes-off messages.
 
 ## SysEx diagnostics
 
@@ -97,8 +98,8 @@ The official FM-1 MIDI document defines a single-parameter write frame and param
 - `.syx` parsing, editing, local storage and export are normal supported workflows;
 - MIDI note/transport playback uses documented messages;
 - the effects workspace uses the documented FX-channel CC 0–23 map, but physical-device behavior is not yet recorded;
-- Yamaha single-voice push is implemented but remains explicitly experimental until tested on the FM-1;
-- live voice parameter writes remain explicitly experimental;
+- isolated Yamaha single-voice bulk push is disabled after it produced a silent active sound on physical hardware;
+- the paced FM-1 parameter stream remains explicitly experimental until its 0–154 byte-index mapping is verified;
 - destructive FM-1 bank transfer is not exposed as verified yet;
 - internal FM-1 sequencer dump/restore is not implemented because no documented pattern protocol was found.
 
