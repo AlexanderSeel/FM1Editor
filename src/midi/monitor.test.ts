@@ -24,8 +24,8 @@ describe('MIDI monitor', () => {
 
 describe('MIDI port preferences', () => {
   const ports: MidiPortInfo[] = [
-    { id: 'new-id', name: 'FM-1', manufacturer: 'M-VAVE', state: 'connected', connection: 'closed', type: 'output' },
-    { id: 'other', name: 'Other', manufacturer: 'Vendor', state: 'connected', connection: 'closed', type: 'output' },
+    { id: 'new-id', name: 'FM-1', manufacturer: 'M-VAVE', state: 'connected', connection: 'closed' },
+    { id: 'other', name: 'Other', manufacturer: 'Vendor', state: 'connected', connection: 'closed' },
   ]
 
   it('keeps a current port and falls back to descriptor matching when IDs change', () => {
