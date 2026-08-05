@@ -19,10 +19,9 @@
 
 ## 3. Voice library and SysEx explorer
 
-- [ ] Add a pluggable online catalog/explorer with source attribution, licensing metadata and user-initiated downloads.
-- [ ] Add Yamaha Black Boxes as a browsable external source without scraping or redistributing its files.
 - [ ] Add detailed diagnostics for unsupported, malformed and multi-message SysEx files.
 - [ ] Add IndexedDB schema migration and library backup/restore.
+- [ ] Add optional provider-specific manifest adapters when a source publishes a stable, permission-compatible machine-readable catalog.
 
 ## 4. Graphical voice editor
 
