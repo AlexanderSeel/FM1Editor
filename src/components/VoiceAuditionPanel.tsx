@@ -106,10 +106,13 @@ export function VoiceAuditionPanel({
           </select>
         </div>
 
-        <label className="flex items-center gap-3 rounded-xl border border-white/10 bg-black/20 px-3 py-2.5 text-xs text-slate-300">
-          <input checked={autoPush} onChange={(event) => setAutoPush(event.target.checked)} type="checkbox" />
-          <span><strong className="block text-white">Auto-push selections</strong><span className="text-slate-500">Bank and library choices only</span></span>
-        </label>
+        <div className="flex items-center gap-3 rounded-xl border border-white/10 bg-black/20 px-3 py-2.5 text-xs text-slate-300">
+          <input id="audition-auto-push" checked={autoPush} onChange={(event) => setAutoPush(event.target.checked)} type="checkbox" />
+          <label htmlFor="audition-auto-push">
+            <strong className="block text-white">Auto-push selections</strong>
+            <span className="text-slate-500">Bank and library choices only</span>
+          </label>
+        </div>
 
         <button
           className="rounded-xl bg-cyan-300 px-4 py-2.5 text-sm font-black text-slate-950 transition hover:bg-cyan-200 disabled:cursor-not-allowed disabled:opacity-40"
