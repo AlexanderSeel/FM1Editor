@@ -57,7 +57,7 @@ export function OperatorRoutingEditor({
   const commitLevels = (levels: SixOperatorLevels) => {
     const operators = cloneOperators(voice)
     operators.forEach((operator, index) => {
-      operator.outputLevel = levels[index]
+      operator.outputLevel = levels[index] ?? operator.outputLevel
     })
     onChange({ ...voice, operators })
   }
