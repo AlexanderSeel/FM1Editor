@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { BankBrowser } from './components/BankBrowser'
 import { ConnectionPanel } from './components/ConnectionPanel'
+import { ExternalCatalogExplorer } from './components/ExternalCatalogExplorer'
 import { PatchLibrary } from './components/PatchLibrary'
 import { SequenceEditor } from './components/SequenceEditor'
 import { SysexToolbar } from './components/SysexToolbar'
@@ -85,7 +86,7 @@ export default function App() {
                     {workspace === 'voice'
                       ? `Six operators · algorithm ${voice.algorithm} · DX7-compatible voice model`
                       : workspace === 'library'
-                        ? `${patchLibrary.records.length} persistent local voices · search · tags · favorites · A/B compare`
+                        ? `${patchLibrary.records.length} persistent local voices · external sources · search · tags · favorites · A/B compare`
                         : `${sequence.length} steps · ${sequence.bpm} BPM · MIDI channel ${sequence.midiChannel}`}
                   </p>
                 </div>
@@ -123,21 +124,24 @@ export default function App() {
                   <VoiceEditor onChange={setVoice} voice={voice} />
                 </>
               ) : workspace === 'library' ? (
-                <PatchLibrary
-                  currentVoice={voice}
-                  error={patchLibrary.error}
-                  loading={patchLibrary.loading}
-                  onDelete={patchLibrary.remove}
-                  onLoad={(nextVoice) => {
-                    setBank([])
-                    setVoice(nextVoice)
-                    setWorkspace('voice')
-                  }}
-                  onSaveCurrent={patchLibrary.saveCurrentVoice}
-                  onToggleFavorite={patchLibrary.toggleFavorite}
-                  onUpdateTags={patchLibrary.updateTags}
-                  records={patchLibrary.records}
-                />
+                <>
+                  <ExternalCatalogExplorer onImport={patchLibrary.importVoices} />
+                  <PatchLibrary
+                    currentVoice={voice}
+                    error={patchLibrary.error}
+                    loading={patchLibrary.loading}
+                    onDelete={patchLibrary.remove}
+                    onLoad={(nextVoice) => {
+                      setBank([])
+                      setVoice(nextVoice)
+                      setWorkspace('voice')
+                    }}
+                    onSaveCurrent={patchLibrary.saveCurrentVoice}
+                    onToggleFavorite={patchLibrary.toggleFavorite}
+                    onUpdateTags={patchLibrary.updateTags}
+                    records={patchLibrary.records}
+                  />
+                </>
               ) : (
                 <SequenceEditor onChange={setSequence} output={selectedOutput} sequence={sequence} />
               )}
@@ -145,7 +149,7 @@ export default function App() {
           </section>
 
           <footer className="flex flex-wrap items-center justify-between gap-2 px-2 text-xs text-slate-500">
-            <span>Current milestone: persistent patch library, multi-file SysEx ingestion and editable bank workspace.</span>
+            <span>Current milestone: persistent patch library, external source explorer, multi-file SysEx ingestion and editable bank workspace.</span>
             <span>Physical FM-1 parameter-write verification remains pending.</span>
           </footer>
         </main>
