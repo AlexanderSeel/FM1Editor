@@ -71,7 +71,42 @@ export function VoiceEditor({ documentKey, voice, onChange }: VoiceEditorProps) 
               <p className="font-mono text-2xl font-black text-white">{String(voice.algorithm).padStart(2, '0')}</p>
             </div>
           </div>
-          <EnvelopeGraph accent="violet" envelope={voice.pitchEnvelope} label="Pitch envelope" />
+          <EnvelopeGraph
+            accent="violet"
+            envelope={voice.pitchEnvelope}
+            label="Pitch envelope"
+            onChange={(pitchEnvelope) => onChange({ ...voice, pitchEnvelope })}
+          />
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            {voice.pitchEnvelope.rates.map((value, index) => (
+              <RangeControl
+                key={`pitch-rate-${index}`}
+                label={`Pitch rate ${index + 1}`}
+                onChange={(next) => onChange({
+                  ...voice,
+                  pitchEnvelope: {
+                    ...voice.pitchEnvelope,
+                    rates: updateFour(voice.pitchEnvelope.rates, index, next),
+                  },
+                })}
+                value={value}
+              />
+            ))}
+            {voice.pitchEnvelope.levels.map((value, index) => (
+              <RangeControl
+                key={`pitch-level-${index}`}
+                label={`Pitch level ${index + 1}`}
+                onChange={(next) => onChange({
+                  ...voice,
+                  pitchEnvelope: {
+                    ...voice.pitchEnvelope,
+                    levels: updateFour(voice.pitchEnvelope.levels, index, next),
+                  },
+                })}
+                value={value}
+              />
+            ))}
+          </div>
         </div>
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 xl:grid-cols-2">
           <RangeControl label="Algorithm" max={32} min={1} onChange={(algorithm) => onChange({ ...voice, algorithm })} value={voice.algorithm} />
@@ -114,7 +149,11 @@ export function VoiceEditor({ documentKey, voice, onChange }: VoiceEditorProps) 
 
             <div className="grid gap-4 xl:grid-cols-[1.2fr_1fr]">
               <div className="grid gap-4">
-                <EnvelopeGraph envelope={operator.envelope} label={`Operator ${selectedOperator + 1} amplitude envelope`} />
+                <EnvelopeGraph
+                  envelope={operator.envelope}
+                  label={`Operator ${selectedOperator + 1} amplitude envelope`}
+                  onChange={(envelope) => updateOperator((current) => ({ ...current, envelope }))}
+                />
                 <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
                   {operator.envelope.rates.map((value, index) => (
                     <RangeControl
