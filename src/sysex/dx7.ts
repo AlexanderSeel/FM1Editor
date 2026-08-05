@@ -90,6 +90,16 @@ function writeWaveform(waveform: Dx7LfoWaveform): number {
   return index
 }
 
+/**
+ * A DX7 operator has 15 valid detune positions encoded as 0..14 (-7..+7).
+ * Some legacy banks contain the reserved four-bit value 15. Normalize that
+ * value to the nearest valid position so it cannot block an otherwise valid
+ * voice or complete 32-voice bank transfer.
+ */
+function normalizeDetune(value: number): number {
+  return Math.min(value, 14)
+}
+
 function decodeUnpackedOperator(data: Uint8Array, offset: number): Dx7Operator {
   return {
     envelope: {
@@ -110,7 +120,7 @@ function decodeUnpackedOperator(data: Uint8Array, offset: number): Dx7Operator {
     oscillatorMode: (data[offset + 17] ?? 0) === 0 ? 'ratio' : 'fixed',
     frequencyCoarse: data[offset + 18] ?? 0,
     frequencyFine: data[offset + 19] ?? 0,
-    detune: data[offset + 20] ?? 0,
+    detune: normalizeDetune(data[offset + 20] ?? 0),
   }
 }
 
@@ -138,7 +148,7 @@ function decodePackedOperator(data: Uint8Array, offset: number): Dx7Operator {
     oscillatorMode: (oscillatorAndCoarse & 0x01) === 0 ? 'ratio' : 'fixed',
     frequencyCoarse: (oscillatorAndCoarse >> 1) & 0x1f,
     frequencyFine: data[offset + 15] ?? 0,
-    detune: (data[offset + 16] ?? 0) & 0x0f,
+    detune: normalizeDetune((data[offset + 16] ?? 0) & 0x0f),
   }
 }
 
@@ -154,7 +164,7 @@ function validateOperator(operator: Dx7Operator, label: string): void {
   assertRange(`${label} output level`, operator.outputLevel, 0, 99)
   assertRange(`${label} frequency coarse`, operator.frequencyCoarse, 0, 31)
   assertRange(`${label} frequency fine`, operator.frequencyFine, 0, 99)
-  assertRange(`${label} detune`, operator.detune, 0, 14)
+  assertRange(`${label} detune`, operator.detune, 0, 15)
 }
 
 export function validateVoice(voice: Dx7Voice): void {
@@ -234,7 +244,7 @@ export function encodeSingleVoiceData(voice: Dx7Voice): Uint8Array {
     data[offset + 17] = operator.oscillatorMode === 'fixed' ? 1 : 0
     data[offset + 18] = operator.frequencyCoarse
     data[offset + 19] = operator.frequencyFine
-    data[offset + 20] = operator.detune
+    data[offset + 20] = normalizeDetune(operator.detune)
   }
 
   writeRange(data, 126, voice.pitchEnvelope.rates)
@@ -325,7 +335,7 @@ export function encodePackedVoice(voice: Dx7Voice): Uint8Array {
       (operator.oscillatorMode === 'fixed' ? 1 : 0) |
       (operator.frequencyCoarse << 1)
     data[offset + 15] = operator.frequencyFine
-    data[offset + 16] = ((data[offset + 16] ?? 0) & 0x70) | operator.detune
+    data[offset + 16] = ((data[offset + 16] ?? 0) & 0x70) | normalizeDetune(operator.detune)
   }
 
   writeRange(data, 102, voice.pitchEnvelope.rates)
