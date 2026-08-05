@@ -13,7 +13,7 @@
 ## 2. Application foundation
 
 - [x] Add application-level undo/redo and unsaved-change protection.
-- [ ] Add installable PWA metadata and offline application caching.
+- [x] Add installable PWA metadata and offline application caching.
 
 ## 3. Voice library and SysEx explorer
 
