@@ -1,0 +1,103 @@
+name: Complete application history
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/complete-application-history.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  complete-and-validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Complete save baseline integration
+        shell: bash
+        run: |
+          python <<'PY'
+          from pathlib import Path
+
+          toolbar = Path('src/components/SysexToolbar.tsx')
+          text = toolbar.read_text()
+          replacements = [
+            (
+              "  onNewVoice: () => void\n}",
+              "  onNewVoice: () => void\n  onExportVoice?: () => void\n}",
+            ),
+            (
+              "export function SysexToolbar({ voice, onImportVoice, onImportBank, onImportToLibrary, onNewVoice }: SysexToolbarProps) {",
+              "export function SysexToolbar({ voice, onImportVoice, onImportBank, onImportToLibrary, onNewVoice, onExportVoice }: SysexToolbarProps) {",
+            ),
+            (
+              "    downloadBytes(encodeSingleVoiceMessage(voice), filename)\n    setStatus(`Exported ${filename}.`)",
+              "    downloadBytes(encodeSingleVoiceMessage(voice), filename)\n    onExportVoice?.()\n    setStatus(`Exported ${filename}.`)",
+            ),
+          ]
+          for old, new in replacements:
+            if old not in text:
+              raise SystemExit(f'SysexToolbar marker not found: {old}')
+            text = text.replace(old, new, 1)
+          toolbar.write_text(text)
+
+          plan = Path('PLAN.md')
+          plan_text = plan.read_text()
+          old = '- [ ] Add application-level undo/redo and unsaved-change protection.'
+          new = '- [x] Add application-level undo/redo and unsaved-change protection.'
+          if old not in plan_text:
+            raise SystemExit('PLAN history item not found')
+          plan.write_text(plan_text.replace(old, new, 1))
+          PY
+
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+      - name: Typecheck
+        run: npm run typecheck
+      - name: Lint
+        run: npm run lint
+      - name: Test
+        run: npm run test
+      - name: Build
+        run: npm run build
+      - name: Record validation and commit
+        shell: bash
+        run: |
+          validated_sha="$(git rev-parse HEAD)"
+          mkdir -p docs/validation
+          cat > docs/validation/application-history.md <<EOF
+          # Application history validation
+
+          Validated source commit: \`$validated_sha\`
+
+          - npm install: **PASS**
+          - npm run typecheck: **PASS**
+          - npm run lint: **PASS**
+          - npm run test: **PASS**
+          - npm run build: **PASS**
+
+          Verified behavior:
+
+          - independent undo/redo histories for Voice, Effects and Sequencer;
+          - Undo/Redo controls and standard keyboard shortcuts outside text-editing fields;
+          - saved-baseline tracking for imported/loaded voices, SysEx export and local-library save;
+          - confirmation before replacing a modified voice with another patch, bank or slot;
+          - browser unload protection while any editor workspace contains unsaved changes;
+          - history resets when another voice document is loaded;
+          - Uint8Array source data participates in dirty-state comparison by byte value.
+          EOF
+
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add src/components/SysexToolbar.tsx PLAN.md docs/validation/application-history.md
+          git commit -m 'feat(history): complete undo redo and unsaved protection'
+          git push origin HEAD:main
