@@ -10,17 +10,11 @@
 - [ ] Determine whether sequencer patterns expose a stable MIDI/SysEx dump and restore protocol.
 - [ ] Add bank-transfer timeout, retry and post-save recovery guidance after physical import behavior is verified.
 
-## 2. Application foundation
-
-- [x] Add application-level undo/redo and unsaved-change protection.
-- [x] Add installable PWA metadata and offline application caching.
-
-## 3. Voice library and SysEx explorer
+## 2. Voice library and SysEx explorer
 
 - [ ] Add adapters for additional providers only when they publish stable, permission-compatible machine-readable catalogs.
-- [ ] Add a catalog release audit that records source hashes, changed files and unresolved rights metadata before deployment.
 
-## 4. Graphical voice editor
+## 3. Graphical voice editor
 
 - [ ] Add graphical algorithm routing with carrier/modulator distinction and operator enable/solo controls.
 - [ ] Make operator and pitch envelopes directly draggable while retaining numeric precision controls.
@@ -29,13 +23,13 @@
 - [ ] Add constrained randomization, mutation, initialized-voice variants and A/B comparison inside the editor.
 - [ ] Add opt-in throttled live parameter writes only after the FM-1 semantic parameter map is hardware-verified.
 
-## 5. FM-1 bank/device workflow
+## 4. FM-1 bank/device workflow
 
 - [ ] Confirm the app's bank A/B/C/D and slot-to-preset mapping against the physical device.
 - [ ] Add transfer completion detection if the FM-1 exposes an acknowledgement or observable response.
 - [ ] Add device backup/restore only if device-originated bank dumps are verified.
 
-## 6. Sequencer
+## 5. Sequencer
 
 - [ ] Add octave-oriented note entry, direction modes, copy/paste, rotation and pattern randomization.
 - [ ] Add a playhead and timing diagnostics while browser MIDI events are scheduled.
@@ -45,7 +39,7 @@
 - [ ] Make it more like a step sequencer with a piano-roll layout.
 - [ ] Add common presets and patterns for single-note, polyphonic and chord-progression styles based on a starting note.
 
-## 7. Validation and delivery
+## 6. Validation and delivery
 
 - [ ] Add legal/public-domain or user-provided SysEx fixtures and broader codec compatibility tests.
 - [ ] Add property-based round-trip tests for all valid parameter ranges and preserved reserved bits.
