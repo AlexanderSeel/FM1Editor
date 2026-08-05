@@ -50,6 +50,26 @@ describe('DX7 packed voice', () => {
     expect(decoded.operators[1].detune).toBe(5)
     expect(reencoded[op2DetuneOffset]).toBe(0x35)
   })
+
+  it('normalizes reserved detune nibble 15 without blocking bank or single-voice encoding', () => {
+    const packed = encodePackedVoice(createInitializedVoice('DETUNE 15'))
+    const op6DetuneOffset = 16
+    packed[op6DetuneOffset] = 0x3f
+
+    const decoded = decodePackedVoice(packed)
+    const reencoded = encodePackedVoice(decoded)
+
+    expect(decoded.operators[5].detune).toBe(14)
+    expect(reencoded[op6DetuneOffset]).toBe(0x3e)
+
+    const legacyVoice = createInitializedVoice('LEGACY 15')
+    legacyVoice.operators[5].detune = 15
+    const legacyPacked = encodePackedVoice(legacyVoice)
+    const legacySingle = encodeSingleVoiceMessage(legacyVoice)
+
+    expect((legacyPacked[op6DetuneOffset] ?? 0) & 0x0f).toBe(14)
+    expect(decodeSingleVoiceMessage(legacySingle).voice.operators[5].detune).toBe(14)
+  })
 })
 
 describe('DX7 bank', () => {
@@ -63,6 +83,19 @@ describe('DX7 bank', () => {
     expect(decoded.voices).toHaveLength(32)
     expect(decoded.voices[0]?.name).toBe('VOICE 1')
     expect(decoded.voices[31]?.name).toBe('VOICE 32')
+  })
+
+  it('encodes a complete bank containing a legacy detune value 15', () => {
+    const voices = Array.from({ length: 32 }, (_, index) => createInitializedVoice(`VOICE ${index + 1}`))
+    const legacyVoice = voices[7]
+    if (!legacyVoice) throw new Error('Missing test voice.')
+    legacyVoice.operators[5].detune = 15
+
+    const message = encodeVoiceBankMessage(voices)
+    const decoded = decodeVoiceBankMessage(message)
+
+    expect(message).toHaveLength(4104)
+    expect(decoded.voices[7]?.operators[5].detune).toBe(14)
   })
 })
 
