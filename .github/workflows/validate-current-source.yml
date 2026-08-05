@@ -14,6 +14,9 @@ concurrency:
   group: validate-current-source
   cancel-in-progress: false
 
+env:
+  VALIDATION_REVISION: '3'
+
 jobs:
   validate:
     runs-on: ubuntu-latest
@@ -64,6 +67,7 @@ jobs:
           cat > docs/validation/ci-receipt.md <<EOF
           # CI validation receipt
 
+          - Validation revision: \`$VALIDATION_REVISION\`
           - Validated commit: \`$validated_sha\`
           - Node: \`$(node --version 2>/dev/null || echo unavailable)\`
           - npm install: **$(status_word "$install_status")**
