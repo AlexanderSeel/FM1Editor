@@ -100,6 +100,16 @@ function normalizeDetune(value: number): number {
   return Math.min(value, 14)
 }
 
+
+/**
+ * Keyboard-scaling breakpoint is defined as 0..99. Some legacy or
+ * third-party banks contain the reserved 7-bit value 127. Normalize
+ * it to the nearest valid breakpoint instead of blocking bank export.
+ */
+function normalizeBreakpoint(value: number): number {
+  return Math.min(value, 99)
+}
+
 function decodeUnpackedOperator(data: Uint8Array, offset: number): Dx7Operator {
   return {
     envelope: {
@@ -107,7 +117,7 @@ function decodeUnpackedOperator(data: Uint8Array, offset: number): Dx7Operator {
       levels: asFour(data, offset + 4),
     },
     keyboardScaling: {
-      breakPoint: data[offset + 8] ?? 0,
+      breakPoint: normalizeBreakpoint(data[offset + 8] ?? 0),
       leftDepth: data[offset + 9] ?? 0,
       rightDepth: data[offset + 10] ?? 0,
       leftCurve: readCurve(data[offset + 11] ?? 0),
@@ -135,7 +145,7 @@ function decodePackedOperator(data: Uint8Array, offset: number): Dx7Operator {
       levels: asFour(data, offset + 4),
     },
     keyboardScaling: {
-      breakPoint: data[offset + 8] ?? 0,
+      breakPoint: normalizeBreakpoint(data[offset + 8] ?? 0),
       leftDepth: data[offset + 9] ?? 0,
       rightDepth: data[offset + 10] ?? 0,
       leftCurve: readCurve(curvesAndScaling),
@@ -155,7 +165,7 @@ function decodePackedOperator(data: Uint8Array, offset: number): Dx7Operator {
 function validateOperator(operator: Dx7Operator, label: string): void {
   operator.envelope.rates.forEach((value, index) => assertRange(`${label} envelope rate ${index + 1}`, value, 0, 99))
   operator.envelope.levels.forEach((value, index) => assertRange(`${label} envelope level ${index + 1}`, value, 0, 99))
-  assertRange(`${label} breakpoint`, operator.keyboardScaling.breakPoint, 0, 99)
+  assertRange(`${label} breakpoint`, operator.keyboardScaling.breakPoint, 0, 127)
   assertRange(`${label} left depth`, operator.keyboardScaling.leftDepth, 0, 99)
   assertRange(`${label} right depth`, operator.keyboardScaling.rightDepth, 0, 99)
   assertRange(`${label} rate scaling`, operator.keyboardScaling.rateScaling, 0, 7)
@@ -232,7 +242,7 @@ export function encodeSingleVoiceData(voice: Dx7Voice): Uint8Array {
     const offset = block * 21
     writeRange(data, offset, operator.envelope.rates)
     writeRange(data, offset + 4, operator.envelope.levels)
-    data[offset + 8] = operator.keyboardScaling.breakPoint
+    data[offset + 8] = normalizeBreakpoint(operator.keyboardScaling.breakPoint)
     data[offset + 9] = operator.keyboardScaling.leftDepth
     data[offset + 10] = operator.keyboardScaling.rightDepth
     data[offset + 11] = writeCurve(operator.keyboardScaling.leftCurve)
@@ -317,7 +327,7 @@ export function encodePackedVoice(voice: Dx7Voice): Uint8Array {
     const offset = block * 17
     writeRange(data, offset, operator.envelope.rates)
     writeRange(data, offset + 4, operator.envelope.levels)
-    data[offset + 8] = operator.keyboardScaling.breakPoint
+    data[offset + 8] = normalizeBreakpoint(operator.keyboardScaling.breakPoint)
     data[offset + 9] = operator.keyboardScaling.leftDepth
     data[offset + 10] = operator.keyboardScaling.rightDepth
     data[offset + 11] =

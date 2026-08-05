@@ -70,6 +70,31 @@ describe('DX7 packed voice', () => {
     expect((legacyPacked[op6DetuneOffset] ?? 0) & 0x0f).toBe(14)
     expect(decodeSingleVoiceMessage(legacySingle).voice.operators[5].detune).toBe(14)
   })
+
+it('normalizes reserved breakpoint value 127 without blocking voice or bank encoding', () => {
+  const packed = encodePackedVoice(createInitializedVoice('BREAK 127'))
+  const op2BreakpointOffset = 4 * 17 + 8
+  packed[op2BreakpointOffset] = 127
+
+  const decoded = decodePackedVoice(packed)
+  const reencoded = encodePackedVoice(decoded)
+
+  expect(decoded.operators[1].keyboardScaling.breakPoint).toBe(99)
+  expect(reencoded[op2BreakpointOffset]).toBe(99)
+
+  const legacyVoice = createInitializedVoice('LEGACY BP')
+  legacyVoice.operators[1].keyboardScaling.breakPoint = 127
+  const legacySingle = encodeSingleVoiceMessage(legacyVoice)
+  expect(decodeSingleVoiceMessage(legacySingle).voice.operators[1].keyboardScaling.breakPoint).toBe(99)
+
+  const voices = Array.from({ length: 32 }, (_, index) => createInitializedVoice(`VOICE ${index + 1}`))
+  const bankVoice = voices[3]
+  if (!bankVoice) throw new Error('Missing test bank voice.')
+  bankVoice.operators[1].keyboardScaling.breakPoint = 127
+  const bankMessage = encodeVoiceBankMessage(voices)
+  expect(decodeVoiceBankMessage(bankMessage).voices[3]?.operators[1].keyboardScaling.breakPoint).toBe(99)
+})
+
 })
 
 describe('DX7 bank', () => {
