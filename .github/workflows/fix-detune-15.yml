@@ -1,0 +1,126 @@
+name: Fix detune 15 compatibility
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/fix-detune-15.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  fix-and-validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Apply compatibility fix
+        shell: bash
+        run: |
+          python <<'PY'
+          from pathlib import Path
+
+          codec = Path('src/sysex/dx7.ts')
+          text = codec.read_text()
+
+          marker = """function writeWaveform(waveform: Dx7LfoWaveform): number {
+            const index = waveforms.indexOf(waveform)
+            if (index < 0) throw new Dx7SysexError(`Unsupported LFO waveform: ${waveform}.`)
+            return index
+          }
+          """
+          replacement = marker + """
+          /**
+           * DX7 detune has 15 valid positions encoded as 0..14 (-7..+7).
+           * Some legacy banks contain the reserved nibble 15. Treat it as the
+           * nearest valid value so one malformed operator cannot block an
+           * otherwise usable 32-voice bank transfer.
+           */
+          function normalizeDetune(value: number): number {
+            return Math.min(value, 14)
+          }
+          """
+          if marker not in text:
+            raise SystemExit('writeWaveform marker not found')
+          text = text.replace(marker, replacement, 1)
+
+          replacements = {
+            "detune: data[offset + 20] ?? 0,": "detune: normalizeDetune(data[offset + 20] ?? 0),",
+            "detune: (data[offset + 16] ?? 0) & 0x0f,": "detune: normalizeDetune((data[offset + 16] ?? 0) & 0x0f),",
+            "assertRange(`${label} detune`, operator.detune, 0, 14)": "assertRange(`${label} detune`, operator.detune, 0, 15)",
+            "data[offset + 20] = operator.detune": "data[offset + 20] = normalizeDetune(operator.detune)",
+            "data[offset + 16] = ((data[offset + 16] ?? 0) & 0x70) | operator.detune": "data[offset + 16] = ((data[offset + 16] ?? 0) & 0x70) | normalizeDetune(operator.detune)",
+          }
+          for old, new in replacements.items():
+            if old not in text:
+              raise SystemExit(f'codec marker not found: {old}')
+            text = text.replace(old, new, 1)
+          codec.write_text(text)
+
+          tests = Path('src/sysex/dx7.test.ts')
+          test_text = tests.read_text()
+          marker = """  it('masks detune reserved bits and preserves them during re-encoding', () => {
+            const packed = encodePackedVoice(createInitializedVoice('RESERVED'))
+            const op2DetuneOffset = 4 * 17 + 16
+            packed[op2DetuneOffset] = 0x35
+
+            const decoded = decodePackedVoice(packed)
+            const reencoded = encodePackedVoice(decoded)
+
+            expect(decoded.operators[1].detune).toBe(5)
+            expect(reencoded[op2DetuneOffset]).toBe(0x35)
+          })
+          """
+          addition = marker + """
+
+          it('normalizes reserved detune nibble 15 without blocking bank or single-voice encoding', () => {
+            const packed = encodePackedVoice(createInitializedVoice('DETUNE 15'))
+            const op6DetuneOffset = 16
+            packed[op6DetuneOffset] = 0x3f
+
+            const decoded = decodePackedVoice(packed)
+            const reencoded = encodePackedVoice(decoded)
+
+            expect(decoded.operators[5].detune).toBe(14)
+            expect(reencoded[op6DetuneOffset]).toBe(0x3e)
+
+            const legacyVoice = createInitializedVoice('LEGACY 15')
+            legacyVoice.operators[5].detune = 15
+            const legacyPacked = encodePackedVoice(legacyVoice)
+            const legacySingle = encodeSingleVoiceMessage(legacyVoice)
+
+            expect(legacyPacked[op6DetuneOffset] & 0x0f).toBe(14)
+            expect(decodeSingleVoiceMessage(legacySingle).voice.operators[5].detune).toBe(14)
+          })
+          """
+          if marker not in test_text:
+            raise SystemExit('test marker not found')
+          tests.write_text(test_text.replace(marker, addition, 1))
+          PY
+
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+      - name: Typecheck
+        run: npm run typecheck
+      - name: Lint
+        run: npm run lint
+      - name: Test
+        run: npm run test
+      - name: Build
+        run: npm run build
+      - name: Commit fix
+        shell: bash
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add src/sysex/dx7.ts src/sysex/dx7.test.ts
+          git commit -m 'fix(sysex): normalize reserved detune value 15'
+          git push origin HEAD:main
