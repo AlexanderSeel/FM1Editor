@@ -54,6 +54,19 @@ jobs:
             return Number(await locator.getAttribute('aria-valuenow'))
           }
 
+          async function drag(locator, deltaX, deltaY) {
+            await locator.scrollIntoViewIfNeeded()
+            const box = await locator.boundingBox()
+            assert.ok(box)
+            const x = box.x + box.width / 2
+            const y = box.y + box.height / 2
+            await locator.hover()
+            await page.mouse.move(x, y)
+            await page.mouse.down()
+            await page.mouse.move(x + deltaX, y + deltaY, { steps: 8 })
+            await page.mouse.up()
+          }
+
           const browser = await chromium.launch({ headless: true })
           const page = await browser.newPage({ viewport: { width: 1440, height: 1200 } })
           await page.goto('http://127.0.0.1:4173/', { waitUntil: 'networkidle' })
@@ -67,12 +80,7 @@ jobs:
           assert.equal(await value(pitchRate), 99)
           assert.equal(await pitchRateNumeric.inputValue(), '99')
 
-          const rateBox = await pitchRate.boundingBox()
-          assert.ok(rateBox)
-          await page.mouse.move(rateBox.x + rateBox.width / 2, rateBox.y + rateBox.height / 2)
-          await page.mouse.down()
-          await page.mouse.move(rateBox.x + rateBox.width / 2 + 48, rateBox.y + rateBox.height / 2, { steps: 8 })
-          await page.mouse.up()
+          await drag(pitchRate, 48, 0)
           const draggedRate = await value(pitchRate)
           assert.ok(draggedRate < 99)
           assert.equal(await pitchRateNumeric.inputValue(), String(draggedRate))
@@ -80,6 +88,15 @@ jobs:
           await page.getByRole('button', { name: 'Undo last editor change' }).click()
           await page.waitForFunction(() => document.querySelector('[aria-label="Pitch envelope stage 1 rate"]')?.getAttribute('aria-valuenow') === '99')
           assert.equal(await pitchRateNumeric.inputValue(), '99')
+
+          const pitchRateFour = page.getByRole('slider', { name: 'Pitch envelope stage 4 rate' })
+          const pitchRateFourNumeric = page.getByRole('slider', { name: 'Pitch rate 4' })
+          await drag(pitchRateFour, 42, 0)
+          const draggedRateFour = await value(pitchRateFour)
+          assert.ok(draggedRateFour < 99)
+          assert.equal(await pitchRateFourNumeric.inputValue(), String(draggedRateFour))
+          await page.getByRole('button', { name: 'Undo last editor change' }).click()
+          await page.waitForFunction(() => document.querySelector('[aria-label="Pitch envelope stage 4 rate"]')?.getAttribute('aria-valuenow') === '99')
 
           await pitchRate.focus()
           await page.keyboard.press('Home')
@@ -92,24 +109,14 @@ jobs:
           const pitchLevel = page.getByRole('slider', { name: 'Pitch envelope stage 1 level' })
           const pitchLevelNumeric = page.getByRole('slider', { name: 'Pitch level 1' })
           const initialPitchLevel = await value(pitchLevel)
-          const levelBox = await pitchLevel.boundingBox()
-          assert.ok(levelBox)
-          await page.mouse.move(levelBox.x + levelBox.width / 2, levelBox.y + levelBox.height / 2)
-          await page.mouse.down()
-          await page.mouse.move(levelBox.x + levelBox.width / 2, levelBox.y + levelBox.height / 2 - 34, { steps: 8 })
-          await page.mouse.up()
+          await drag(pitchLevel, 0, -34)
           const draggedPitchLevel = await value(pitchLevel)
           assert.ok(draggedPitchLevel > initialPitchLevel)
           assert.equal(await pitchLevelNumeric.inputValue(), String(draggedPitchLevel))
 
           const operatorLevel = page.getByRole('slider', { name: 'Operator 1 amplitude envelope stage 1 level' })
           const operatorLevelNumeric = page.getByRole('slider', { name: 'Level 1', exact: true })
-          const operatorBox = await operatorLevel.boundingBox()
-          assert.ok(operatorBox)
-          await page.mouse.move(operatorBox.x + operatorBox.width / 2, operatorBox.y + operatorBox.height / 2)
-          await page.mouse.down()
-          await page.mouse.move(operatorBox.x + operatorBox.width / 2, operatorBox.y + operatorBox.height / 2 + 42, { steps: 8 })
-          await page.mouse.up()
+          await drag(operatorLevel, 0, 42)
           const draggedOperatorLevel = await value(operatorLevel)
           assert.ok(draggedOperatorLevel < 99)
           assert.equal(await operatorLevelNumeric.inputValue(), String(draggedOperatorLevel))
@@ -140,6 +147,7 @@ jobs:
           - npm run test: **PASS**
           - npm run build: **PASS**
           - Chromium horizontal rate dragging: **PASS**
+          - Chromium stage-4 rate dragging: **PASS**
           - Chromium vertical level dragging: **PASS**
           - Chromium keyboard precision controls: **PASS**
           - numeric/graph synchronization: **PASS**
@@ -150,6 +158,7 @@ jobs:
 
           - operator and pitch envelopes expose four horizontal rate handles and four vertical level handles;
           - all handles support mouse, touch/pointer capture and keyboard adjustment;
+          - relative drag deltas remain stable across responsive SVG scaling;
           - fixed graph timing keeps rate 4 directly movable instead of pinning the final point to the right edge;
           - pointer movement updates a local draft and commits once on release;
           - pointer cancellation restores the source envelope;
