@@ -17,9 +17,10 @@
 
 ## 3. Voice library and SysEx explorer
 
-- [ ] Add detailed diagnostics for unsupported, malformed and multi-message SysEx files.
-- [ ] Add IndexedDB schema migration and library backup/restore.
-- [ ] Add optional provider-specific manifest adapters when a source publishes a stable, permission-compatible machine-readable catalog.
+- [ ] Add richer per-message diagnostics for malformed and mixed multi-message SysEx imports.
+- [ ] Add IndexedDB schema migration and local library backup/restore.
+- [ ] Add adapters for additional providers only when they publish stable, permission-compatible machine-readable catalogs.
+- [ ] Add a catalog release audit that records source hashes, changed files and unresolved rights metadata before deployment.
 
 ## 4. Graphical voice editor
 
@@ -36,7 +37,6 @@
 - [ ] Add transfer progress, checksum diagnostics, retry and cancellation.
 - [ ] Add backup/restore only if device-originated dumps are verified.
 - [ ] Keep verified operations visually distinct from experimental or file-only operations.
-- [ ] Add documented FX-channel controls for filter, reverb, delay, distortion, chorus and phaser CCs.
 
 ## 6. Sequencer
 
