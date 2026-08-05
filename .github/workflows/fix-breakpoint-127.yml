@@ -31,11 +31,8 @@ jobs:
           codec = Path('src/sysex/dx7.ts')
           text = codec.read_text()
 
-          detune_marker = """function normalizeDetune(value: number): number {
-            return Math.min(value, 14)
-          }
-          """
-          addition = detune_marker + """
+          function_end = "function normalizeDetune(value: number): number {\n  return Math.min(value, 14)\n}\n"
+          normalize_breakpoint = """
 
           /**
            * Keyboard-scaling breakpoint is defined as 0..99. Some legacy or
@@ -46,45 +43,25 @@ jobs:
             return Math.min(value, 99)
           }
           """
-          if detune_marker not in text:
+          if function_end not in text:
             raise SystemExit('normalizeDetune marker not found')
-          text = text.replace(detune_marker, addition, 1)
+          text = text.replace(function_end, function_end + normalize_breakpoint, 1)
 
-          replacements = {
-            "breakPoint: data[offset + 8] ?? 0,": "breakPoint: normalizeBreakpoint(data[offset + 8] ?? 0),",
-            "assertRange(`${label} breakpoint`, operator.keyboardScaling.breakPoint, 0, 99)": "assertRange(`${label} breakpoint`, operator.keyboardScaling.breakPoint, 0, 127)",
-            "data[offset + 8] = operator.keyboardScaling.breakPoint": "data[offset + 8] = normalizeBreakpoint(operator.keyboardScaling.breakPoint)",
-          }
-          for old, new in replacements.items():
-            count = text.count(old)
-            if count == 0:
+          replacements = [
+            ("breakPoint: data[offset + 8] ?? 0,", "breakPoint: normalizeBreakpoint(data[offset + 8] ?? 0),"),
+            ("assertRange(`${label} breakpoint`, operator.keyboardScaling.breakPoint, 0, 99)", "assertRange(`${label} breakpoint`, operator.keyboardScaling.breakPoint, 0, 127)"),
+            ("data[offset + 8] = operator.keyboardScaling.breakPoint", "data[offset + 8] = normalizeBreakpoint(operator.keyboardScaling.breakPoint)"),
+          ]
+          for old, new in replacements:
+            if old not in text:
               raise SystemExit(f'codec marker not found: {old}')
             text = text.replace(old, new)
           codec.write_text(text)
 
           tests = Path('src/sysex/dx7.test.ts')
           test_text = tests.read_text()
-          marker = """  it('normalizes reserved detune nibble 15 without blocking bank or single-voice encoding', () => {
-            const packed = encodePackedVoice(createInitializedVoice('DETUNE 15'))
-            const op6DetuneOffset = 16
-            packed[op6DetuneOffset] = 0x3f
-
-            const decoded = decodePackedVoice(packed)
-            const reencoded = encodePackedVoice(decoded)
-
-            expect(decoded.operators[5].detune).toBe(14)
-            expect(reencoded[op6DetuneOffset]).toBe(0x3e)
-
-            const legacyVoice = createInitializedVoice('LEGACY 15')
-            legacyVoice.operators[5].detune = 15
-            const legacyPacked = encodePackedVoice(legacyVoice)
-            const legacySingle = encodeSingleVoiceMessage(legacyVoice)
-
-            expect((legacyPacked[op6DetuneOffset] ?? 0) & 0x0f).toBe(14)
-            expect(decodeSingleVoiceMessage(legacySingle).voice.operators[5].detune).toBe(14)
-          })
-          """
-          addition = marker + """
+          boundary = "\n})\n\ndescribe('DX7 bank', () => {"
+          test = """
 
           it('normalizes reserved breakpoint value 127 without blocking voice or bank encoding', () => {
             const packed = encodePackedVoice(createInitializedVoice('BREAK 127'))
@@ -110,9 +87,9 @@ jobs:
             expect(decodeVoiceBankMessage(bankMessage).voices[3]?.operators[1].keyboardScaling.breakPoint).toBe(99)
           })
           """
-          if marker not in test_text:
-            raise SystemExit('detune test marker not found')
-          tests.write_text(test_text.replace(marker, addition, 1))
+          if boundary not in test_text:
+            raise SystemExit('packed voice test boundary not found')
+          tests.write_text(test_text.replace(boundary, test + boundary, 1))
           PY
 
       - name: Install dependencies
