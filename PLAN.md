@@ -2,14 +2,13 @@
 
 ## 1. FM-1 protocol verification
 
-- [ ] Record the firmware version and reproduce/recover the observed silent edit buffer caused by an isolated Yamaha DX7 single-voice dump; keep that transport disabled.
-- [ ] Verify whether the paced 0–154 FM-1 parameter stream recreates a selected voice correctly and remains playable after all writes complete.
-- [ ] Verify on physical FM-1 hardware whether standard Yamaha DX7 32-voice bulk dumps are accepted byte-for-byte and document the tested firmware version.
-- [ ] Capture FM-1 MIDI traffic for live parameter edits, program changes, paced parameter streams, bank imports and A/B/C/D destination selection.
-- [ ] Derive and verify the semantic meaning of FM-1 parameter IDs 0–155; keep byte-index live editing experimental until proven.
-- [ ] Determine whether the FM-1 can transmit voice dumps or only receive them.
+- [ ] Record the tested FM-1 firmware version for the observed silent edit buffer after both rejected single-voice approaches; keep isolated Yamaha voice dumps and byte-index parameter streams disabled.
+- [ ] Verify on physical FM-1 hardware that the merged standard Yamaha DX7 32-voice dump opens the A/B/C/D destination prompt, preserves the other 31 voices from the loaded base bank and produces a playable target preset.
+- [ ] Capture FM-1 MIDI traffic and device-screen behavior for bank imports, destination confirmation, preset recall and any device-originated dump request.
+- [ ] Determine whether the FM-1 can transmit complete voice banks; otherwise retain the explicit requirement for an exact app-side base/backup bank.
+- [ ] Derive and verify the semantic meaning of FM-1 parameter IDs 0–155 before enabling any individual live voice edits.
 - [ ] Determine whether sequencer patterns expose a stable MIDI/SysEx dump and restore protocol.
-- [ ] Add cancellation and retry around the paced parameter stream and long bank transfers; preset recall and progress are implemented.
+- [ ] Add bank-transfer timeout, retry and post-save recovery guidance after physical import behavior is verified.
 
 ## 2. Application foundation
 
@@ -28,14 +27,13 @@
 - [ ] Add keyboard-scaling depth controls and visual scaling curves.
 - [ ] Add mono/poly, portamento, pitch-bend and performance controls where supported by the FM-1.
 - [ ] Add constrained randomization, mutation, initialized-voice variants and A/B comparison inside the editor.
-- [ ] Add opt-in throttled live parameter writes after the parameter map is hardware-verified.
+- [ ] Add opt-in throttled live parameter writes only after the FM-1 semantic parameter map is hardware-verified.
 
 ## 5. FM-1 bank/device workflow
 
-- [ ] Add A/B/C/D destination selection with explicit destructive-operation confirmation.
-- [ ] Add transfer progress, checksum diagnostics, retry and cancellation.
-- [ ] Add backup/restore only if device-originated dumps are verified.
-- [ ] Keep verified operations visually distinct from experimental or file-only operations.
+- [ ] Confirm the app's bank A/B/C/D and slot-to-preset mapping against the physical device.
+- [ ] Add transfer completion detection if the FM-1 exposes an acknowledgement or observable response.
+- [ ] Add device backup/restore only if device-originated bank dumps are verified.
 
 ## 6. Sequencer
 
@@ -44,14 +42,14 @@
 - [ ] Add MIDI clock output at 24 PPQN and selectable internal/external clock behavior.
 - [ ] Add pattern chaining and a small song-arrangement view.
 - [ ] Add FM-1 internal pattern transfer only after a stable protocol is verified.
-- [ ] Make it more like a step sequencer with a pianoroll layout
-- [ ] Add common presets/patterns to select single/poly styles like chrod progression based on a starting note
+- [ ] Make it more like a step sequencer with a piano-roll layout.
+- [ ] Add common presets and patterns for single-note, polyphonic and chord-progression styles based on a starting note.
 
 ## 7. Validation and delivery
 
 - [ ] Add legal/public-domain or user-provided SysEx fixtures and broader codec compatibility tests.
 - [ ] Add property-based round-trip tests for all valid parameter ranges and preserved reserved bits.
-- [ ] Test the viewport-safe sidebar and virtual piano in Chrome and Edge at desktop, tablet and narrow mobile widths.
-- [ ] Test Chrome and Edge on Windows with a physical FM-1 over USB MIDI, including voice push, note-off recovery and channel selection; test BLE MIDI where browser/platform support permits.
+- [ ] Test the viewport-safe sidebar, bank-merge controls and virtual piano in Chrome and Edge at desktop, tablet and narrow mobile widths.
+- [ ] Test Chrome and Edge on Windows with a physical FM-1 over USB MIDI, including merged bank import, destination selection, preset recall, note-off recovery and channel selection; test BLE MIDI where browser/platform support permits.
 - [ ] Add GitHub Pages deployment after secure-context routing and Web MIDI behavior are verified.
 - [ ] Document firmware-specific limitations, recovery steps and tested hardware/browser combinations.
