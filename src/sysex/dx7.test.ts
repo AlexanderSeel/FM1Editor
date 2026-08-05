@@ -2,8 +2,10 @@ import { describe, expect, it } from 'vitest'
 import { createInitializedVoice } from '../domain/voice'
 import {
   calculateYamahaChecksum,
+  decodePackedVoice,
   decodeSingleVoiceMessage,
   decodeVoiceBankMessage,
+  encodePackedVoice,
   encodeSingleVoiceMessage,
   encodeVoiceBankMessage,
 } from './dx7'
@@ -33,6 +35,20 @@ describe('DX7 single voice', () => {
     const message = encodeSingleVoiceMessage(createInitializedVoice())
     message[20] = 42
     expect(() => decodeSingleVoiceMessage(message)).toThrow(/checksum/i)
+  })
+})
+
+describe('DX7 packed voice', () => {
+  it('masks detune reserved bits and preserves them during re-encoding', () => {
+    const packed = encodePackedVoice(createInitializedVoice('RESERVED'))
+    const op2DetuneOffset = 4 * 17 + 16
+    packed[op2DetuneOffset] = 0x35
+
+    const decoded = decodePackedVoice(packed)
+    const reencoded = encodePackedVoice(decoded)
+
+    expect(decoded.operators[1].detune).toBe(5)
+    expect(reencoded[op2DetuneOffset]).toBe(0x35)
   })
 })
 
