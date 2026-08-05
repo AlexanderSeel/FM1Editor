@@ -1,5 +1,5 @@
 import type { Dx7Voice } from '../domain/voice'
-import { encodeSingleVoiceData } from '../sysex/dx7'
+import { DX7_PACKED_VOICE_LENGTH, encodeSingleVoiceData } from '../sysex/dx7'
 import {
   fingerprintVoice,
   normalizeTags,
@@ -46,13 +46,29 @@ function normalizeOrigin(
   }
 }
 
+function repairPackedDetuneValues(voice: Dx7Voice): Dx7Voice {
+  const packed = voice.source?.packed
+  if (!(packed instanceof Uint8Array) || packed.length !== DX7_PACKED_VOICE_LENGTH) return voice
+  if (!voice.operators.some((operator) => operator.detune > 14)) return voice
+
+  const operators = voice.operators.map((operator, operatorIndex) => {
+    if (operator.detune <= 14) return operator
+    const packedBlock = 5 - operatorIndex
+    const packedDetune = packed[packedBlock * 17 + 16]
+    if (packedDetune === undefined) return operator
+    return { ...operator, detune: packedDetune & 0x0f }
+  }) as unknown as Dx7Voice['operators']
+
+  return { ...voice, operators }
+}
+
 export function normalizeStoredPatchRecord(
   value: unknown,
   fallbackTimestamp = new Date().toISOString(),
 ): PatchRecord | null {
   if (!isRecord(value) || !isRecord(value.voice)) return null
 
-  const voice = value.voice as unknown as Dx7Voice
+  const voice = repairPackedDetuneValues(value.voice as unknown as Dx7Voice)
   try {
     encodeSingleVoiceData(voice)
   } catch {
