@@ -1,16 +1,49 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="192" height="192" viewBox="0 0 192 192" role="img" aria-label="FM1 Editor">
   <defs>
-    <linearGradient id="bg" x1="24" y1="18" x2="168" y2="174" gradientUnits="userSpaceOnUse">
-      <stop stop-color="#132238"/>
-      <stop offset="1" stop-color="#070b12"/>
+    <linearGradient id="case" x1="28" y1="18" x2="164" y2="176" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#222722"/>
+      <stop offset=".55" stop-color="#121612"/>
+      <stop offset="1" stop-color="#080a08"/>
     </linearGradient>
-    <linearGradient id="wave" x1="31" y1="92" x2="161" y2="92" gradientUnits="userSpaceOnUse">
-      <stop stop-color="#22d3ee"/>
-      <stop offset="1" stop-color="#a855f7"/>
+    <linearGradient id="lcd" x1="67" y1="53" x2="126" y2="112" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#c6f1ff"/>
+      <stop offset="1" stop-color="#66c7eb"/>
     </linearGradient>
+    <radialGradient id="knob" cx="38%" cy="30%" r="70%">
+      <stop stop-color="#596159"/>
+      <stop offset=".55" stop-color="#272c27"/>
+      <stop offset="1" stop-color="#090b09"/>
+    </radialGradient>
   </defs>
-  <rect width="192" height="192" rx="42" fill="url(#bg)"/>
-  <rect x="10" y="10" width="172" height="172" rx="34" fill="none" stroke="#ffffff" stroke-opacity=".12" stroke-width="2"/>
-  <path d="M31 96c13-41 23-41 35 0s23 41 35 0 23-41 35 0 17 27 25 6" fill="none" stroke="url(#wave)" stroke-linecap="round" stroke-width="10"/>
-  <text x="96" y="151" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="34" font-weight="800" letter-spacing="3" fill="#f8fafc">FM1</text>
+  <rect width="192" height="192" rx="38" fill="#090b09"/>
+  <rect x="7" y="7" width="178" height="178" rx="32" fill="url(#case)" stroke="#596159" stroke-width="2"/>
+  <path d="M30 8h132" stroke="#789b3d" stroke-width="4" stroke-linecap="round" opacity=".9"/>
+  <rect x="58" y="42" width="76" height="79" rx="8" fill="#050705" stroke="#343a34" stroke-width="4"/>
+  <rect x="64" y="48" width="64" height="67" rx="4" fill="url(#lcd)"/>
+  <path d="M69 63h54M69 91h54" stroke="#0a4964" stroke-width="2" opacity=".55"/>
+  <text x="96" y="82" text-anchor="middle" font-family="Arial Narrow,Arial,sans-serif" font-size="18" font-weight="800" fill="#06364a">FM-1</text>
+  <g fill="url(#knob)" stroke="#687068">
+    <circle cx="31" cy="54" r="13"/>
+    <circle cx="31" cy="95" r="13"/>
+    <circle cx="157" cy="54" r="13"/>
+    <circle cx="157" cy="95" r="13"/>
+  </g>
+  <g stroke="#dbe1db" stroke-width="2" stroke-linecap="round">
+    <path d="M31 46v6"/>
+    <path d="M31 87v6"/>
+    <path d="M157 46v6"/>
+    <path d="M157 87v6"/>
+  </g>
+  <g fill="#2c312c" stroke="#4a514a">
+    <rect x="27" y="136" width="30" height="23" rx="5"/>
+    <rect x="63" y="136" width="30" height="23" rx="5"/>
+    <rect x="99" y="136" width="30" height="23" rx="5"/>
+    <rect x="135" y="136" width="30" height="23" rx="5"/>
+  </g>
+  <g fill="#9fe5ff" font-family="Arial Narrow,Arial,sans-serif" font-size="7" font-weight="800" text-anchor="middle">
+    <text x="42" y="151">FX</text>
+    <text x="78" y="151">EDIT</text>
+    <text x="114" y="151">SEQ</text>
+    <text x="150" y="151">SAVE</text>
+  </g>
 </svg>
