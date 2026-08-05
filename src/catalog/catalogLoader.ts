@@ -1,6 +1,8 @@
 import { unzipSync } from 'fflate'
+import { websiteBanksFromManifest } from './catalogManifest'
 import { fetchRemoteSysex } from './remoteSysex'
 import { buildPatchCatalog, type PatchCatalog, type PatchCatalogEntry } from './patchCatalog'
+import { YAMAHA_BLACK_BOXES_BANKS, type WebsiteCatalogBank } from './yamahaBlackBoxesCatalog'
 
 const ARCHIVE_REMOTE_URL = 'https://github.com/probonopd/MiniDexed/files/11312517/sysexFinal.zip'
 const ARCHIVE_EXPECTED_SHA256 = 'fde5aad29b215aa3ea67e9f57bf55d4443cc6efe7562d6cb6dc375b3c780b263'
@@ -8,6 +10,7 @@ const ARCHIVE_EXPECTED_SHA256 = 'fde5aad29b215aa3ea67e9f57bf55d4443cc6efe7562d6c
 export interface LoadedPatchCatalog extends PatchCatalog {
   archiveSource: 'build-mirror' | 'original-source'
   archiveIntegrity: 'verified' | 'changed' | 'unavailable'
+  websiteSource: 'sync-manifest' | 'static-fallback'
 }
 
 let catalogPromise: Promise<LoadedPatchCatalog> | null = null
@@ -20,6 +23,12 @@ async function fetchBytes(url: string): Promise<Uint8Array> {
   const response = await fetch(url, { credentials: 'omit' })
   if (!response.ok) throw new Error(`${url} returned HTTP ${response.status}.`)
   return new Uint8Array(await response.arrayBuffer())
+}
+
+async function fetchJson(url: string): Promise<unknown> {
+  const response = await fetch(url, { credentials: 'omit' })
+  if (!response.ok) throw new Error(`${url} returned HTTP ${response.status}.`)
+  return response.json() as Promise<unknown>
 }
 
 async function digestSha256(bytes: Uint8Array): Promise<string | null> {
@@ -43,11 +52,23 @@ async function loadArchive(): Promise<{ bytes: Uint8Array; source: LoadedPatchCa
   }
 }
 
+async function loadWebsiteBanks(): Promise<{
+  banks: readonly WebsiteCatalogBank[]
+  source: LoadedPatchCatalog['websiteSource']
+}> {
+  try {
+    const manifest = await fetchJson(assetUrl('catalog/sync-manifest.json'))
+    return { banks: websiteBanksFromManifest(manifest), source: 'sync-manifest' }
+  } catch {
+    return { banks: YAMAHA_BLACK_BOXES_BANKS, source: 'static-fallback' }
+  }
+}
+
 export async function loadPatchCatalog(): Promise<LoadedPatchCatalog> {
   catalogPromise ??= (async () => {
-    const archive = await loadArchive()
+    const [archive, website] = await Promise.all([loadArchive(), loadWebsiteBanks()])
     const actualSha256 = await digestSha256(archive.bytes)
-    const catalog = buildPatchCatalog(unzipSync(archive.bytes))
+    const catalog = buildPatchCatalog(unzipSync(archive.bytes), website.banks)
     return {
       ...catalog,
       archiveSource: archive.source,
@@ -56,6 +77,7 @@ export async function loadPatchCatalog(): Promise<LoadedPatchCatalog> {
         : actualSha256 === ARCHIVE_EXPECTED_SHA256
           ? 'verified'
           : 'changed',
+      websiteSource: website.source,
     }
   })()
   return catalogPromise
