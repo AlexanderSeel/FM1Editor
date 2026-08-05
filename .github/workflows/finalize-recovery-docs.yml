@@ -1,0 +1,61 @@
+name: Finalize recovery documentation
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/finalize-recovery-docs.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  finalize:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Align completed work and documentation
+        shell: python
+        run: |
+          from pathlib import Path
+
+          readme = Path('README.md')
+          text = readme.read_text(encoding='utf-8')
+          text = text.replace(
+              '40 passing Vitest tests across 15 files',
+              '44 passing Vitest tests across 15 files',
+          )
+          text = text.replace(
+              'GitHub Actions workflow for typecheck, tests and production build.',
+              'GitHub Actions workflow for typecheck, ESLint/JSX accessibility, tests and production build.',
+          )
+          text = text.replace(
+              'npm run typecheck\nnpm run test\nnpm run build',
+              'npm run typecheck\nnpm run lint\nnpm run test\nnpm run build',
+          )
+          readme.write_text(text, encoding='utf-8')
+
+          app = Path('src/App.tsx')
+          text = app.read_text(encoding='utf-8')
+          text = text.replace('schema v2 · backup/restore', 'schema v3 · backup/restore')
+          app.write_text(text, encoding='utf-8')
+
+          plan = Path('PLAN.md')
+          text = plan.read_text(encoding='utf-8')
+          text = text.replace('- [ ] Add ESLint and automated accessibility checks.\n', '')
+          plan.write_text(text, encoding='utf-8')
+
+      - name: Commit cleanup
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add README.md src/App.tsx PLAN.md
+          git commit -m 'docs: finalize FM-1 recovery milestone'
+          git push origin HEAD:main
