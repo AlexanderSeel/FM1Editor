@@ -78,6 +78,10 @@ export function encodeControlChange(channel: number, controller: number, value: 
   return Uint8Array.of(0xb0 | (channel - 1), controller, value)
 }
 
+export function encodeAllNotesOff(channel: number): Uint8Array {
+  return encodeControlChange(channel, 123, 0)
+}
+
 export function encodeProgramChange(channel: number, program: number): Uint8Array {
   assertIntegerRange('MIDI channel', channel, 1, 16)
   assertIntegerRange('MIDI program', program, 0, 127)
