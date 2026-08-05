@@ -48,7 +48,7 @@ function openDatabase(): Promise<IDBDatabase> {
 
   databasePromise = new Promise((resolve, reject) => {
     const request = indexedDB.open(DATABASE_NAME, DATABASE_VERSION)
-    request.addEventListener('upgradeneeded', () => {
+    request.addEventListener('upgradeneeded', (event) => {
       const database = request.result
       const transaction = request.transaction
       if (!transaction) return
@@ -57,7 +57,7 @@ function openDatabase(): Promise<IDBDatabase> {
         ? transaction.objectStore(PATCH_STORE)
         : database.createObjectStore(PATCH_STORE, { keyPath: 'id' })
       ensurePatchIndexes(patchStore)
-      if (request.oldVersion < 2) migrateStoredRecords(patchStore)
+      if ((event as IDBVersionChangeEvent).oldVersion < 2) migrateStoredRecords(patchStore)
 
       const metadataStore = database.objectStoreNames.contains(METADATA_STORE)
         ? transaction.objectStore(METADATA_STORE)
