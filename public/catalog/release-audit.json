@@ -1,0 +1,828 @@
+{
+  "version": 1,
+  "generatedAt": "2026-08-05T13:30:23.678Z",
+  "catalogFingerprint": "891241776c2e86610e86f2b01140976b76f09fd91b6c73c2201a81570f7e00cd",
+  "previousCatalogFingerprint": null,
+  "sourceManifest": {
+    "path": "public/catalog/sync-manifest.json",
+    "sha256": "2c0f4901796e64c676a6640b264841e2fbb5f9d127fffc53b32acfa655a7b037"
+  },
+  "releaseStatus": "review-required",
+  "sources": [
+    {
+      "id": "tracked-archive",
+      "kind": "archive",
+      "source": "public/catalog/sysexFinal.zip",
+      "assetPath": "catalog/sysexFinal.zip",
+      "size": 2785215,
+      "sha256": "fde5aad29b215aa3ea67e9f57bf55d4443cc6efe7562d6cb6dc375b3c780b263",
+      "expectedSha256": "fde5aad29b215aa3ea67e9f57bf55d4443cc6efe7562d6cb6dc375b3c780b263"
+    },
+    {
+      "id": "yamaha-black-boxes",
+      "kind": "website",
+      "source": "https://yamahablackboxes.com/collection/yamaha-dx7-synthesizer/patches/",
+      "fileCount": 35,
+      "aggregateSha256": "fba0dc1eaf4e14f1e35fda727157839a9c7f8920edaae1b6acf5a73404ebcbec"
+    }
+  ],
+  "changes": {
+    "added": [
+      {
+        "id": "archive:catalog/sysexFinal.zip",
+        "kind": "archive",
+        "filename": "sysexFinal.zip",
+        "sourceUrl": "public/catalog/sysexFinal.zip",
+        "assetPath": "catalog/sysexFinal.zip",
+        "size": 2785215,
+        "sha256": "fde5aad29b215aa3ea67e9f57bf55d4443cc6efe7562d6cb6dc375b3c780b263",
+        "rights": {}
+      },
+      {
+        "id": "website:https://yamahablackboxes.com/patches/dx7/factory/rom1a.syx",
+        "kind": "website",
+        "filename": "rom1a.syx",
+        "sourceUrl": "https://yamahablackboxes.com/patches/dx7/factory/rom1a.syx",
+        "assetPath": "catalog/yamaha-black-boxes/factory/rom1a.syx",
+        "size": 4104,
+        "sha256": "91416e81d0fad931f6c7b5dc5bcfd7b7c48f5340b3753b7d3bf99f439fdd104d",
+        "rights": {}
+      },
+      {
+        "id": "website:https://yamahablackboxes.com/patches/dx7/factory/rom1b.syx",
+        "kind": "website",
+        "filename": "rom1b.syx",
+        "sourceUrl": "https://yamahablackboxes.com/patches/dx7/factory/rom1b.syx",
+        "assetPath": "catalog/yamaha-black-boxes/factory/rom1b.syx",
+        "size": 4104,
+        "sha256": "15c817360f56f7bd0e269575291cbfac91a45f0ee6125479abfdc4d69a560b4b",
+        "rights": {}
+      },
+      {
+        "id": "website:https://yamahablackboxes.com/patches/dx7/factory/rom2a.syx",
+        "kind": "website",
+        "filename": "rom2a.syx",
+        "sourceUrl": "https://yamahablackboxes.com/patches/dx7/factory/rom2a.syx",
+        "assetPath": "catalog/yamaha-black-boxes/factory/rom2a.syx",
+        "size": 4104,
+        "sha256": "5254f04b674aa872e8f09a8b5828cc5454f79495e4aa5bbba8a3cac3c606a699",
+        "rights": {}
+      },
+      {
+        "id": "website:https://yamahablackboxes.com/patches/dx7/factory/rom2b.syx",
+        "kind": "website",
+        "filename": "rom2b.syx",
+        "sourceUrl": "https://yamahablackboxes.com/patches/dx7/factory/rom2b.syx",
+        "assetPath": "catalog/yamaha-black-boxes/factory/rom2b.syx",
+        "size": 4104,
+        "sha256": "1efb00f24e28df03470ebca19cadd63cb98b5f099b5e7502dd6f232ddb23af54",
+        "rights": {}
+      },
+      {
+        "id": "website:https://yamahablackboxes.com/patches/dx7/factory/rom3a.syx",
+        "kind": "website",
+        "filename": "rom3a.syx",
+        "sourceUrl": "https://yamahablackboxes.com/patches/dx7/factory/rom3a.syx",
+        "assetPath": "catalog/yamaha-black-boxes/factory/rom3a.syx",
+        "size": 4104,
+        "sha256": "157b71a53a9881c8209bb5de57f6d9519d5f43cb7cae591c4606e7fb52ff9d86",
+        "rights": {}
+      },
+      {
+        "id": "website:https://yamahablackboxes.com/patches/dx7/factory/rom3b.syx",
+        "kind": "website",
+        "filename": "rom3b.syx",
+        "sourceUrl": "https://yamahablackboxes.com/patches/dx7/factory/rom3b.syx",
+        "assetPath": "catalog/yamaha-black-boxes/factory/rom3b.syx",
+        "size": 4104,
+        "sha256": "0f21e5f28f0b6c77ef5cef839bb244d8946b2ee2243e88e1ba19f46c4aa85e30",
+        "rights": {}
+      },
+      {
+        "id": "website:https://yamahablackboxes.com/patches/dx7/factory/rom4a.syx",
+        "kind": "website",
+        "filename": "rom4a.syx",
+        "sourceUrl": "https://yamahablackboxes.com/patches/dx7/factory/rom4a.syx",
+        "assetPath": "catalog/yamaha-black-boxes/factory/rom4a.syx",
+        "size": 4104,
+        "sha256": "b34f01b5ee8690e5b45351a960eed3dea2fdd72318b419303d23f07d5e411fda",
+        "rights": {}
+      },
+      {
+        "id": "website:https://yamahablackboxes.com/patches/dx7/factory/rom4b.syx",
+        "kind": "website",
+        "filename": "rom4b.syx",
+        "sourceUrl": "https://yamahablackboxes.com/patches/dx7/factory/rom4b.syx",
+        "assetPath": "catalog/yamaha-black-boxes/factory/rom4b.syx",
+        "size": 4104,
+        "sha256": "d4eae13570569e27894a21593a9c591a474a1b945c13c3a0a933c42dee684c0b",
+        "rights": {}
+      },
+      {
+        "id": "website:https://yamahablackboxes.com/patches/dx7/greymatter/2.syx",
+        "kind": "website",
+        "filename": "2.syx",
+        "sourceUrl": "https://yamahablackboxes.com/patches/dx7/greymatter/2.syx",
+        "assetPath": "catalog/yamaha-black-boxes/greymatter/2.syx",
+        "size": 4104,
+        "sha256": "22c2510e0bbf184f20e9fabbb29e9ac1476bac653fddd246dc8ccf4480f9fbac",
+        "rights": {}
+      },
+      {
+        "id": "website:https://yamahablackboxes.com/patches/dx7/greymatter/5.syx",
+        "kind": "website",
+        "filename": "5.syx",
+        "sourceUrl": "https://yamahablackboxes.com/patches/dx7/greymatter/5.syx",
+        "assetPath": "catalog/yamaha-black-boxes/greymatter/5.syx",
+        "size": 4104,
+        "sha256": "c3d8aee7c22da4356c86961c9b12640e0a28c624bb5d960d010bd3eef0b9c740",
+        "rights": {}
+      },
+      {
+        "id": "website:https://yamahablackboxes.com/patches/dx7/greymatter/7.syx",
+        "kind": "website",
+        "filename": "7.syx",
+        "sourceUrl": "https://yamahablackboxes.com/patches/dx7/greymatter/7.syx",
+        "assetPath": "catalog/yamaha-black-boxes/greymatter/7.syx",
+        "size": 4104,
+        "sha256": "c23f053d9b63ad6fbb1cf4bf70ef74088a9506bc9490dbfe9af29cd672bd0e33",
+        "rights": {}
+      },
+      {
+        "id": "website:https://yamahablackboxes.com/patches/dx7/vrc/vrc101a.syx",
+        "kind": "website",
+        "filename": "vrc101a.syx",
+        "sourceUrl": "https://yamahablackboxes.com/patches/dx7/vrc/vrc101a.syx",
+        "assetPath": "catalog/yamaha-black-boxes/vrc/vrc101a.syx",
+        "size": 4104,
+        "sha256": "5356b78317ac6a1abf1d3de2ee4afa2e7f4b0f4c1fb92623517d83177ebed355",
+        "rights": {}
+      },
+      {
+        "id": "website:https://yamahablackboxes.com/patches/dx7/vrc/vrc101b.syx",
+        "kind": "website",
+        "filename": "vrc101b.syx",
+        "sourceUrl": "https://yamahablackboxes.com/patches/dx7/vrc/vrc101b.syx",
+        "assetPath": "catalog/yamaha-black-boxes/vrc/vrc101b.syx",
+        "size": 4104,
+        "sha256": "c2c3a9bb9d4400b392dc0f191b712587f2d2fb24349c343c86fb29e2c491526f",
+        "rights": {}
+      },
+      {
+        "id": "website:https://yamahablackboxes.com/patches/dx7/vrc/vrc102a.syx",
+        "kind": "website",
+        "filename": "vrc102a.syx",
+        "sourceUrl": "https://yamahablackboxes.com/patches/dx7/vrc/vrc102a.syx",
+        "assetPath": "catalog/yamaha-black-boxes/vrc/vrc102a.syx",
+        "size": 4104,
+        "sha256": "2d2831b420b2d6f2571d064380f25f0aa98715af5d757a73109477ee358fede9",
+        "rights": {}
+      },
+      {
+        "id": "website:https://yamahablackboxes.com/patches/dx7/vrc/vrc102b.syx",
+        "kind": "website",
+        "filename": "vrc102b.syx",
+        "sourceUrl": "https://yamahablackboxes.com/patches/dx7/vrc/vrc102b.syx",
+        "assetPath": "catalog/yamaha-black-boxes/vrc/vrc102b.syx",
+        "size": 4104,
+        "sha256": "6beb2d4e2efb2a3fc7d01be5e4ac2eba2a3d757d8eda74366d9077e8b710dd6f",
+        "rights": {}
+      },
+      {
+        "id": "website:https://yamahablackboxes.com/patches/dx7/vrc/vrc103a.syx",
+        "kind": "website",
+        "filename": "vrc103a.syx",
+        "sourceUrl": "https://yamahablackboxes.com/patches/dx7/vrc/vrc103a.syx",
+        "assetPath": "catalog/yamaha-black-boxes/vrc/vrc103a.syx",
+        "size": 4104,
+        "sha256": "754b76d8eb7e9a72c6844fd6ac377330845e7826f79ddeaae82633edb14b9ed6",
+        "rights": {}
+      },
+      {
+        "id": "website:https://yamahablackboxes.com/patches/dx7/vrc/vrc103b.syx",
+        "kind": "website",
+        "filename": "vrc103b.syx",
+        "sourceUrl": "https://yamahablackboxes.com/patches/dx7/vrc/vrc103b.syx",
+        "assetPath": "catalog/yamaha-black-boxes/vrc/vrc103b.syx",
+        "size": 4104,
+        "sha256": "c2425222d5dc509f43a05ae043423f4dbe2176f4af59f5c00b0d76d7dc5141b5",
+        "rights": {}
+      },
+      {
+        "id": "website:https://yamahablackboxes.com/patches/dx7/vrc/vrc104a.syx",
+        "kind": "website",
+        "filename": "vrc104a.syx",
+        "sourceUrl": "https://yamahablackboxes.com/patches/dx7/vrc/vrc104a.syx",
+        "assetPath": "catalog/yamaha-black-boxes/vrc/vrc104a.syx",
+        "size": 4104,
+        "sha256": "7a5dd7979bb0be2e7678ca2fcde828c098141b3092d31c772df554d7414dab91",
+        "rights": {}
+      },
+      {
+        "id": "website:https://yamahablackboxes.com/patches/dx7/vrc/vrc104b.syx",
+        "kind": "website",
+        "filename": "vrc104b.syx",
+        "sourceUrl": "https://yamahablackboxes.com/patches/dx7/vrc/vrc104b.syx",
+        "assetPath": "catalog/yamaha-black-boxes/vrc/vrc104b.syx",
+        "size": 4104,
+        "sha256": "de14ed916d6496c67e1f66521eb02133930d1f66725bbc92ac265d6bacc7fa15",
+        "rights": {}
+      },
+      {
+        "id": "website:https://yamahablackboxes.com/patches/dx7/vrc/vrc105a.syx",
+        "kind": "website",
+        "filename": "vrc105a.syx",
+        "sourceUrl": "https://yamahablackboxes.com/patches/dx7/vrc/vrc105a.syx",
+        "assetPath": "catalog/yamaha-black-boxes/vrc/vrc105a.syx",
+        "size": 4104,
+        "sha256": "5b6b466cafcf04331227cae9561ae82b7316beb586dcf978adf44efa5aeba2ea",
+        "rights": {}
+      },
+      {
+        "id": "website:https://yamahablackboxes.com/patches/dx7/vrc/vrc105b.syx",
+        "kind": "website",
+        "filename": "vrc105b.syx",
+        "sourceUrl": "https://yamahablackboxes.com/patches/dx7/vrc/vrc105b.syx",
+        "assetPath": "catalog/yamaha-black-boxes/vrc/vrc105b.syx",
+        "size": 4104,
+        "sha256": "1f423b35be11621aba4f74fe410d5b99b5dcfa0f0d9aac8f9f4e1e8ae5a23986",
+        "rights": {}
+      },
+      {
+        "id": "website:https://yamahablackboxes.com/patches/dx7/vrc/vrc106a.syx",
+        "kind": "website",
+        "filename": "vrc106a.syx",
+        "sourceUrl": "https://yamahablackboxes.com/patches/dx7/vrc/vrc106a.syx",
+        "assetPath": "catalog/yamaha-black-boxes/vrc/vrc106a.syx",
+        "size": 4104,
+        "sha256": "05f1573592793e974c855db745eafa2ba321d7e6332b74529f6ca36b8be8c093",
+        "rights": {}
+      },
+      {
+        "id": "website:https://yamahablackboxes.com/patches/dx7/vrc/vrc106b.syx",
+        "kind": "website",
+        "filename": "vrc106b.syx",
+        "sourceUrl": "https://yamahablackboxes.com/patches/dx7/vrc/vrc106b.syx",
+        "assetPath": "catalog/yamaha-black-boxes/vrc/vrc106b.syx",
+        "size": 4104,
+        "sha256": "01cea1b37989ea5772734dbfda76dc9acf9a6e5dc0aaa60ed2971a577d257681",
+        "rights": {}
+      },
+      {
+        "id": "website:https://yamahablackboxes.com/patches/dx7/vrc/vrc107a.syx",
+        "kind": "website",
+        "filename": "vrc107a.syx",
+        "sourceUrl": "https://yamahablackboxes.com/patches/dx7/vrc/vrc107a.syx",
+        "assetPath": "catalog/yamaha-black-boxes/vrc/vrc107a.syx",
+        "size": 4104,
+        "sha256": "4a4b6b6b5c76dac5f618065d64606d930182d3ef5c004b2edb2f6067d43466a0",
+        "rights": {}
+      },
+      {
+        "id": "website:https://yamahablackboxes.com/patches/dx7/vrc/vrc107b.syx",
+        "kind": "website",
+        "filename": "vrc107b.syx",
+        "sourceUrl": "https://yamahablackboxes.com/patches/dx7/vrc/vrc107b.syx",
+        "assetPath": "catalog/yamaha-black-boxes/vrc/vrc107b.syx",
+        "size": 4104,
+        "sha256": "a5a1a37a230abaa581f8a9be467230365c73e11d267ba5be7f476d6d79314ae2",
+        "rights": {}
+      },
+      {
+        "id": "website:https://yamahablackboxes.com/patches/dx7/vrc/vrc108a.syx",
+        "kind": "website",
+        "filename": "vrc108a.syx",
+        "sourceUrl": "https://yamahablackboxes.com/patches/dx7/vrc/vrc108a.syx",
+        "assetPath": "catalog/yamaha-black-boxes/vrc/vrc108a.syx",
+        "size": 4104,
+        "sha256": "cbca27b69c04ba6b2ebaedfb9b33f632fd05f83cf0a1efe0058d39243cbe6aca",
+        "rights": {}
+      },
+      {
+        "id": "website:https://yamahablackboxes.com/patches/dx7/vrc/vrc108b.syx",
+        "kind": "website",
+        "filename": "vrc108b.syx",
+        "sourceUrl": "https://yamahablackboxes.com/patches/dx7/vrc/vrc108b.syx",
+        "assetPath": "catalog/yamaha-black-boxes/vrc/vrc108b.syx",
+        "size": 4104,
+        "sha256": "e73e181aec5c3a8a121aab5f757408e6bd1f9e7f8fddc41af356636766e20df7",
+        "rights": {}
+      },
+      {
+        "id": "website:https://yamahablackboxes.com/patches/dx7/vrc/vrc109a.syx",
+        "kind": "website",
+        "filename": "vrc109a.syx",
+        "sourceUrl": "https://yamahablackboxes.com/patches/dx7/vrc/vrc109a.syx",
+        "assetPath": "catalog/yamaha-black-boxes/vrc/vrc109a.syx",
+        "size": 4104,
+        "sha256": "bb7ab20e105aa5f3457aa4dcba3c288583dca197a5a18f47514a2379b110d140",
+        "rights": {}
+      },
+      {
+        "id": "website:https://yamahablackboxes.com/patches/dx7/vrc/vrc109b.syx",
+        "kind": "website",
+        "filename": "vrc109b.syx",
+        "sourceUrl": "https://yamahablackboxes.com/patches/dx7/vrc/vrc109b.syx",
+        "assetPath": "catalog/yamaha-black-boxes/vrc/vrc109b.syx",
+        "size": 4104,
+        "sha256": "a07ddeab3263c2b4743bc654cbe79603b043e357e72bdb354f4aadf98d8506b0",
+        "rights": {}
+      },
+      {
+        "id": "website:https://yamahablackboxes.com/patches/dx7/vrc/vrc110a.syx",
+        "kind": "website",
+        "filename": "vrc110a.syx",
+        "sourceUrl": "https://yamahablackboxes.com/patches/dx7/vrc/vrc110a.syx",
+        "assetPath": "catalog/yamaha-black-boxes/vrc/vrc110a.syx",
+        "size": 4104,
+        "sha256": "910835e68db2585e95998811c5132c3398ab5d07c6a80a9eb75ee1769cb1e39b",
+        "rights": {}
+      },
+      {
+        "id": "website:https://yamahablackboxes.com/patches/dx7/vrc/vrc110b.syx",
+        "kind": "website",
+        "filename": "vrc110b.syx",
+        "sourceUrl": "https://yamahablackboxes.com/patches/dx7/vrc/vrc110b.syx",
+        "assetPath": "catalog/yamaha-black-boxes/vrc/vrc110b.syx",
+        "size": 4104,
+        "sha256": "072eb2b832357eeffb57d8c3953085490ef35b32e91b798e495b8b047bdd7fbf",
+        "rights": {}
+      },
+      {
+        "id": "website:https://yamahablackboxes.com/patches/dx7/vrc/vrc111a.syx",
+        "kind": "website",
+        "filename": "vrc111a.syx",
+        "sourceUrl": "https://yamahablackboxes.com/patches/dx7/vrc/vrc111a.syx",
+        "assetPath": "catalog/yamaha-black-boxes/vrc/vrc111a.syx",
+        "size": 4104,
+        "sha256": "199e101d0e8291de034569a1652aa21b75ce39d8e400481c3d8fadbb8ccfb7dc",
+        "rights": {}
+      },
+      {
+        "id": "website:https://yamahablackboxes.com/patches/dx7/vrc/vrc111b.syx",
+        "kind": "website",
+        "filename": "vrc111b.syx",
+        "sourceUrl": "https://yamahablackboxes.com/patches/dx7/vrc/vrc111b.syx",
+        "assetPath": "catalog/yamaha-black-boxes/vrc/vrc111b.syx",
+        "size": 4104,
+        "sha256": "0b5433acbd4b9d734d6421a187f96e550b0be45512cde5c59f2d59c9aa363097",
+        "rights": {}
+      },
+      {
+        "id": "website:https://yamahablackboxes.com/patches/dx7/vrc/vrc112a.syx",
+        "kind": "website",
+        "filename": "vrc112a.syx",
+        "sourceUrl": "https://yamahablackboxes.com/patches/dx7/vrc/vrc112a.syx",
+        "assetPath": "catalog/yamaha-black-boxes/vrc/vrc112a.syx",
+        "size": 4104,
+        "sha256": "62aa54ab3242b4d77d1995c5c15f90081d6c46ef7deadd5b4a9bf47de87fdbce",
+        "rights": {}
+      },
+      {
+        "id": "website:https://yamahablackboxes.com/patches/dx7/vrc/vrc112b.syx",
+        "kind": "website",
+        "filename": "vrc112b.syx",
+        "sourceUrl": "https://yamahablackboxes.com/patches/dx7/vrc/vrc112b.syx",
+        "assetPath": "catalog/yamaha-black-boxes/vrc/vrc112b.syx",
+        "size": 4104,
+        "sha256": "24c76ac10830faa005a05df31bce351ae29cfe417e694f3c122291a809b9420c",
+        "rights": {}
+      }
+    ],
+    "removed": [],
+    "modified": [],
+    "unchangedCount": 0
+  },
+  "rightsReview": {
+    "status": "review-required",
+    "unresolvedCount": 2,
+    "items": [
+      {
+        "id": "archive:catalog/sysexFinal.zip",
+        "scope": "archive",
+        "source": "public/catalog/sysexFinal.zip",
+        "affectedFiles": [
+          "sysexFinal.zip"
+        ],
+        "missing": [
+          "license",
+          "rightsHolder",
+          "attribution",
+          "provenanceUrl"
+        ],
+        "note": "The bundled archive is tracked and hash-pinned, but explicit provenance and permission metadata must be reviewed before public release."
+      },
+      {
+        "id": "provider:https://yamahablackboxes.com/collection/yamaha-dx7-synthesizer/patches/",
+        "scope": "provider",
+        "source": "https://yamahablackboxes.com/collection/yamaha-dx7-synthesizer/patches/",
+        "affectedFiles": [
+          "2.syx",
+          "5.syx",
+          "7.syx",
+          "rom1a.syx",
+          "rom1b.syx",
+          "rom2a.syx",
+          "rom2b.syx",
+          "rom3a.syx",
+          "rom3b.syx",
+          "rom4a.syx",
+          "rom4b.syx",
+          "vrc101a.syx",
+          "vrc101b.syx",
+          "vrc102a.syx",
+          "vrc102b.syx",
+          "vrc103a.syx",
+          "vrc103b.syx",
+          "vrc104a.syx",
+          "vrc104b.syx",
+          "vrc105a.syx",
+          "vrc105b.syx",
+          "vrc106a.syx",
+          "vrc106b.syx",
+          "vrc107a.syx",
+          "vrc107b.syx",
+          "vrc108a.syx",
+          "vrc108b.syx",
+          "vrc109a.syx",
+          "vrc109b.syx",
+          "vrc110a.syx",
+          "vrc110b.syx",
+          "vrc111a.syx",
+          "vrc111b.syx",
+          "vrc112a.syx",
+          "vrc112b.syx"
+        ],
+        "missing": [
+          "attribution",
+          "license",
+          "rightsHolder"
+        ],
+        "note": "Source URLs and hashes are retained, but the provider does not publish complete machine-readable license and rights-holder metadata per bank."
+      }
+    ]
+  },
+  "rightsNotice": "Patch rights vary by original author and collection. Source attribution is retained; users are responsible for permitted use.",
+  "catalogFiles": [
+    {
+      "id": "archive:catalog/sysexFinal.zip",
+      "kind": "archive",
+      "filename": "sysexFinal.zip",
+      "sourceUrl": "public/catalog/sysexFinal.zip",
+      "assetPath": "catalog/sysexFinal.zip",
+      "size": 2785215,
+      "sha256": "fde5aad29b215aa3ea67e9f57bf55d4443cc6efe7562d6cb6dc375b3c780b263",
+      "rights": {}
+    },
+    {
+      "id": "website:https://yamahablackboxes.com/patches/dx7/factory/rom1a.syx",
+      "kind": "website",
+      "filename": "rom1a.syx",
+      "sourceUrl": "https://yamahablackboxes.com/patches/dx7/factory/rom1a.syx",
+      "assetPath": "catalog/yamaha-black-boxes/factory/rom1a.syx",
+      "size": 4104,
+      "sha256": "91416e81d0fad931f6c7b5dc5bcfd7b7c48f5340b3753b7d3bf99f439fdd104d",
+      "rights": {}
+    },
+    {
+      "id": "website:https://yamahablackboxes.com/patches/dx7/factory/rom1b.syx",
+      "kind": "website",
+      "filename": "rom1b.syx",
+      "sourceUrl": "https://yamahablackboxes.com/patches/dx7/factory/rom1b.syx",
+      "assetPath": "catalog/yamaha-black-boxes/factory/rom1b.syx",
+      "size": 4104,
+      "sha256": "15c817360f56f7bd0e269575291cbfac91a45f0ee6125479abfdc4d69a560b4b",
+      "rights": {}
+    },
+    {
+      "id": "website:https://yamahablackboxes.com/patches/dx7/factory/rom2a.syx",
+      "kind": "website",
+      "filename": "rom2a.syx",
+      "sourceUrl": "https://yamahablackboxes.com/patches/dx7/factory/rom2a.syx",
+      "assetPath": "catalog/yamaha-black-boxes/factory/rom2a.syx",
+      "size": 4104,
+      "sha256": "5254f04b674aa872e8f09a8b5828cc5454f79495e4aa5bbba8a3cac3c606a699",
+      "rights": {}
+    },
+    {
+      "id": "website:https://yamahablackboxes.com/patches/dx7/factory/rom2b.syx",
+      "kind": "website",
+      "filename": "rom2b.syx",
+      "sourceUrl": "https://yamahablackboxes.com/patches/dx7/factory/rom2b.syx",
+      "assetPath": "catalog/yamaha-black-boxes/factory/rom2b.syx",
+      "size": 4104,
+      "sha256": "1efb00f24e28df03470ebca19cadd63cb98b5f099b5e7502dd6f232ddb23af54",
+      "rights": {}
+    },
+    {
+      "id": "website:https://yamahablackboxes.com/patches/dx7/factory/rom3a.syx",
+      "kind": "website",
+      "filename": "rom3a.syx",
+      "sourceUrl": "https://yamahablackboxes.com/patches/dx7/factory/rom3a.syx",
+      "assetPath": "catalog/yamaha-black-boxes/factory/rom3a.syx",
+      "size": 4104,
+      "sha256": "157b71a53a9881c8209bb5de57f6d9519d5f43cb7cae591c4606e7fb52ff9d86",
+      "rights": {}
+    },
+    {
+      "id": "website:https://yamahablackboxes.com/patches/dx7/factory/rom3b.syx",
+      "kind": "website",
+      "filename": "rom3b.syx",
+      "sourceUrl": "https://yamahablackboxes.com/patches/dx7/factory/rom3b.syx",
+      "assetPath": "catalog/yamaha-black-boxes/factory/rom3b.syx",
+      "size": 4104,
+      "sha256": "0f21e5f28f0b6c77ef5cef839bb244d8946b2ee2243e88e1ba19f46c4aa85e30",
+      "rights": {}
+    },
+    {
+      "id": "website:https://yamahablackboxes.com/patches/dx7/factory/rom4a.syx",
+      "kind": "website",
+      "filename": "rom4a.syx",
+      "sourceUrl": "https://yamahablackboxes.com/patches/dx7/factory/rom4a.syx",
+      "assetPath": "catalog/yamaha-black-boxes/factory/rom4a.syx",
+      "size": 4104,
+      "sha256": "b34f01b5ee8690e5b45351a960eed3dea2fdd72318b419303d23f07d5e411fda",
+      "rights": {}
+    },
+    {
+      "id": "website:https://yamahablackboxes.com/patches/dx7/factory/rom4b.syx",
+      "kind": "website",
+      "filename": "rom4b.syx",
+      "sourceUrl": "https://yamahablackboxes.com/patches/dx7/factory/rom4b.syx",
+      "assetPath": "catalog/yamaha-black-boxes/factory/rom4b.syx",
+      "size": 4104,
+      "sha256": "d4eae13570569e27894a21593a9c591a474a1b945c13c3a0a933c42dee684c0b",
+      "rights": {}
+    },
+    {
+      "id": "website:https://yamahablackboxes.com/patches/dx7/greymatter/2.syx",
+      "kind": "website",
+      "filename": "2.syx",
+      "sourceUrl": "https://yamahablackboxes.com/patches/dx7/greymatter/2.syx",
+      "assetPath": "catalog/yamaha-black-boxes/greymatter/2.syx",
+      "size": 4104,
+      "sha256": "22c2510e0bbf184f20e9fabbb29e9ac1476bac653fddd246dc8ccf4480f9fbac",
+      "rights": {}
+    },
+    {
+      "id": "website:https://yamahablackboxes.com/patches/dx7/greymatter/5.syx",
+      "kind": "website",
+      "filename": "5.syx",
+      "sourceUrl": "https://yamahablackboxes.com/patches/dx7/greymatter/5.syx",
+      "assetPath": "catalog/yamaha-black-boxes/greymatter/5.syx",
+      "size": 4104,
+      "sha256": "c3d8aee7c22da4356c86961c9b12640e0a28c624bb5d960d010bd3eef0b9c740",
+      "rights": {}
+    },
+    {
+      "id": "website:https://yamahablackboxes.com/patches/dx7/greymatter/7.syx",
+      "kind": "website",
+      "filename": "7.syx",
+      "sourceUrl": "https://yamahablackboxes.com/patches/dx7/greymatter/7.syx",
+      "assetPath": "catalog/yamaha-black-boxes/greymatter/7.syx",
+      "size": 4104,
+      "sha256": "c23f053d9b63ad6fbb1cf4bf70ef74088a9506bc9490dbfe9af29cd672bd0e33",
+      "rights": {}
+    },
+    {
+      "id": "website:https://yamahablackboxes.com/patches/dx7/vrc/vrc101a.syx",
+      "kind": "website",
+      "filename": "vrc101a.syx",
+      "sourceUrl": "https://yamahablackboxes.com/patches/dx7/vrc/vrc101a.syx",
+      "assetPath": "catalog/yamaha-black-boxes/vrc/vrc101a.syx",
+      "size": 4104,
+      "sha256": "5356b78317ac6a1abf1d3de2ee4afa2e7f4b0f4c1fb92623517d83177ebed355",
+      "rights": {}
+    },
+    {
+      "id": "website:https://yamahablackboxes.com/patches/dx7/vrc/vrc101b.syx",
+      "kind": "website",
+      "filename": "vrc101b.syx",
+      "sourceUrl": "https://yamahablackboxes.com/patches/dx7/vrc/vrc101b.syx",
+      "assetPath": "catalog/yamaha-black-boxes/vrc/vrc101b.syx",
+      "size": 4104,
+      "sha256": "c2c3a9bb9d4400b392dc0f191b712587f2d2fb24349c343c86fb29e2c491526f",
+      "rights": {}
+    },
+    {
+      "id": "website:https://yamahablackboxes.com/patches/dx7/vrc/vrc102a.syx",
+      "kind": "website",
+      "filename": "vrc102a.syx",
+      "sourceUrl": "https://yamahablackboxes.com/patches/dx7/vrc/vrc102a.syx",
+      "assetPath": "catalog/yamaha-black-boxes/vrc/vrc102a.syx",
+      "size": 4104,
+      "sha256": "2d2831b420b2d6f2571d064380f25f0aa98715af5d757a73109477ee358fede9",
+      "rights": {}
+    },
+    {
+      "id": "website:https://yamahablackboxes.com/patches/dx7/vrc/vrc102b.syx",
+      "kind": "website",
+      "filename": "vrc102b.syx",
+      "sourceUrl": "https://yamahablackboxes.com/patches/dx7/vrc/vrc102b.syx",
+      "assetPath": "catalog/yamaha-black-boxes/vrc/vrc102b.syx",
+      "size": 4104,
+      "sha256": "6beb2d4e2efb2a3fc7d01be5e4ac2eba2a3d757d8eda74366d9077e8b710dd6f",
+      "rights": {}
+    },
+    {
+      "id": "website:https://yamahablackboxes.com/patches/dx7/vrc/vrc103a.syx",
+      "kind": "website",
+      "filename": "vrc103a.syx",
+      "sourceUrl": "https://yamahablackboxes.com/patches/dx7/vrc/vrc103a.syx",
+      "assetPath": "catalog/yamaha-black-boxes/vrc/vrc103a.syx",
+      "size": 4104,
+      "sha256": "754b76d8eb7e9a72c6844fd6ac377330845e7826f79ddeaae82633edb14b9ed6",
+      "rights": {}
+    },
+    {
+      "id": "website:https://yamahablackboxes.com/patches/dx7/vrc/vrc103b.syx",
+      "kind": "website",
+      "filename": "vrc103b.syx",
+      "sourceUrl": "https://yamahablackboxes.com/patches/dx7/vrc/vrc103b.syx",
+      "assetPath": "catalog/yamaha-black-boxes/vrc/vrc103b.syx",
+      "size": 4104,
+      "sha256": "c2425222d5dc509f43a05ae043423f4dbe2176f4af59f5c00b0d76d7dc5141b5",
+      "rights": {}
+    },
+    {
+      "id": "website:https://yamahablackboxes.com/patches/dx7/vrc/vrc104a.syx",
+      "kind": "website",
+      "filename": "vrc104a.syx",
+      "sourceUrl": "https://yamahablackboxes.com/patches/dx7/vrc/vrc104a.syx",
+      "assetPath": "catalog/yamaha-black-boxes/vrc/vrc104a.syx",
+      "size": 4104,
+      "sha256": "7a5dd7979bb0be2e7678ca2fcde828c098141b3092d31c772df554d7414dab91",
+      "rights": {}
+    },
+    {
+      "id": "website:https://yamahablackboxes.com/patches/dx7/vrc/vrc104b.syx",
+      "kind": "website",
+      "filename": "vrc104b.syx",
+      "sourceUrl": "https://yamahablackboxes.com/patches/dx7/vrc/vrc104b.syx",
+      "assetPath": "catalog/yamaha-black-boxes/vrc/vrc104b.syx",
+      "size": 4104,
+      "sha256": "de14ed916d6496c67e1f66521eb02133930d1f66725bbc92ac265d6bacc7fa15",
+      "rights": {}
+    },
+    {
+      "id": "website:https://yamahablackboxes.com/patches/dx7/vrc/vrc105a.syx",
+      "kind": "website",
+      "filename": "vrc105a.syx",
+      "sourceUrl": "https://yamahablackboxes.com/patches/dx7/vrc/vrc105a.syx",
+      "assetPath": "catalog/yamaha-black-boxes/vrc/vrc105a.syx",
+      "size": 4104,
+      "sha256": "5b6b466cafcf04331227cae9561ae82b7316beb586dcf978adf44efa5aeba2ea",
+      "rights": {}
+    },
+    {
+      "id": "website:https://yamahablackboxes.com/patches/dx7/vrc/vrc105b.syx",
+      "kind": "website",
+      "filename": "vrc105b.syx",
+      "sourceUrl": "https://yamahablackboxes.com/patches/dx7/vrc/vrc105b.syx",
+      "assetPath": "catalog/yamaha-black-boxes/vrc/vrc105b.syx",
+      "size": 4104,
+      "sha256": "1f423b35be11621aba4f74fe410d5b99b5dcfa0f0d9aac8f9f4e1e8ae5a23986",
+      "rights": {}
+    },
+    {
+      "id": "website:https://yamahablackboxes.com/patches/dx7/vrc/vrc106a.syx",
+      "kind": "website",
+      "filename": "vrc106a.syx",
+      "sourceUrl": "https://yamahablackboxes.com/patches/dx7/vrc/vrc106a.syx",
+      "assetPath": "catalog/yamaha-black-boxes/vrc/vrc106a.syx",
+      "size": 4104,
+      "sha256": "05f1573592793e974c855db745eafa2ba321d7e6332b74529f6ca36b8be8c093",
+      "rights": {}
+    },
+    {
+      "id": "website:https://yamahablackboxes.com/patches/dx7/vrc/vrc106b.syx",
+      "kind": "website",
+      "filename": "vrc106b.syx",
+      "sourceUrl": "https://yamahablackboxes.com/patches/dx7/vrc/vrc106b.syx",
+      "assetPath": "catalog/yamaha-black-boxes/vrc/vrc106b.syx",
+      "size": 4104,
+      "sha256": "01cea1b37989ea5772734dbfda76dc9acf9a6e5dc0aaa60ed2971a577d257681",
+      "rights": {}
+    },
+    {
+      "id": "website:https://yamahablackboxes.com/patches/dx7/vrc/vrc107a.syx",
+      "kind": "website",
+      "filename": "vrc107a.syx",
+      "sourceUrl": "https://yamahablackboxes.com/patches/dx7/vrc/vrc107a.syx",
+      "assetPath": "catalog/yamaha-black-boxes/vrc/vrc107a.syx",
+      "size": 4104,
+      "sha256": "4a4b6b6b5c76dac5f618065d64606d930182d3ef5c004b2edb2f6067d43466a0",
+      "rights": {}
+    },
+    {
+      "id": "website:https://yamahablackboxes.com/patches/dx7/vrc/vrc107b.syx",
+      "kind": "website",
+      "filename": "vrc107b.syx",
+      "sourceUrl": "https://yamahablackboxes.com/patches/dx7/vrc/vrc107b.syx",
+      "assetPath": "catalog/yamaha-black-boxes/vrc/vrc107b.syx",
+      "size": 4104,
+      "sha256": "a5a1a37a230abaa581f8a9be467230365c73e11d267ba5be7f476d6d79314ae2",
+      "rights": {}
+    },
+    {
+      "id": "website:https://yamahablackboxes.com/patches/dx7/vrc/vrc108a.syx",
+      "kind": "website",
+      "filename": "vrc108a.syx",
+      "sourceUrl": "https://yamahablackboxes.com/patches/dx7/vrc/vrc108a.syx",
+      "assetPath": "catalog/yamaha-black-boxes/vrc/vrc108a.syx",
+      "size": 4104,
+      "sha256": "cbca27b69c04ba6b2ebaedfb9b33f632fd05f83cf0a1efe0058d39243cbe6aca",
+      "rights": {}
+    },
+    {
+      "id": "website:https://yamahablackboxes.com/patches/dx7/vrc/vrc108b.syx",
+      "kind": "website",
+      "filename": "vrc108b.syx",
+      "sourceUrl": "https://yamahablackboxes.com/patches/dx7/vrc/vrc108b.syx",
+      "assetPath": "catalog/yamaha-black-boxes/vrc/vrc108b.syx",
+      "size": 4104,
+      "sha256": "e73e181aec5c3a8a121aab5f757408e6bd1f9e7f8fddc41af356636766e20df7",
+      "rights": {}
+    },
+    {
+      "id": "website:https://yamahablackboxes.com/patches/dx7/vrc/vrc109a.syx",
+      "kind": "website",
+      "filename": "vrc109a.syx",
+      "sourceUrl": "https://yamahablackboxes.com/patches/dx7/vrc/vrc109a.syx",
+      "assetPath": "catalog/yamaha-black-boxes/vrc/vrc109a.syx",
+      "size": 4104,
+      "sha256": "bb7ab20e105aa5f3457aa4dcba3c288583dca197a5a18f47514a2379b110d140",
+      "rights": {}
+    },
+    {
+      "id": "website:https://yamahablackboxes.com/patches/dx7/vrc/vrc109b.syx",
+      "kind": "website",
+      "filename": "vrc109b.syx",
+      "sourceUrl": "https://yamahablackboxes.com/patches/dx7/vrc/vrc109b.syx",
+      "assetPath": "catalog/yamaha-black-boxes/vrc/vrc109b.syx",
+      "size": 4104,
+      "sha256": "a07ddeab3263c2b4743bc654cbe79603b043e357e72bdb354f4aadf98d8506b0",
+      "rights": {}
+    },
+    {
+      "id": "website:https://yamahablackboxes.com/patches/dx7/vrc/vrc110a.syx",
+      "kind": "website",
+      "filename": "vrc110a.syx",
+      "sourceUrl": "https://yamahablackboxes.com/patches/dx7/vrc/vrc110a.syx",
+      "assetPath": "catalog/yamaha-black-boxes/vrc/vrc110a.syx",
+      "size": 4104,
+      "sha256": "910835e68db2585e95998811c5132c3398ab5d07c6a80a9eb75ee1769cb1e39b",
+      "rights": {}
+    },
+    {
+      "id": "website:https://yamahablackboxes.com/patches/dx7/vrc/vrc110b.syx",
+      "kind": "website",
+      "filename": "vrc110b.syx",
+      "sourceUrl": "https://yamahablackboxes.com/patches/dx7/vrc/vrc110b.syx",
+      "assetPath": "catalog/yamaha-black-boxes/vrc/vrc110b.syx",
+      "size": 4104,
+      "sha256": "072eb2b832357eeffb57d8c3953085490ef35b32e91b798e495b8b047bdd7fbf",
+      "rights": {}
+    },
+    {
+      "id": "website:https://yamahablackboxes.com/patches/dx7/vrc/vrc111a.syx",
+      "kind": "website",
+      "filename": "vrc111a.syx",
+      "sourceUrl": "https://yamahablackboxes.com/patches/dx7/vrc/vrc111a.syx",
+      "assetPath": "catalog/yamaha-black-boxes/vrc/vrc111a.syx",
+      "size": 4104,
+      "sha256": "199e101d0e8291de034569a1652aa21b75ce39d8e400481c3d8fadbb8ccfb7dc",
+      "rights": {}
+    },
+    {
+      "id": "website:https://yamahablackboxes.com/patches/dx7/vrc/vrc111b.syx",
+      "kind": "website",
+      "filename": "vrc111b.syx",
+      "sourceUrl": "https://yamahablackboxes.com/patches/dx7/vrc/vrc111b.syx",
+      "assetPath": "catalog/yamaha-black-boxes/vrc/vrc111b.syx",
+      "size": 4104,
+      "sha256": "0b5433acbd4b9d734d6421a187f96e550b0be45512cde5c59f2d59c9aa363097",
+      "rights": {}
+    },
+    {
+      "id": "website:https://yamahablackboxes.com/patches/dx7/vrc/vrc112a.syx",
+      "kind": "website",
+      "filename": "vrc112a.syx",
+      "sourceUrl": "https://yamahablackboxes.com/patches/dx7/vrc/vrc112a.syx",
+      "assetPath": "catalog/yamaha-black-boxes/vrc/vrc112a.syx",
+      "size": 4104,
+      "sha256": "62aa54ab3242b4d77d1995c5c15f90081d6c46ef7deadd5b4a9bf47de87fdbce",
+      "rights": {}
+    },
+    {
+      "id": "website:https://yamahablackboxes.com/patches/dx7/vrc/vrc112b.syx",
+      "kind": "website",
+      "filename": "vrc112b.syx",
+      "sourceUrl": "https://yamahablackboxes.com/patches/dx7/vrc/vrc112b.syx",
+      "assetPath": "catalog/yamaha-black-boxes/vrc/vrc112b.syx",
+      "size": 4104,
+      "sha256": "24c76ac10830faa005a05df31bce351ae29cfe417e694f3c122291a809b9420c",
+      "rights": {}
+    }
+  ]
+}
