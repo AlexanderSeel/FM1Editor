@@ -1,4 +1,11 @@
 import { useEffect, useRef, useState } from 'react'
+import {
+  createSoloOperatorLevels,
+  isSoloLevelShape,
+  toSixOperatorLevels,
+  toggleOperatorEnabled,
+  type SixOperatorLevels,
+} from '../domain/operatorLevels'
 import type { Dx7Operator, Dx7Voice } from '../domain/voice'
 import { AlgorithmGraph } from './AlgorithmGraph'
 
@@ -20,6 +27,10 @@ function cloneOperators(voice: Dx7Voice): [Dx7Operator, Dx7Operator, Dx7Operator
   })) as [Dx7Operator, Dx7Operator, Dx7Operator, Dx7Operator, Dx7Operator, Dx7Operator]
 }
 
+function voiceLevels(voice: Dx7Voice): SixOperatorLevels {
+  return toSixOperatorLevels(voice.operators.map((operator) => operator.outputLevel))
+}
+
 export function OperatorRoutingEditor({
   voice,
   selectedOperator,
@@ -29,7 +40,7 @@ export function OperatorRoutingEditor({
   const rememberedLevels = useRef<number[]>(
     voice.operators.map((operator) => operator.outputLevel > 0 ? operator.outputLevel : 99),
   )
-  const soloSnapshot = useRef<number[] | null>(null)
+  const soloSnapshot = useRef<SixOperatorLevels | null>(null)
   const [soloOperator, setSoloOperator] = useState<number | null>(null)
 
   useEffect(() => {
@@ -37,37 +48,29 @@ export function OperatorRoutingEditor({
       if (operator.outputLevel > 0) rememberedLevels.current[index] = operator.outputLevel
     })
 
-    if (soloOperator !== null) {
-      const soloShapeStillActive = voice.operators.every(
-        (operator, index) => index === soloOperator || operator.outputLevel === 0,
-      )
-      if (!soloShapeStillActive) {
-        soloSnapshot.current = null
-        setSoloOperator(null)
-      }
+    if (soloOperator !== null && !isSoloLevelShape(voiceLevels(voice), soloOperator)) {
+      soloSnapshot.current = null
+      setSoloOperator(null)
     }
-  }, [soloOperator, voice.operators])
+  }, [soloOperator, voice])
 
-  const commitLevels = (levels: readonly number[]) => {
+  const commitLevels = (levels: SixOperatorLevels) => {
     const operators = cloneOperators(voice)
     operators.forEach((operator, index) => {
-      operator.outputLevel = levels[index] ?? operator.outputLevel
+      operator.outputLevel = levels[index]
     })
     onChange({ ...voice, operators })
   }
 
   const toggleEnabled = (operatorIndex: number) => {
-    const operator = voice.operators[operatorIndex]
-    if (!operator) return
-
-    const levels = voice.operators.map((candidate) => candidate.outputLevel)
-    if (operator.outputLevel > 0) {
-      rememberedLevels.current[operatorIndex] = operator.outputLevel
-      levels[operatorIndex] = 0
-    } else {
-      levels[operatorIndex] = rememberedLevels.current[operatorIndex] ?? 99
-    }
-    commitLevels(levels)
+    if (!voice.operators[operatorIndex]) return
+    const result = toggleOperatorEnabled(
+      voiceLevels(voice),
+      operatorIndex,
+      rememberedLevels.current[operatorIndex] ?? 99,
+    )
+    rememberedLevels.current[operatorIndex] = result.rememberedLevel
+    commitLevels(result.levels)
   }
 
   const toggleSolo = (operatorIndex: number) => {
@@ -81,12 +84,13 @@ export function OperatorRoutingEditor({
       return
     }
 
-    const baseLevels = soloSnapshot.current ?? voice.operators.map((operator) => operator.outputLevel)
-    soloSnapshot.current = [...baseLevels]
-    const targetLevel = baseLevels[operatorIndex] && baseLevels[operatorIndex] > 0
-      ? baseLevels[operatorIndex]
-      : rememberedLevels.current[operatorIndex] ?? 99
-    const soloLevels = baseLevels.map((_, index) => index === operatorIndex ? targetLevel : 0)
+    const baseLevels = soloSnapshot.current ?? voiceLevels(voice)
+    soloSnapshot.current = baseLevels
+    const soloLevels = createSoloOperatorLevels(
+      baseLevels,
+      operatorIndex,
+      rememberedLevels.current[operatorIndex] ?? 99,
+    )
     setSoloOperator(operatorIndex)
     onSelect(operatorIndex)
     commitLevels(soloLevels)
