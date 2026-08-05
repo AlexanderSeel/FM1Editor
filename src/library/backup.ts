@@ -194,12 +194,13 @@ export function parsePatchLibraryBackup(text: string): PatchLibraryBackup {
     throw new Error('The patch library backup is missing required metadata.')
   }
 
-  const parsed = value.records.map((record, index) => parseRecord(record, index, value.exportedAt))
+  const exportedAt = value.exportedAt
+  const parsed = value.records.map((record, index) => parseRecord(record, index, exportedAt))
   const deduplicated = mergePatchBackupRecords([], parsed)
   return {
     format: PATCH_LIBRARY_BACKUP_FORMAT,
     version: PATCH_LIBRARY_BACKUP_VERSION,
-    exportedAt: value.exportedAt,
+    exportedAt,
     records: deduplicated.records,
   }
 }
