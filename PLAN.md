@@ -16,7 +16,6 @@
 
 ## 3. Graphical voice editor
 
-- [ ] Make operator and pitch envelopes directly draggable while retaining numeric precision controls.
 - [ ] Add keyboard-scaling depth controls and visual scaling curves.
 - [ ] Add mono/poly, portamento, pitch-bend and performance controls where supported by the FM-1.
 - [ ] Add constrained randomization, mutation, initialized-voice variants and A/B comparison inside the editor.
