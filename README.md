@@ -6,6 +6,8 @@ A TypeScript web editor and librarian for the **M-VAVE FM-1** pocket FM synthesi
 
 - React, TypeScript, Vite and Tailwind application shell;
 - Web MIDI capability detection, SysEx permission request and reconnect-aware input/output selection;
+- persisted MIDI port preferences with descriptor fallback when browser port IDs change;
+- timestamped incoming/outgoing MIDI monitor with direction/text filtering, hexadecimal data and JSON export;
 - Yamaha DX7-compatible 155-byte single-voice and 4,096-byte 32-voice bank codecs;
 - Yamaha checksum validation and multi-message `.syx` file classification;
 - drag-and-drop, multi-file and folder ingestion for `.syx` and `.sysex` files;
@@ -16,8 +18,8 @@ A TypeScript web editor and librarian for the **M-VAVE FM-1** pocket FM synthesi
 - graphical six-operator voice editor with amplitude/pitch envelope views, operator frequency/level/scaling controls, algorithm, feedback and LFO controls;
 - documented FM-1 parameter-write, CC, note, program and real-time message encoders;
 - local 16-step sequence editor with note/rest/tie, velocity, gate, tempo, swing, length and MIDI channel;
-- versioned sequence JSON load/save and scheduled Web MIDI playback;
-- Vitest coverage for DX7 codecs, FM-1 message framing, sequence scheduling, library logic, bank reordering and remote-import safeguards;
+- versioned sequence JSON load/save and scheduled Web MIDI playback through the monitored output adapter;
+- Vitest coverage for DX7 codecs, FM-1 message framing, sequence scheduling, library logic, bank reordering, MIDI monitoring and remote-import safeguards;
 - GitHub Actions workflow for typecheck, tests and production build.
 
 See [`PLAN.md`](./PLAN.md) for unresolved work.
