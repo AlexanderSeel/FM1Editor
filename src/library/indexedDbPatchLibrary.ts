@@ -26,7 +26,6 @@ function transactionComplete(transaction: IDBTransaction): Promise<void> {
 function ensurePatchIndexes(store: IDBObjectStore): void {
   if (!store.indexNames.contains('fingerprint')) store.createIndex('fingerprint', 'fingerprint', { unique: false })
   if (!store.indexNames.contains('updatedAt')) store.createIndex('updatedAt', 'updatedAt', { unique: false })
-  if (!store.indexNames.contains('favorite')) store.createIndex('favorite', 'favorite', { unique: false })
   if (!store.indexNames.contains('originKind')) store.createIndex('originKind', 'origin.kind', { unique: false })
 }
 
