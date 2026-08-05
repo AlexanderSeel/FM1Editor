@@ -2,6 +2,9 @@ node_modules/
 dist/
 .vite/
 coverage/
+public/catalog/sysexFinal.zip
+public/catalog/sync-manifest.json
+public/catalog/yamaha-black-boxes/
 *.local
 .DS_Store
 Thumbs.db
