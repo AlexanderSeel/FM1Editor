@@ -32,6 +32,9 @@ interface ActiveDrag {
   readonly kind: DragKind
   readonly stage: EnvelopeStageIndex
   readonly pointerId: number
+  readonly source: Dx7Envelope
+  readonly startClientX: number
+  readonly startClientY: number
 }
 
 function keyboardDelta(event: KeyboardEvent<SVGGElement>, current: number): number | null {
@@ -74,25 +77,26 @@ export function EnvelopeGraph({ envelope, label, accent = 'cyan', onChange }: En
     setDraft(next)
   }
 
-  const pointerCoordinates = (event: PointerEvent<SVGGElement>) => {
+  const envelopeFromDrag = (
+    active: ActiveDrag,
+    event: PointerEvent<SVGGElement>,
+  ): Dx7Envelope | null => {
     const rectangle = svgRef.current?.getBoundingClientRect()
     if (!rectangle || rectangle.width <= 0 || rectangle.height <= 0) return null
-    return {
-      x: ((event.clientX - rectangle.left) / rectangle.width) * ENVELOPE_GRAPH_WIDTH,
-      y: ((event.clientY - rectangle.top) / rectangle.height) * ENVELOPE_GRAPH_HEIGHT,
-    }
-  }
 
-  const updateFromPointer = (
-    kind: DragKind,
-    stage: EnvelopeStageIndex,
-    event: PointerEvent<SVGGElement>,
-  ) => {
-    const coordinates = pointerCoordinates(event)
-    if (!coordinates) return
-    updateDraft(kind === 'rate'
-      ? updateEnvelopeRateFromX(draftRef.current, stage, coordinates.x)
-      : updateEnvelopeLevelFromY(draftRef.current, stage, coordinates.y))
+    if (active.kind === 'rate') {
+      const sourcePoints = calculateEnvelopePoints(active.source)
+      const endpoint = sourcePoints[active.stage + 1]
+      if (!endpoint) return null
+      const deltaX = (event.clientX - active.startClientX) * (ENVELOPE_GRAPH_WIDTH / rectangle.width)
+      return updateEnvelopeRateFromX(active.source, active.stage, endpoint.x + deltaX)
+    }
+
+    const sourcePoints = calculateEnvelopePoints(active.source)
+    const endpoint = sourcePoints[active.stage + 1]
+    if (!endpoint) return null
+    const deltaY = (event.clientY - active.startClientY) * (ENVELOPE_GRAPH_HEIGHT / rectangle.height)
+    return updateEnvelopeLevelFromY(active.source, active.stage, endpoint.y + deltaY)
   }
 
   const beginDrag = (
@@ -102,35 +106,44 @@ export function EnvelopeGraph({ envelope, label, accent = 'cyan', onChange }: En
   ) => {
     if (!onChange) return
     event.preventDefault()
-    activeDrag.current = { kind, stage, pointerId: event.pointerId }
+    activeDrag.current = {
+      kind,
+      stage,
+      pointerId: event.pointerId,
+      source: draftRef.current,
+      startClientX: event.clientX,
+      startClientY: event.clientY,
+    }
     event.currentTarget.setPointerCapture(event.pointerId)
-    updateFromPointer(kind, stage, event)
   }
 
   const moveDrag = (event: PointerEvent<SVGGElement>) => {
     const active = activeDrag.current
     if (!active || active.pointerId !== event.pointerId) return
     event.preventDefault()
-    updateFromPointer(active.kind, active.stage, event)
+    const next = envelopeFromDrag(active, event)
+    if (next) updateDraft(next)
   }
 
   const finishDrag = (event: PointerEvent<SVGGElement>) => {
     const active = activeDrag.current
     if (!active || active.pointerId !== event.pointerId) return
     event.preventDefault()
+    const next = envelopeFromDrag(active, event) ?? draftRef.current
+    updateDraft(next)
     activeDrag.current = null
     if (event.currentTarget.hasPointerCapture(event.pointerId)) {
       event.currentTarget.releasePointerCapture(event.pointerId)
     }
-    onChange?.(draftRef.current)
+    onChange?.(next)
   }
 
   const cancelDrag = (event: PointerEvent<SVGGElement>) => {
     const active = activeDrag.current
     if (!active || active.pointerId !== event.pointerId) return
     activeDrag.current = null
-    draftRef.current = envelope
-    setDraft(envelope)
+    draftRef.current = active.source
+    setDraft(active.source)
   }
 
   const handleKeyboard = (
