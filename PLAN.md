@@ -44,6 +44,8 @@
 - [ ] Add MIDI clock output at 24 PPQN and selectable internal/external clock behavior.
 - [ ] Add pattern chaining and a small song-arrangement view.
 - [ ] Add FM-1 internal pattern transfer only after a stable protocol is verified.
+- [ ] Make it more like a step sequencer with a pianoroll layout
+- [ ] Add common presets/patterns to select single/poly styles like chrod progression based on a starting note
 
 ## 7. Validation and delivery
 
