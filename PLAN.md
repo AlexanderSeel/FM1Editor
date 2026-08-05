@@ -19,12 +19,10 @@
 
 ## 3. Voice library and SysEx explorer
 
-- [ ] Add drag-and-drop import and multi-file/folder ingestion.
-- [ ] Add 32-voice bank export and non-destructive slot reordering.
-- [ ] Add IndexedDB storage, tags, favorites, search, comparison and duplicate detection.
 - [ ] Add a pluggable online catalog/explorer with source attribution, licensing metadata and user-initiated downloads.
 - [ ] Add Yamaha Black Boxes as a browsable external source without scraping or redistributing its files.
 - [ ] Add detailed diagnostics for unsupported, malformed and multi-message SysEx files.
+- [ ] Add IndexedDB schema migration and library backup/restore.
 
 ## 4. Graphical voice editor
 
@@ -32,7 +30,7 @@
 - [ ] Make operator and pitch envelopes directly draggable while retaining numeric precision controls.
 - [ ] Add keyboard-scaling depth controls and visual scaling curves.
 - [ ] Add mono/poly, portamento, pitch-bend and performance controls where supported by the FM-1.
-- [ ] Add constrained randomization, mutation, initialized-voice variants and A/B comparison.
+- [ ] Add constrained randomization, mutation, initialized-voice variants and A/B comparison inside the editor.
 - [ ] Add opt-in throttled live parameter writes after the parameter map is hardware-verified.
 
 ## 5. FM-1 bank/device workflow
