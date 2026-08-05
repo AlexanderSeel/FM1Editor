@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { BankBrowser } from './components/BankBrowser'
+import { CollapsibleSection } from './components/CollapsibleSection'
 import { ConnectionPanel } from './components/ConnectionPanel'
 import { EffectsEditor } from './components/EffectsEditor'
 import { MidiMonitor } from './components/MidiMonitor'
@@ -100,7 +101,14 @@ export default function App() {
             onSelectOutput={midi.setSelectedOutputId}
           />
 
-          <MidiMonitor entries={midi.monitorEntries} onClear={midi.clearMonitor} />
+          <CollapsibleSection
+            defaultOpen={false}
+            description={`${midi.monitorEntries.length} captured MIDI messages`}
+            storageKey="sidebar-midi-monitor"
+            title="MIDI monitor"
+          >
+            <MidiMonitor entries={midi.monitorEntries} onClear={midi.clearMonitor} />
+          </CollapsibleSection>
 
           <section className="rounded-2xl border border-white/10 bg-white/[0.025] p-4 text-sm text-slate-400">
             <p className="text-xs font-semibold uppercase tracking-[0.18em] text-amber-200">Safety boundary</p>
@@ -147,46 +155,90 @@ export default function App() {
             <div className="grid gap-5 p-4 sm:p-5 xl:p-7">
               {workspace === 'voice' ? (
                 <>
-                  <BankBrowser
-                    onChange={setBank}
-                    onSelect={(nextVoice, index) => selectVoiceForAudition(nextVoice, index)}
-                    selectedIndex={selectedBankSlot}
-                    voices={bank}
-                  />
-                  <VoiceAuditionPanel
-                    baseBank={bank}
-                    output={midi.output}
-                    selectedBankSlot={selectedBankSlot}
-                    sysexEnabled={midi.state.sysexEnabled}
-                    voice={voice}
-                  />
-                  <VoiceEditor onChange={setVoice} voice={voice} />
+                  {bank.length > 0 && (
+                    <CollapsibleSection
+                      description={`${bank.length} loaded voice slots`}
+                      storageKey="voice-imported-bank"
+                      title="Imported bank"
+                    >
+                      <BankBrowser
+                        onChange={setBank}
+                        onSelect={(nextVoice, index) => selectVoiceForAudition(nextVoice, index)}
+                        selectedIndex={selectedBankSlot}
+                        voices={bank}
+                      />
+                    </CollapsibleSection>
+                  )}
+                  <CollapsibleSection
+                    description="Whole-bank transfer, preset recall and virtual piano"
+                    storageKey="voice-bank-audition"
+                    title="FM-1 bank audition"
+                  >
+                    <VoiceAuditionPanel
+                      baseBank={bank}
+                      output={midi.output}
+                      selectedBankSlot={selectedBankSlot}
+                      sysexEnabled={midi.state.sysexEnabled}
+                      voice={voice}
+                    />
+                  </CollapsibleSection>
+                  <CollapsibleSection
+                    description={`Algorithm ${voice.algorithm} · six operators · envelopes and LFO`}
+                    storageKey="voice-editor"
+                    title="Voice editor"
+                  >
+                    <VoiceEditor onChange={setVoice} voice={voice} />
+                  </CollapsibleSection>
                 </>
               ) : workspace === 'library' ? (
                 <>
-                  <PatchCatalogBrowser
-                    onImportToLibrary={patchLibrary.importVoices}
-                    onLoadBank={loadCatalogBank}
-                    onLoadVoice={loadCatalogVoice}
-                  />
-                  <PatchLibrary
-                    currentVoice={voice}
-                    error={patchLibrary.error}
-                    loading={patchLibrary.loading}
-                    onDelete={patchLibrary.remove}
-                    onExportBackup={patchLibrary.exportBackup}
-                    onLoad={loadCatalogVoice}
-                    onRestoreBackup={patchLibrary.restoreBackup}
-                    onSaveCurrent={patchLibrary.saveCurrentVoice}
-                    onToggleFavorite={patchLibrary.toggleFavorite}
-                    onUpdateTags={patchLibrary.updateTags}
-                    records={patchLibrary.records}
-                  />
+                  <CollapsibleSection
+                    description="Browse the tracked ZIP and Yamaha Black Boxes overlay"
+                    storageKey="library-patch-catalog"
+                    title="Patch catalog"
+                  >
+                    <PatchCatalogBrowser
+                      onImportToLibrary={patchLibrary.importVoices}
+                      onLoadBank={loadCatalogBank}
+                      onLoadVoice={loadCatalogVoice}
+                    />
+                  </CollapsibleSection>
+                  <CollapsibleSection
+                    description={`${patchLibrary.records.length} locally stored voices`}
+                    storageKey="library-local-patches"
+                    title="Local patch library"
+                  >
+                    <PatchLibrary
+                      currentVoice={voice}
+                      error={patchLibrary.error}
+                      loading={patchLibrary.loading}
+                      onDelete={patchLibrary.remove}
+                      onExportBackup={patchLibrary.exportBackup}
+                      onLoad={loadCatalogVoice}
+                      onRestoreBackup={patchLibrary.restoreBackup}
+                      onSaveCurrent={patchLibrary.saveCurrentVoice}
+                      onToggleFavorite={patchLibrary.toggleFavorite}
+                      onUpdateTags={patchLibrary.updateTags}
+                      records={patchLibrary.records}
+                    />
+                  </CollapsibleSection>
                 </>
               ) : workspace === 'effects' ? (
-                <EffectsEditor onChange={setEffects} output={midi.output} state={effects} />
+                <CollapsibleSection
+                  description={`CC 0–23 · MIDI channel ${effects.midiChannel}`}
+                  storageKey="effects-controls"
+                  title="Effects controls"
+                >
+                  <EffectsEditor onChange={setEffects} output={midi.output} state={effects} />
+                </CollapsibleSection>
               ) : (
-                <SequenceEditor onChange={setSequence} output={midi.output} sequence={sequence} />
+                <CollapsibleSection
+                  description={`${sequence.length} steps · ${sequence.bpm} BPM`}
+                  storageKey="sequencer-editor"
+                  title="Sequence editor"
+                >
+                  <SequenceEditor onChange={setSequence} output={midi.output} sequence={sequence} />
+                </CollapsibleSection>
               )}
             </div>
           </section>
