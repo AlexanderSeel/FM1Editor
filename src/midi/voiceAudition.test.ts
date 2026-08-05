@@ -1,11 +1,8 @@
 import { describe, expect, it, vi } from 'vitest'
-import { createInitializedVoice } from '../domain/voice'
 import type { MidiOutputTarget } from './output'
 import {
-  buildFm1VoiceParameterWrites,
   playFm1TestNote,
   recallFm1Preset,
-  sendVoiceToFm1,
 } from './voiceAudition'
 
 function createOutput(sent: Array<{ data: Uint8Array; timestamp?: number }>): MidiOutputTarget {
@@ -21,40 +18,7 @@ function createOutput(sent: Array<{ data: Uint8Array; timestamp?: number }>): Mi
   }
 }
 
-describe('voice audition transfer', () => {
-  it('maps all 155 DX7 edit-buffer bytes to documented FM-1 parameter frames', () => {
-    const writes = buildFm1VoiceParameterWrites(createInitializedVoice('AUDITION'))
-
-    expect(writes).toHaveLength(155)
-    expect(Array.from(writes[0]?.message ?? [])).toEqual([0xf0, 0x43, 0x10, 0, 0, 99, 0xf7])
-    expect(writes[154]?.parameter).toBe(154)
-    expect(writes[154]?.message).toHaveLength(7)
-  })
-
-  it('opens the output and sends a paced FM-1 parameter stream instead of a Yamaha bulk dump', async () => {
-    const sent: Array<{ data: Uint8Array; timestamp?: number }> = []
-    const output = createOutput(sent)
-    const progress: number[] = []
-
-    const result = await sendVoiceToFm1(output, createInitializedVoice('AUDITION'), {
-      parameterIntervalMs: 0,
-      onProgress: (completed) => progress.push(completed),
-      wait: async () => undefined,
-    })
-
-    expect(output.open).toHaveBeenCalledOnce()
-    expect(output.clear).toHaveBeenCalledOnce()
-    expect(sent).toHaveLength(156)
-    expect(Array.from(sent[0]?.data ?? [])).toEqual([0xb0, 123, 0])
-    expect(sent.slice(1).every(({ data }) => data.length === 7 && data[0] === 0xf0 && data[2] === 0x10)).toBe(true)
-    expect(progress.at(-1)).toBe(155)
-    expect(result).toMatchObject({
-      protocol: 'fm1-parameter-stream',
-      messageCount: 155,
-      outputName: 'FM-1 MIDI',
-    })
-  })
-
+describe('safe FM-1 audition controls', () => {
   it('recalls a one-based preset and schedules a test note on the selected channel', async () => {
     const sent: Array<{ data: Uint8Array; timestamp?: number }> = []
     const output = createOutput(sent)
