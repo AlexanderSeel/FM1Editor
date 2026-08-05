@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { BankBrowser } from './components/BankBrowser'
 import { ConnectionPanel } from './components/ConnectionPanel'
 import { ExternalCatalogExplorer } from './components/ExternalCatalogExplorer'
+import { MidiMonitor } from './components/MidiMonitor'
 import { PatchLibrary } from './components/PatchLibrary'
 import { SequenceEditor } from './components/SequenceEditor'
 import { SysexToolbar } from './components/SysexToolbar'
@@ -20,9 +21,6 @@ export default function App() {
   const [voice, setVoice] = useState<Dx7Voice>(() => createInitializedVoice())
   const [bank, setBank] = useState<readonly Dx7Voice[]>([])
   const [sequence, setSequence] = useState<Fm1Sequence>(() => createInitializedSequence())
-  const selectedOutput = midi.state.selectedOutputId
-    ? (midi.access?.outputs.get(midi.state.selectedOutputId) ?? null)
-    : null
 
   const workspaceTitle = workspace === 'voice'
     ? (voice.name || 'UNTITLED')
@@ -68,6 +66,8 @@ export default function App() {
             onSelectInput={midi.setSelectedInputId}
             onSelectOutput={midi.setSelectedOutputId}
           />
+
+          <MidiMonitor entries={midi.monitorEntries} onClear={midi.clearMonitor} />
 
           <section className="rounded-2xl border border-white/10 bg-white/[0.025] p-4 text-sm text-slate-400">
             <p className="text-xs font-semibold uppercase tracking-[0.18em] text-amber-200">Safety boundary</p>
@@ -143,13 +143,13 @@ export default function App() {
                   />
                 </>
               ) : (
-                <SequenceEditor onChange={setSequence} output={selectedOutput} sequence={sequence} />
+                <SequenceEditor onChange={setSequence} output={midi.output} sequence={sequence} />
               )}
             </div>
           </section>
 
           <footer className="flex flex-wrap items-center justify-between gap-2 px-2 text-xs text-slate-500">
-            <span>Current milestone: persistent patch library, external source explorer, multi-file SysEx ingestion and editable bank workspace.</span>
+            <span>Current milestone: persistent library, external source explorer, monitored MIDI routing and editable bank workspace.</span>
             <span>Physical FM-1 parameter-write verification remains pending.</span>
           </footer>
         </main>
