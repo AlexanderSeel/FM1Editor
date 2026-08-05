@@ -1,5 +1,6 @@
 import { unzipSync } from 'fflate'
 import { websiteBanksFromManifest } from './catalogManifest'
+import { assertStandardDx7Bank } from './catalogSysexValidation'
 import { fetchRemoteSysex } from './remoteSysex'
 import { buildPatchCatalog, type PatchCatalog, type PatchCatalogEntry } from './patchCatalog'
 import { YAMAHA_BLACK_BOXES_BANKS, type WebsiteCatalogBank } from './yamahaBlackBoxesCatalog'
@@ -82,6 +83,10 @@ export async function loadPatchCatalog(): Promise<LoadedPatchCatalog> {
   return catalogPromise
 }
 
+function errorMessage(cause: unknown): string {
+  return cause instanceof Error ? cause.message : 'Unknown download error.'
+}
+
 export async function loadCatalogEntryBytes(entry: PatchCatalogEntry): Promise<Uint8Array> {
   if (entry.archivePath) {
     const catalog = await loadPatchCatalog()
@@ -92,10 +97,24 @@ export async function loadCatalogEntryBytes(entry: PatchCatalogEntry): Promise<U
 
   const website = entry.website
   if (!website) throw new Error('This catalog entry has no loadable source.')
+
+  let mirrorFailure = 'not attempted'
   try {
-    return await fetchBytes(assetUrl(website.mirrorPath))
-  } catch {
-    return fetchRemoteSysex(website.remoteUrl, 2_000_000)
+    const mirrored = await fetchBytes(assetUrl(website.mirrorPath))
+    assertStandardDx7Bank(mirrored, `The mirrored ${entry.filename} file`)
+    return mirrored
+  } catch (cause) {
+    mirrorFailure = errorMessage(cause)
+  }
+
+  try {
+    const remote = await fetchRemoteSysex(website.remoteUrl, 2_000_000)
+    assertStandardDx7Bank(remote, `The downloaded ${entry.filename} file`)
+    return remote
+  } catch (cause) {
+    throw new Error(
+      `The Yamaha Black Boxes bank could not be loaded. Mirror: ${mirrorFailure} Direct source: ${errorMessage(cause)}`,
+    )
   }
 }
 
