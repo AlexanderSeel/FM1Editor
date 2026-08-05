@@ -124,7 +124,7 @@ export function VirtualPiano({ output, midiChannel, velocity, baseOctave }: Virt
     activeNotesRef.current.clear()
   }, [midiChannel, output])
 
-  const handleKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
+  const handleKeyDown = (event: ReactKeyboardEvent<HTMLButtonElement>) => {
     if (event.repeat || event.ctrlKey || event.metaKey || event.altKey) return
     const offset = COMPUTER_KEY_OFFSETS[event.key.toLowerCase()]
     if (offset === undefined) return
@@ -132,7 +132,7 @@ export function VirtualPiano({ output, midiChannel, velocity, baseOctave }: Virt
     noteOn(baseNote + offset)
   }
 
-  const handleKeyUp = (event: ReactKeyboardEvent<HTMLDivElement>) => {
+  const handleKeyUp = (event: ReactKeyboardEvent<HTMLButtonElement>) => {
     const offset = COMPUTER_KEY_OFFSETS[event.key.toLowerCase()]
     if (offset === undefined) return
     event.preventDefault()
@@ -155,27 +155,33 @@ export function VirtualPiano({ output, midiChannel, velocity, baseOctave }: Virt
   })
 
   return (
-    <div
-      aria-label="Virtual MIDI piano. Focus this area to play with computer keys A through semicolon."
-      className="rounded-2xl border border-white/10 bg-black/20 p-3 outline-none focus:border-cyan-300/40 sm:p-4"
-      onKeyDown={handleKeyDown}
-      onKeyUp={handleKeyUp}
-      role="application"
-      tabIndex={0}
-    >
+    <div className="rounded-2xl border border-white/10 bg-black/20 p-3 sm:p-4">
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
         <div>
           <p className="text-xs font-semibold uppercase tracking-[0.16em] text-cyan-300">Virtual piano</p>
-          <p className="mt-1 text-[11px] text-slate-500">Mouse, touch or focused computer keys A–; · two octaves from C{baseOctave}</p>
+          <p className="mt-1 text-[11px] text-slate-500">Mouse, touch or computer keys A–; · two octaves from C{baseOctave}</p>
         </div>
-        <button
-          className="rounded-lg border border-white/10 px-3 py-1.5 text-xs font-semibold text-slate-300 hover:bg-white/5 disabled:opacity-40"
-          disabled={disabled}
-          onClick={releaseAll}
-          type="button"
-        >
-          All notes off
-        </button>
+        <div className="flex flex-wrap gap-2">
+          <button
+            aria-label="Focus computer keyboard piano input. Use keys A through semicolon."
+            className="rounded-lg border border-cyan-300/20 bg-cyan-300/5 px-3 py-1.5 text-xs font-semibold text-cyan-200 hover:bg-cyan-300/10 focus:bg-cyan-300/15 disabled:opacity-40"
+            disabled={disabled}
+            onBlur={releaseAll}
+            onKeyDown={handleKeyDown}
+            onKeyUp={handleKeyUp}
+            type="button"
+          >
+            Focus computer keys
+          </button>
+          <button
+            className="rounded-lg border border-white/10 px-3 py-1.5 text-xs font-semibold text-slate-300 hover:bg-white/5 disabled:opacity-40"
+            disabled={disabled}
+            onClick={releaseAll}
+            type="button"
+          >
+            All notes off
+          </button>
+        </div>
       </div>
 
       <div className={`relative h-36 select-none overflow-hidden rounded-xl border border-white/15 sm:h-44 ${disabled ? 'opacity-45' : ''}`} onContextMenu={(event) => event.preventDefault()}>
