@@ -1,38 +1,52 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import type { Dx7Voice } from '../domain/voice'
+import { downloadBytes } from '../files/download'
+import {
+  mergeVoiceIntoFm1Bank,
+  resolveFm1PresetLocation,
+  sendMergedBankToFm1,
+  type Fm1BankLetter,
+} from '../midi/fm1BankTransfer'
 import type { MidiOutputTarget } from '../midi/output'
 import {
   playFm1TestNote,
   recallFm1Preset,
-  sendVoiceToFm1,
 } from '../midi/voiceAudition'
+import { encodeVoiceBankMessage } from '../sysex/dx7'
 import { VirtualPiano } from './VirtualPiano'
 
 interface VoiceAuditionPanelProps {
   voice: Dx7Voice
+  baseBank: readonly Dx7Voice[]
+  selectedBankSlot: number | null
   output: MidiOutputTarget | null
   sysexEnabled: boolean
-  selectionVersion: number
 }
 
-type BusyAction = 'push' | 'recall' | 'test' | null
+type BusyAction = 'send-bank' | 'recall' | 'test' | null
 
 export function VoiceAuditionPanel({
   voice,
+  baseBank,
+  selectedBankSlot,
   output,
   sysexEnabled,
-  selectionVersion,
 }: VoiceAuditionPanelProps) {
   const [midiChannel, setMidiChannel] = useState(1)
   const [velocity, setVelocity] = useState(105)
   const [baseOctave, setBaseOctave] = useState(3)
-  const [preset, setPreset] = useState(1)
-  const [autoPush, setAutoPush] = useState(false)
+  const [targetBank, setTargetBank] = useState<Fm1BankLetter>('A')
   const [busyAction, setBusyAction] = useState<BusyAction>(null)
-  const [progress, setProgress] = useState({ completed: 0, total: 155 })
   const [status, setStatus] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const lastSelectionVersionRef = useRef(selectionVersion)
+
+  const slot = selectedBankSlot === null ? null : selectedBankSlot + 1
+  const location = useMemo(
+    () => slot === null ? null : resolveFm1PresetLocation(targetBank, slot),
+    [slot, targetBank],
+  )
+  const baseReady = baseBank.length === 32 && location !== null
+  const busy = busyAction !== null
 
   const beginAction = useCallback((action: Exclude<BusyAction, null>) => {
     setBusyAction(action)
@@ -46,53 +60,105 @@ export function VoiceAuditionPanel({
     return null
   }, [output])
 
-  const pushVoice = useCallback(async (automatic = false) => {
-    if (busyAction !== null) return
+  const createMergedBank = useCallback((): readonly Dx7Voice[] => {
+    if (!location) throw new Error('Load a complete 32-voice bank and select the slot that should be replaced.')
+    return mergeVoiceIntoFm1Bank(baseBank, voice, location.slot)
+  }, [baseBank, location, voice])
+
+  const exportBaseBank = () => {
+    try {
+      if (baseBank.length !== 32) throw new Error('A complete 32-voice base bank is required.')
+      downloadBytes(encodeVoiceBankMessage(baseBank), `fm1-base-bank-${targetBank.toLowerCase()}.syx`)
+      setStatus(`Exported the unchanged 32-voice base bank for destination ${targetBank}. Keep this as the recovery copy.`)
+      setError(null)
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'The base bank could not be exported.')
+    }
+  }
+
+  const exportMergedBank = () => {
+    try {
+      if (!location) throw new Error('Select a bank slot first.')
+      downloadBytes(
+        encodeVoiceBankMessage(createMergedBank()),
+        `fm1-${targetBank.toLowerCase()}-${String(location.slot).padStart(2, '0')}-${voice.name.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-') || 'voice'}.syx`,
+      )
+      setStatus(`Exported a merged bank with ${voice.name || 'UNTITLED'} in ${targetBank}${String(location.slot).padStart(2, '0')}.`)
+      setError(null)
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'The merged bank could not be exported.')
+    }
+  }
+
+  const sendMergedBank = async () => {
+    if (busy) return
     const target = requireOutput()
     if (!target) return
     if (!sysexEnabled) {
-      setError('Reconnect Web MIDI with SysEx permission before sending voice parameters.')
+      setError('Reconnect Web MIDI with SysEx permission before sending a bank.')
+      return
+    }
+    if (!location || baseBank.length !== 32) {
+      setError('Load a complete 32-voice bank and select the slot to replace first.')
       return
     }
 
-    beginAction('push')
-    setProgress({ completed: 0, total: 155 })
+    const confirmed = window.confirm(
+      `Send a complete 32-voice bank to the FM-1?\n\n` +
+      `Current voice: ${voice.name || 'UNTITLED'}\n` +
+      `Replace slot: ${targetBank}${String(location.slot).padStart(2, '0')} (preset ${location.preset})\n\n` +
+      `The FM-1 should open its bank destination screen. Select bank ${targetBank}. This can overwrite all 32 presets in that bank. The app cannot read the device bank, so the loaded base bank must be the exact recovery/base copy.`,
+    )
+    if (!confirmed) return
+
+    beginAction('send-bank')
     try {
-      const result = await sendVoiceToFm1(target, voice, {
-        noteChannel: midiChannel,
-        onProgress: (completed, total) => setProgress({ completed, total }),
-      })
-      setStatus(`${automatic ? 'Auto-pushed' : 'Pushed'} ${voice.name || 'UNTITLED'} to ${result.outputName} as ${result.messageCount} paced FM-1 parameter writes. Test the sound before saving anything on the device.`)
+      const result = await sendMergedBankToFm1(
+        target,
+        baseBank,
+        voice,
+        targetBank,
+        location.slot,
+        midiChannel,
+      )
+      setStatus(
+        `Sent ${result.byteLength} bytes to ${result.outputName}. On the FM-1, choose destination bank ${result.bank}. After the device confirms the save, recall preset ${result.preset} and test it with the piano.`,
+      )
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : 'The FM-1 parameter stream could not be sent.')
+      setError(cause instanceof Error ? cause.message : 'The merged 32-voice bank could not be sent.')
     } finally {
       setBusyAction(null)
     }
-  }, [beginAction, busyAction, midiChannel, requireOutput, sysexEnabled, voice])
+  }
 
-  const recallPreset = async () => {
-    if (busyAction !== null) return
+  const recallTargetPreset = async () => {
+    if (busy) return
     const target = requireOutput()
     if (!target) return
+    if (!location) {
+      setError('Select a slot in a loaded 32-voice bank first.')
+      return
+    }
+
     beginAction('recall')
     try {
-      const result = await recallFm1Preset(target, midiChannel, preset)
-      setStatus(`Recalled preset ${result.preset} on MIDI channel ${result.midiChannel}. Use Test C4 or the piano now.`)
+      const result = await recallFm1Preset(target, midiChannel, location.preset)
+      setStatus(`Recalled ${targetBank}${String(location.slot).padStart(2, '0')} as preset ${result.preset} on MIDI channel ${result.midiChannel}.`)
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : 'The preset could not be recalled.')
+      setError(cause instanceof Error ? cause.message : 'The target preset could not be recalled.')
     } finally {
       setBusyAction(null)
     }
   }
 
   const testNote = async () => {
-    if (busyAction !== null) return
+    if (busy) return
     const target = requireOutput()
     if (!target) return
     beginAction('test')
     try {
       await playFm1TestNote(target, midiChannel, 60, velocity)
-      setStatus(`Sent C4 on MIDI channel ${midiChannel}. No sound means the selected output, note channel, FM-1 volume or audio path still needs checking.`)
+      setStatus(`Sent C4 on MIDI channel ${midiChannel}.`)
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'The test note could not be sent.')
     } finally {
@@ -100,26 +166,17 @@ export function VoiceAuditionPanel({
     }
   }
 
-  useEffect(() => {
-    if (selectionVersion === lastSelectionVersionRef.current) return
-    lastSelectionVersionRef.current = selectionVersion
-    if (autoPush) void pushVoice(true)
-  }, [autoPush, pushVoice, selectionVersion])
-
-  const busy = busyAction !== null
-  const progressPercent = progress.total === 0 ? 0 : Math.round((progress.completed / progress.total) * 100)
-
   return (
     <section className="rounded-2xl border border-cyan-300/15 bg-cyan-300/[0.035] p-4 sm:p-5">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
-            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-cyan-300">FM-1 audition</p>
-            <span className="rounded-full border border-amber-300/25 bg-amber-300/10 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.14em] text-amber-200">Experimental parameter mapping</span>
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-cyan-300">FM-1 bank audition</p>
+            <span className="rounded-full border border-amber-300/25 bg-amber-300/10 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.14em] text-amber-200">Whole-bank overwrite</span>
           </div>
           <h3 className="mt-2 truncate text-lg font-bold text-white">{voice.name || 'UNTITLED'}</h3>
           <p className="mt-1 max-w-4xl text-xs leading-5 text-slate-400">
-            The unsupported Yamaha single-voice bulk send has been removed. Voice push now sends the 155 edit-buffer values individually through the FM-1 parameter-write frame, paced at 6 ms per value. Use Recall preset to recover immediately if the result is silent or incorrect.
+            Immediate single-voice push is disabled because both attempted edit-buffer methods silenced the FM-1. This workflow replaces one slot in the currently loaded 32-voice base bank and sends one standard DX7 bank dump.
           </p>
         </div>
         <div className="text-right text-xs text-slate-500">
@@ -129,10 +186,10 @@ export function VoiceAuditionPanel({
       </div>
 
       <div className="mt-4 rounded-xl border border-amber-300/20 bg-amber-300/[0.07] p-3 text-xs leading-5 text-amber-100">
-        <strong>Recovery order:</strong> choose a known preset, click Recall preset, then Test C4. Only push a voice after the normal preset is audible on the chosen MIDI channel.
+        <strong>No device readback:</strong> the app cannot recall the other 31 voices from the FM-1. Before sending, load the exact base or backup bank for the destination and export it as a recovery copy.
       </div>
 
-      <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-[145px_minmax(170px,1fr)_135px_135px_auto_auto_auto]">
+      <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-[130px_minmax(170px,1fr)_125px_125px_150px]">
         <div className="grid gap-1.5 text-xs text-slate-400">
           <label className="font-semibold uppercase tracking-[0.12em]" htmlFor="audition-midi-channel">Note channel</label>
           <select
@@ -167,65 +224,33 @@ export function VoiceAuditionPanel({
         </div>
 
         <div className="grid gap-1.5 text-xs text-slate-400">
-          <label className="font-semibold uppercase tracking-[0.12em]" htmlFor="audition-preset">Recovery preset</label>
+          <label className="font-semibold uppercase tracking-[0.12em]" htmlFor="audition-target-bank">Destination</label>
           <select
             className="rounded-xl border border-white/10 bg-slate-950 px-3 py-2.5 text-sm text-white"
             disabled={busy}
-            id="audition-preset"
-            onChange={(event) => setPreset(Number(event.target.value))}
-            value={preset}
+            id="audition-target-bank"
+            onChange={(event) => setTargetBank(event.target.value as Fm1BankLetter)}
+            value={targetBank}
           >
-            {Array.from({ length: 128 }, (_, index) => index + 1).map((item) => <option key={item} value={item}>Preset {item}</option>)}
+            {(['A', 'B', 'C', 'D'] as const).map((bank) => <option key={bank} value={bank}>Bank {bank}</option>)}
           </select>
         </div>
 
-        <button
-          className="rounded-xl border border-white/10 bg-white/5 px-4 py-2.5 text-sm font-bold text-slate-200 hover:bg-white/10 disabled:opacity-40"
-          disabled={!output || busy}
-          onClick={() => void recallPreset()}
-          type="button"
-        >
-          {busyAction === 'recall' ? 'Recalling…' : 'Recall preset'}
-        </button>
-
-        <button
-          className="rounded-xl border border-cyan-300/20 bg-cyan-300/5 px-4 py-2.5 text-sm font-bold text-cyan-200 hover:bg-cyan-300/10 disabled:opacity-40"
-          disabled={!output || busy}
-          onClick={() => void testNote()}
-          type="button"
-        >
-          {busyAction === 'test' ? 'Testing…' : 'Test C4'}
-        </button>
-
-        <button
-          className="rounded-xl bg-cyan-300 px-4 py-2.5 text-sm font-black text-slate-950 transition hover:bg-cyan-200 disabled:cursor-not-allowed disabled:opacity-40"
-          disabled={!output || !sysexEnabled || busy}
-          onClick={() => void pushVoice(false)}
-          type="button"
-        >
-          {busyAction === 'push' ? 'Writing parameters…' : 'Push voice parameters'}
-        </button>
-      </div>
-
-      <div className="mt-3 flex items-center gap-3 rounded-xl border border-white/10 bg-black/20 px-3 py-2.5 text-xs text-slate-300">
-        <input disabled={busy} id="audition-auto-push" checked={autoPush} onChange={(event) => setAutoPush(event.target.checked)} type="checkbox" />
-        <label htmlFor="audition-auto-push">
-          <strong className="text-white">Auto-push bank/library selections</strong>
-          <span className="ml-2 text-slate-500">Uses the same experimental paced parameter stream.</span>
-        </label>
-      </div>
-
-      {busyAction === 'push' && (
-        <div className="mt-3" role="status" aria-live="polite">
-          <div className="mb-1 flex justify-between text-[11px] text-slate-400">
-            <span>Writing FM-1 parameters</span>
-            <span>{progress.completed}/{progress.total} · {progressPercent}%</span>
-          </div>
-          <div className="h-2 overflow-hidden rounded-full bg-white/10">
-            <div className="h-full rounded-full bg-cyan-300 transition-[width]" style={{ width: `${progressPercent}%` }} />
-          </div>
+        <div className="rounded-xl border border-white/10 bg-black/20 px-3 py-2.5 text-xs text-slate-400">
+          <span className="block font-semibold uppercase tracking-[0.12em]">Selected target</span>
+          <strong className="mt-1 block text-sm text-white">
+            {location ? `${location.bank}${String(location.slot).padStart(2, '0')} · preset ${location.preset}` : 'Select a bank slot'}
+          </strong>
         </div>
-      )}
+      </div>
+
+      <div className="mt-3 flex flex-wrap gap-2">
+        <button className="rounded-xl border border-white/10 bg-white/5 px-4 py-2.5 text-sm font-bold text-slate-200 hover:bg-white/10 disabled:opacity-40" disabled={baseBank.length !== 32 || busy} onClick={exportBaseBank} type="button">Export base backup</button>
+        <button className="rounded-xl border border-white/10 bg-white/5 px-4 py-2.5 text-sm font-bold text-slate-200 hover:bg-white/10 disabled:opacity-40" disabled={!baseReady || busy} onClick={exportMergedBank} type="button">Export merged bank</button>
+        <button className="rounded-xl bg-amber-300 px-4 py-2.5 text-sm font-black text-slate-950 hover:bg-amber-200 disabled:cursor-not-allowed disabled:opacity-40" disabled={!baseReady || !output || !sysexEnabled || busy} onClick={() => void sendMergedBank()} type="button">{busyAction === 'send-bank' ? 'Sending bank…' : 'Send merged 32-voice bank'}</button>
+        <button className="rounded-xl border border-violet-300/20 bg-violet-300/5 px-4 py-2.5 text-sm font-bold text-violet-200 hover:bg-violet-300/10 disabled:opacity-40" disabled={!location || !output || busy} onClick={() => void recallTargetPreset()} type="button">{busyAction === 'recall' ? 'Recalling…' : 'Recall target preset'}</button>
+        <button className="rounded-xl border border-cyan-300/20 bg-cyan-300/5 px-4 py-2.5 text-sm font-bold text-cyan-200 hover:bg-cyan-300/10 disabled:opacity-40" disabled={!output || busy} onClick={() => void testNote()} type="button">{busyAction === 'test' ? 'Testing…' : 'Test C4'}</button>
+      </div>
 
       {(status || error) && <p aria-live="polite" className={`mt-3 text-xs ${error ? 'text-rose-300' : 'text-emerald-300'}`}>{error ?? status}</p>}
 
@@ -233,7 +258,7 @@ export function VoiceAuditionPanel({
         <VirtualPiano
           baseOctave={baseOctave}
           disabled={busy}
-          disabledReason={busyAction === 'push' ? 'Wait until all 155 voice parameters have been written.' : 'Wait for the current MIDI action to finish.'}
+          disabledReason="Wait for the current MIDI operation to finish."
           midiChannel={midiChannel}
           output={output}
           velocity={velocity}
