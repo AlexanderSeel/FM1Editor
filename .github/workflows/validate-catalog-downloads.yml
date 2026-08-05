@@ -1,0 +1,65 @@
+name: Validate catalog downloads
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/validate-catalog-downloads.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+      - name: Typecheck
+        run: npm run typecheck
+      - name: Lint
+        run: npm run lint
+      - name: Test
+        run: npm run test
+      - name: Build
+        run: npm run build
+      - name: Record validation
+        shell: bash
+        run: |
+          validated_sha="$(git rev-parse HEAD)"
+          mkdir -p docs/validation
+          cat > docs/validation/catalog-download-integrity.md <<EOF
+          # Catalog download integrity validation
+
+          Validated source commit: \`$validated_sha\`
+
+          - npm install: **PASS**
+          - npm run typecheck: **PASS**
+          - npm run lint: **PASS**
+          - npm run test: **PASS**
+          - npm run build: **PASS**
+
+          Verified behavior:
+
+          - Yamaha Black Boxes downloads must be complete 4104-byte DX7 bank messages;
+          - Yamaha manufacturer, bank format, declared payload, framing and checksum are validated;
+          - HTML, JSON, truncated and checksum-invalid responses are rejected;
+          - invalid downloads are not written to the build mirror or manifest;
+          - cached mirror files are independently validated before reuse;
+          - runtime loading validates the mirror and falls back to the direct source only when needed.
+          EOF
+
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add docs/validation/catalog-download-integrity.md
+          git commit -m 'test(ci): record catalog download validation'
+          git push origin HEAD:main
