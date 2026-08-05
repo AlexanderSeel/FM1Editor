@@ -1,6 +1,7 @@
 import type { Fm1Sequence } from '../domain/sequence'
 import { validateSequence } from '../domain/sequence'
 import { encodeNoteOff, encodeNoteOn, encodeRealtimeMessage } from './fm1Protocol'
+import type { MidiOutputTarget } from './output'
 
 export interface ScheduledMidiEvent {
   timestamp: number
@@ -56,15 +57,15 @@ export function buildSequenceEvents(sequence: Fm1Sequence, startTimestamp: numbe
   return events.sort((left, right) => left.timestamp - right.timestamp || (left.kind === 'note-off' ? -1 : 1))
 }
 
-export function scheduleSequence(output: MIDIOutput, sequence: Fm1Sequence, startDelayMs = 80): ScheduledMidiEvent[] {
+export function scheduleSequence(output: MidiOutputTarget, sequence: Fm1Sequence, startDelayMs = 80): ScheduledMidiEvent[] {
   const startTimestamp = performance.now() + startDelayMs
   const events = buildSequenceEvents(sequence, startTimestamp)
   events.forEach((event) => output.send(event.data, event.timestamp))
   return events
 }
 
-export function stopSequence(output: MIDIOutput, midiChannel: number): void {
-  ;(output as MIDIOutput & { clear?: () => void }).clear?.()
+export function stopSequence(output: MidiOutputTarget, midiChannel: number): void {
+  output.clear?.()
   output.send(encodeControlAllNotesOff(midiChannel))
   output.send(encodeRealtimeMessage('stop'))
 }
