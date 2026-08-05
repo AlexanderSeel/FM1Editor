@@ -48,24 +48,26 @@ export function CollapsibleSection({
   }
 
   return (
-    <div className="grid min-w-0 gap-2">
+    <div className="fm1-section grid min-w-0 gap-2">
       <button
         aria-controls={contentId}
         aria-expanded={open}
-        className="flex w-full items-center justify-between gap-4 rounded-xl border border-white/10 bg-white/[0.035] px-4 py-3 text-left transition hover:border-cyan-300/25 hover:bg-white/[0.055]"
+        className="fm1-section-toggle flex w-full items-center justify-between gap-4 px-4 py-3 text-left transition"
+        data-active={open}
         onClick={toggle}
         type="button"
       >
         <span className="min-w-0">
-          <span className="block text-xs font-bold uppercase tracking-[0.16em] text-slate-200">{title}</span>
-          {description && <span className="mt-1 block truncate text-[11px] text-slate-500">{description}</span>}
+          <span className="fm1-section-title block text-[11px] font-black uppercase tracking-[0.15em]">{title}</span>
+          {description && <span className="fm1-section-description mt-1 block truncate text-[10px] text-slate-500">{description}</span>}
         </span>
-        <span className="flex shrink-0 items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-cyan-200">
-          {open ? 'Collapse' : 'Expand'}
-          <span aria-hidden="true" className={`text-base transition-transform ${open ? 'rotate-180' : ''}`}>⌄</span>
+        <span className="fm1-section-state flex shrink-0 items-center gap-2 text-[9px] font-bold uppercase tracking-[0.13em]">
+          <span aria-hidden="true" className={`inline-block h-2 w-2 rounded-full ${open ? 'bg-cyan-200 shadow-[0_0_8px_rgba(115,216,255,0.8)]' : 'bg-slate-700'}`} />
+          {open ? 'On' : 'Off'}
+          <span aria-hidden="true" className={`text-sm transition-transform ${open ? 'rotate-180' : ''}`}>⌄</span>
         </span>
       </button>
-      <div hidden={!open} id={contentId}>
+      <div className="fm1-section-content" hidden={!open} id={contentId}>
         {children}
       </div>
     </div>
