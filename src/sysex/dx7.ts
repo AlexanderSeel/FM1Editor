@@ -138,7 +138,7 @@ function decodePackedOperator(data: Uint8Array, offset: number): Dx7Operator {
     oscillatorMode: (oscillatorAndCoarse & 0x01) === 0 ? 'ratio' : 'fixed',
     frequencyCoarse: (oscillatorAndCoarse >> 1) & 0x1f,
     frequencyFine: data[offset + 15] ?? 0,
-    detune: data[offset + 16] ?? 0,
+    detune: (data[offset + 16] ?? 0) & 0x0f,
   }
 }
 
@@ -325,7 +325,7 @@ export function encodePackedVoice(voice: Dx7Voice): Uint8Array {
       (operator.oscillatorMode === 'fixed' ? 1 : 0) |
       (operator.frequencyCoarse << 1)
     data[offset + 15] = operator.frequencyFine
-    data[offset + 16] = operator.detune
+    data[offset + 16] = ((data[offset + 16] ?? 0) & 0x70) | operator.detune
   }
 
   writeRange(data, 102, voice.pitchEnvelope.rates)
