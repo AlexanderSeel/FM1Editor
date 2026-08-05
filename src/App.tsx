@@ -7,6 +7,7 @@ import { PatchCatalogBrowser } from './components/PatchCatalogBrowser'
 import { PatchLibrary } from './components/PatchLibrary'
 import { SequenceEditor } from './components/SequenceEditor'
 import { SysexToolbar } from './components/SysexToolbar'
+import { VoiceAuditionPanel } from './components/VoiceAuditionPanel'
 import { VoiceEditor } from './components/VoiceEditor'
 import { createInitializedFxState, type Fm1FxState } from './domain/fx'
 import { createInitializedSequence, type Fm1Sequence } from './domain/sequence'
@@ -21,9 +22,15 @@ export default function App() {
   const patchLibrary = usePatchLibrary()
   const [workspace, setWorkspace] = useState<Workspace>('voice')
   const [voice, setVoice] = useState<Dx7Voice>(() => createInitializedVoice())
+  const [voiceSelectionVersion, setVoiceSelectionVersion] = useState(0)
   const [bank, setBank] = useState<readonly Dx7Voice[]>([])
   const [effects, setEffects] = useState<Fm1FxState>(() => createInitializedFxState())
   const [sequence, setSequence] = useState<Fm1Sequence>(() => createInitializedSequence())
+
+  const selectVoiceForAudition = (nextVoice: Dx7Voice) => {
+    setVoice(nextVoice)
+    setVoiceSelectionVersion((current) => current + 1)
+  }
 
   const workspaceTitle = workspace === 'voice'
     ? (voice.name || 'UNTITLED')
@@ -34,7 +41,7 @@ export default function App() {
         : (sequence.name || 'UNTITLED')
 
   const workspaceSummary = workspace === 'voice'
-    ? `Six operators · algorithm ${voice.algorithm} · DX7-compatible voice model`
+    ? `Six operators · algorithm ${voice.algorithm} · FM-1 push and virtual piano audition`
     : workspace === 'library'
       ? `${patchLibrary.records.length} local voices · schema v2 · backup/restore · merged ZIP and website catalog`
       : workspace === 'effects'
@@ -44,13 +51,13 @@ export default function App() {
   const loadCatalogBank = (voices: readonly Dx7Voice[]) => {
     setBank(voices)
     const first = voices[0]
-    if (first) setVoice(first)
+    if (first) selectVoiceForAudition(first)
     setWorkspace('voice')
   }
 
   const loadCatalogVoice = (nextVoice: Dx7Voice) => {
     setBank([])
-    setVoice(nextVoice)
+    selectVoiceForAudition(nextVoice)
     setWorkspace('voice')
   }
 
@@ -97,7 +104,7 @@ export default function App() {
 
           <section className="rounded-2xl border border-white/10 bg-white/[0.025] p-4 text-sm text-slate-400">
             <p className="text-xs font-semibold uppercase tracking-[0.18em] text-amber-200">Safety boundary</p>
-            <p className="mt-2 leading-6">File operations, documented FX CCs and MIDI sequence playback are active. Live voice parameter writes remain experimental until the FM-1 parameter map is verified against hardware.</p>
+            <p className="mt-2 leading-6">File operations, documented FX CCs and MIDI note playback are active. Full voice pushes and live parameter writes remain experimental until verified against physical FM-1 hardware.</p>
           </section>
         </aside>
 
@@ -115,7 +122,7 @@ export default function App() {
                     onImportBank={(voices) => {
                       setBank(voices)
                       const first = voices[0]
-                      if (first) setVoice(first)
+                      if (first) selectVoiceForAudition(first)
                     }}
                     onImportToLibrary={(voices, filename) => patchLibrary.importVoices(voices, {
                       kind: 'file',
@@ -125,7 +132,7 @@ export default function App() {
                     })}
                     onImportVoice={(nextVoice) => {
                       setBank([])
-                      setVoice(nextVoice)
+                      selectVoiceForAudition(nextVoice)
                     }}
                     onNewVoice={() => {
                       setBank([])
@@ -140,7 +147,13 @@ export default function App() {
             <div className="grid gap-5 p-4 sm:p-5 xl:p-7">
               {workspace === 'voice' ? (
                 <>
-                  <BankBrowser onChange={setBank} onSelect={setVoice} selectedVoice={voice} voices={bank} />
+                  <BankBrowser onChange={setBank} onSelect={selectVoiceForAudition} selectedVoice={voice} voices={bank} />
+                  <VoiceAuditionPanel
+                    output={midi.output}
+                    selectionVersion={voiceSelectionVersion}
+                    sysexEnabled={midi.state.sysexEnabled}
+                    voice={voice}
+                  />
                   <VoiceEditor onChange={setVoice} voice={voice} />
                 </>
               ) : workspace === 'library' ? (
@@ -173,8 +186,8 @@ export default function App() {
           </section>
 
           <footer className="flex flex-wrap items-center justify-between gap-2 px-2 text-xs text-slate-500">
-            <span>Current milestone: tracked SysEx catalog, schema-v2 patch library, JSON backup/restore and structured import diagnostics.</span>
-            <span>Physical FM-1 voice parameter and bank-transfer verification remains pending.</span>
+            <span>Current milestone: viewport-safe layout, tracked SysEx catalog, schema-v2 library and direct voice audition workflow.</span>
+            <span>Physical FM-1 voice-transfer verification remains pending.</span>
           </footer>
         </main>
       </div>
