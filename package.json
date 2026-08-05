@@ -4,6 +4,7 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
+    "predev": "node scripts/sync-patch-catalog.mjs --best-effort",
     "dev": "vite",
     "catalog:sync": "node scripts/sync-patch-catalog.mjs",
     "prebuild": "node scripts/sync-patch-catalog.mjs --best-effort",
