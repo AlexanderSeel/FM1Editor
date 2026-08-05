@@ -88,8 +88,9 @@ function errorMessage(cause: unknown): string {
 }
 
 export async function loadCatalogEntryBytes(entry: PatchCatalogEntry): Promise<Uint8Array> {
+  const catalog = await loadPatchCatalog()
+
   if (entry.archivePath) {
-    const catalog = await loadPatchCatalog()
     const bytes = catalog.files.get(entry.archivePath)
     if (!bytes) throw new Error(`The bundled archive no longer contains ${entry.archivePath}.`)
     return bytes
@@ -98,13 +99,15 @@ export async function loadCatalogEntryBytes(entry: PatchCatalogEntry): Promise<U
   const website = entry.website
   if (!website) throw new Error('This catalog entry has no loadable source.')
 
-  let mirrorFailure = 'not attempted'
-  try {
-    const mirrored = await fetchBytes(assetUrl(website.mirrorPath))
-    assertStandardDx7Bank(mirrored, `The mirrored ${entry.filename} file`)
-    return mirrored
-  } catch (cause) {
-    mirrorFailure = errorMessage(cause)
+  let mirrorFailure = 'The mirror was not requested because no validated sync manifest is available.'
+  if (catalog.websiteSource === 'sync-manifest') {
+    try {
+      const mirrored = await fetchBytes(assetUrl(website.mirrorPath))
+      assertStandardDx7Bank(mirrored, `The mirrored ${entry.filename} file`)
+      return mirrored
+    } catch (cause) {
+      mirrorFailure = errorMessage(cause)
+    }
   }
 
   try {
