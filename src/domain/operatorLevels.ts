@@ -26,15 +26,16 @@ export function toggleOperatorEnabled(
   assertOperatorIndex(operatorIndex)
   assertLevel(rememberedLevel, 'Remembered operator level')
 
-  const currentLevel = levels[operatorIndex]
+  const currentLevel = levels[operatorIndex] ?? 0
   const next = [...levels] as [number, number, number, number, number, number]
   if (currentLevel > 0) {
     next[operatorIndex] = 0
     return { levels: next, rememberedLevel: currentLevel }
   }
 
-  next[operatorIndex] = rememberedLevel > 0 ? rememberedLevel : 99
-  return { levels: next, rememberedLevel: next[operatorIndex] }
+  const restoredLevel = rememberedLevel > 0 ? rememberedLevel : 99
+  next[operatorIndex] = restoredLevel
+  return { levels: next, rememberedLevel: restoredLevel }
 }
 
 export function createSoloOperatorLevels(
@@ -44,8 +45,9 @@ export function createSoloOperatorLevels(
 ): SixOperatorLevels {
   assertOperatorIndex(operatorIndex)
   assertLevel(rememberedLevel, 'Remembered operator level')
-  const targetLevel = baseLevels[operatorIndex] > 0
-    ? baseLevels[operatorIndex]
+  const baseLevel = baseLevels[operatorIndex] ?? 0
+  const targetLevel = baseLevel > 0
+    ? baseLevel
     : rememberedLevel > 0
       ? rememberedLevel
       : 99
