@@ -6,6 +6,7 @@ import {
   DX7_SINGLE_MESSAGE_LENGTH,
   Dx7SysexError,
 } from './dx7'
+import { normalizeLegacyVoice } from './normalizeLegacyVoice'
 
 export interface ImportedSingleVoice {
   kind: 'single-voice'
@@ -164,11 +165,25 @@ function decodeMessage(message: ExtractedSysexMessage): {
   try {
     if (raw.length === DX7_SINGLE_MESSAGE_LENGTH && format === 0x00) {
       const decoded = decodeSingleVoiceMessage(raw)
-      return { entry: { kind: 'single-voice', ...decoded, raw } }
+      return {
+        entry: {
+          kind: 'single-voice',
+          ...decoded,
+          voice: normalizeLegacyVoice(decoded.voice),
+          raw,
+        },
+      }
     }
     if (raw.length === DX7_BANK_MESSAGE_LENGTH && format === 0x09) {
       const decoded = decodeVoiceBankMessage(raw)
-      return { entry: { kind: 'voice-bank', ...decoded, raw } }
+      return {
+        entry: {
+          kind: 'voice-bank',
+          ...decoded,
+          voices: decoded.voices.map(normalizeLegacyVoice),
+          raw,
+        },
+      }
     }
 
     const reason = `Unsupported SysEx message (${raw.length} bytes, manufacturer ${hexByte(manufacturer)}, format ${hexByte(format)}).`
