@@ -2,7 +2,7 @@ import type { PatchRecord } from './model'
 import { normalizeStoredPatchRecord } from './storageMigration'
 
 const DATABASE_NAME = 'fm1-editor'
-const DATABASE_VERSION = 2
+const DATABASE_VERSION = 3
 const PATCH_STORE = 'patches'
 const METADATA_STORE = 'metadata'
 
@@ -56,7 +56,7 @@ function openDatabase(): Promise<IDBDatabase> {
         ? transaction.objectStore(PATCH_STORE)
         : database.createObjectStore(PATCH_STORE, { keyPath: 'id' })
       ensurePatchIndexes(patchStore)
-      if ((event as IDBVersionChangeEvent).oldVersion < 2) migrateStoredRecords(patchStore)
+      if ((event as IDBVersionChangeEvent).oldVersion < DATABASE_VERSION) migrateStoredRecords(patchStore)
 
       const metadataStore = database.objectStoreNames.contains(METADATA_STORE)
         ? transaction.objectStore(METADATA_STORE)
