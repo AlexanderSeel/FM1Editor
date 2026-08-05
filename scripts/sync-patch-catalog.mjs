@@ -6,10 +6,50 @@ const ARCHIVE_EXPECTED_SHA256 = 'fde5aad29b215aa3ea67e9f57bf55d4443cc6efe7562d6c
 const WEBSITE_PAGE_URL = 'https://yamahablackboxes.com/collection/yamaha-dx7-synthesizer/patches/'
 const OUTPUT_ROOT = new URL('../public/catalog/', import.meta.url)
 const ARCHIVE_PATH = new URL('sysexFinal.zip', OUTPUT_ROOT)
+const DX7_BANK_MESSAGE_LENGTH = 4104
+const DX7_BANK_DATA_LENGTH = 4096
 const bestEffort = process.argv.includes('--best-effort')
 
 function sha256(bytes) {
   return createHash('sha256').update(bytes).digest('hex')
+}
+
+function yamahaChecksum(bytes) {
+  let sum = 0
+  for (const value of bytes) sum = (sum + value) & 0x7f
+  return (-sum) & 0x7f
+}
+
+function looksLikeTextResponse(bytes) {
+  const prefix = bytes.subarray(0, 32).toString('utf8').trimStart().toLowerCase()
+  return prefix.startsWith('<!doctype') || prefix.startsWith('<html') || prefix.startsWith('{')
+}
+
+function assertStandardDx7Bank(bytes, source) {
+  const textHint = looksLikeTextResponse(bytes)
+    ? ' The response appears to contain HTML or JSON instead of SysEx data.'
+    : ''
+
+  if (bytes.byteLength !== DX7_BANK_MESSAGE_LENGTH) {
+    throw new Error(`${source} contains ${bytes.byteLength} bytes; expected ${DX7_BANK_MESSAGE_LENGTH}.${textHint}`)
+  }
+  if (
+    bytes[0] !== 0xf0
+    || bytes[1] !== 0x43
+    || bytes[3] !== 0x09
+    || bytes[4] !== 0x20
+    || bytes[5] !== 0x00
+    || bytes[DX7_BANK_MESSAGE_LENGTH - 1] !== 0xf7
+  ) {
+    throw new Error(`${source} is not a standard Yamaha DX7 32-voice bank.${textHint}`)
+  }
+
+  const payload = bytes.subarray(6, 6 + DX7_BANK_DATA_LENGTH)
+  const expected = yamahaChecksum(payload)
+  const actual = bytes[6 + DX7_BANK_DATA_LENGTH]
+  if (actual !== expected) {
+    throw new Error(`${source} has an invalid Yamaha checksum: expected ${expected}, received ${actual ?? -1}.`)
+  }
 }
 
 async function fetchBytes(url) {
@@ -93,29 +133,39 @@ async function synchronize() {
   const files = []
   for (const url of links) {
     const relativePath = websiteRelativePath(url)
+    let bytes = null
+
     try {
-      const bytes = await fetchBytes(url)
-      await writeBytes(relativePath, bytes)
-      files.push({
-        filename: basename(url.pathname),
-        sourceUrl: url.href,
-        assetPath: `catalog/${relativePath}`,
-        size: bytes.byteLength,
-        sha256: sha256(bytes),
-      })
+      const downloaded = await fetchBytes(url)
+      assertStandardDx7Bank(downloaded, url.href)
+      bytes = downloaded
+      await writeBytes(relativePath, downloaded)
     } catch (cause) {
       const cached = await readCached(relativePath)
-      if (!cached) throw cause
-      console.warn(`Patch download failed for ${url.href}; using cached file.`)
-      files.push({
-        filename: basename(url.pathname),
-        sourceUrl: url.href,
-        assetPath: `catalog/${relativePath}`,
-        size: cached.byteLength,
-        sha256: sha256(cached),
-      })
+      if (cached) {
+        try {
+          assertStandardDx7Bank(cached, `Cached ${relativePath}`)
+          bytes = cached
+          console.warn(`Patch download failed or was invalid for ${url.href}; using validated cached file.`)
+        } catch (cachedCause) {
+          console.warn(`Skipping ${url.href}: download failed (${cause instanceof Error ? cause.message : cause}); cached copy is invalid (${cachedCause instanceof Error ? cachedCause.message : cachedCause}).`)
+        }
+      } else {
+        console.warn(`Skipping ${url.href}: ${cause instanceof Error ? cause.message : cause}`)
+      }
     }
+
+    if (!bytes) continue
+    files.push({
+      filename: basename(url.pathname),
+      sourceUrl: url.href,
+      assetPath: `catalog/${relativePath}`,
+      size: bytes.byteLength,
+      sha256: sha256(bytes),
+    })
   }
+
+  if (files.length === 0) throw new Error('No checksum-valid Yamaha DX7 website banks were available.')
 
   const manifest = {
     version: 1,
@@ -136,7 +186,7 @@ async function synchronize() {
     rightsNotice: 'Patch rights vary by original author and collection. Source attribution is retained; users are responsible for permitted use.',
   }
   await writeBytes('sync-manifest.json', Buffer.from(`${JSON.stringify(manifest, null, 2)}\n`))
-  console.log(`Patch catalog synchronized: ${files.length} website banks merged with the tracked sysexFinal.zip.`)
+  console.log(`Patch catalog synchronized: ${files.length} validated website banks merged with the tracked sysexFinal.zip.`)
 }
 
 try {
