@@ -1,0 +1,157 @@
+name: Fix breakpoint 127 compatibility
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/fix-breakpoint-127.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  fix-and-validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Apply breakpoint compatibility fix
+        shell: bash
+        run: |
+          python <<'PY'
+          from pathlib import Path
+
+          codec = Path('src/sysex/dx7.ts')
+          text = codec.read_text()
+
+          detune_marker = """function normalizeDetune(value: number): number {
+            return Math.min(value, 14)
+          }
+          """
+          addition = detune_marker + """
+
+          /**
+           * Keyboard-scaling breakpoint is defined as 0..99. Some legacy or
+           * third-party banks contain the reserved 7-bit value 127. Normalize
+           * it to the nearest valid breakpoint instead of blocking bank export.
+           */
+          function normalizeBreakpoint(value: number): number {
+            return Math.min(value, 99)
+          }
+          """
+          if detune_marker not in text:
+            raise SystemExit('normalizeDetune marker not found')
+          text = text.replace(detune_marker, addition, 1)
+
+          replacements = {
+            "breakPoint: data[offset + 8] ?? 0,": "breakPoint: normalizeBreakpoint(data[offset + 8] ?? 0),",
+            "assertRange(`${label} breakpoint`, operator.keyboardScaling.breakPoint, 0, 99)": "assertRange(`${label} breakpoint`, operator.keyboardScaling.breakPoint, 0, 127)",
+            "data[offset + 8] = operator.keyboardScaling.breakPoint": "data[offset + 8] = normalizeBreakpoint(operator.keyboardScaling.breakPoint)",
+          }
+          for old, new in replacements.items():
+            count = text.count(old)
+            if count == 0:
+              raise SystemExit(f'codec marker not found: {old}')
+            text = text.replace(old, new)
+          codec.write_text(text)
+
+          tests = Path('src/sysex/dx7.test.ts')
+          test_text = tests.read_text()
+          marker = """  it('normalizes reserved detune nibble 15 without blocking bank or single-voice encoding', () => {
+            const packed = encodePackedVoice(createInitializedVoice('DETUNE 15'))
+            const op6DetuneOffset = 16
+            packed[op6DetuneOffset] = 0x3f
+
+            const decoded = decodePackedVoice(packed)
+            const reencoded = encodePackedVoice(decoded)
+
+            expect(decoded.operators[5].detune).toBe(14)
+            expect(reencoded[op6DetuneOffset]).toBe(0x3e)
+
+            const legacyVoice = createInitializedVoice('LEGACY 15')
+            legacyVoice.operators[5].detune = 15
+            const legacyPacked = encodePackedVoice(legacyVoice)
+            const legacySingle = encodeSingleVoiceMessage(legacyVoice)
+
+            expect((legacyPacked[op6DetuneOffset] ?? 0) & 0x0f).toBe(14)
+            expect(decodeSingleVoiceMessage(legacySingle).voice.operators[5].detune).toBe(14)
+          })
+          """
+          addition = marker + """
+
+          it('normalizes reserved breakpoint value 127 without blocking voice or bank encoding', () => {
+            const packed = encodePackedVoice(createInitializedVoice('BREAK 127'))
+            const op2BreakpointOffset = 4 * 17 + 8
+            packed[op2BreakpointOffset] = 127
+
+            const decoded = decodePackedVoice(packed)
+            const reencoded = encodePackedVoice(decoded)
+
+            expect(decoded.operators[1].keyboardScaling.breakPoint).toBe(99)
+            expect(reencoded[op2BreakpointOffset]).toBe(99)
+
+            const legacyVoice = createInitializedVoice('LEGACY BP')
+            legacyVoice.operators[1].keyboardScaling.breakPoint = 127
+            const legacySingle = encodeSingleVoiceMessage(legacyVoice)
+            expect(decodeSingleVoiceMessage(legacySingle).voice.operators[1].keyboardScaling.breakPoint).toBe(99)
+
+            const voices = Array.from({ length: 32 }, (_, index) => createInitializedVoice(`VOICE ${index + 1}`))
+            const bankVoice = voices[3]
+            if (!bankVoice) throw new Error('Missing test bank voice.')
+            bankVoice.operators[1].keyboardScaling.breakPoint = 127
+            const bankMessage = encodeVoiceBankMessage(voices)
+            expect(decodeVoiceBankMessage(bankMessage).voices[3]?.operators[1].keyboardScaling.breakPoint).toBe(99)
+          })
+          """
+          if marker not in test_text:
+            raise SystemExit('detune test marker not found')
+          tests.write_text(test_text.replace(marker, addition, 1))
+          PY
+
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+      - name: Typecheck
+        run: npm run typecheck
+      - name: Lint
+        run: npm run lint
+      - name: Test
+        run: npm run test
+      - name: Build
+        run: npm run build
+      - name: Record validation and commit
+        shell: bash
+        run: |
+          validated_sha="$(git rev-parse HEAD)"
+          mkdir -p docs/validation
+          cat > docs/validation/breakpoint-127.md <<EOF
+          # Breakpoint 127 compatibility validation
+
+          Validated source commit: \`$validated_sha\`
+
+          - npm install: **PASS**
+          - npm run typecheck: **PASS**
+          - npm run lint: **PASS**
+          - npm run test: **PASS**
+          - npm run build: **PASS**
+
+          Verified behavior:
+
+          - packed and unpacked keyboard-scaling breakpoint 127 normalizes to 99;
+          - imported voices remain editable and exportable;
+          - existing in-memory breakpoint 127 no longer blocks single-voice encoding;
+          - existing in-memory breakpoint 127 no longer blocks complete 32-voice bank encoding;
+          - Yamaha checksum is recalculated after normalization.
+          EOF
+
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add src/sysex/dx7.ts src/sysex/dx7.test.ts docs/validation/breakpoint-127.md
+          git commit -m 'fix(sysex): normalize reserved breakpoint value 127'
+          git push origin HEAD:main
