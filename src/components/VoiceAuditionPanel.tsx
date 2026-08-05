@@ -75,10 +75,11 @@ export function VoiceAuditionPanel({
       </div>
 
       <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-[150px_minmax(180px,1fr)_150px_minmax(220px,1fr)_auto]">
-        <label className="grid gap-1.5 text-xs text-slate-400">
-          <span className="font-semibold uppercase tracking-[0.12em]">MIDI channel</span>
+        <div className="grid gap-1.5 text-xs text-slate-400">
+          <label className="font-semibold uppercase tracking-[0.12em]" htmlFor="audition-midi-channel">MIDI channel</label>
           <select
             className="rounded-xl border border-white/10 bg-slate-950 px-3 py-2.5 text-sm text-white"
+            id="audition-midi-channel"
             onChange={(event) => setMidiChannel(Number(event.target.value))}
             value={midiChannel}
           >
@@ -86,23 +87,24 @@ export function VoiceAuditionPanel({
               <option key={channel} value={channel}>Channel {channel}</option>
             ))}
           </select>
-        </label>
+        </div>
 
-        <label className="grid gap-1.5 text-xs text-slate-400">
-          <span className="flex justify-between font-semibold uppercase tracking-[0.12em]"><span>Velocity</span><strong className="text-cyan-200">{velocity}</strong></span>
-          <input max={127} min={1} onChange={(event) => setVelocity(Number(event.target.value))} type="range" value={velocity} />
-        </label>
+        <div className="grid gap-1.5 text-xs text-slate-400">
+          <label className="flex justify-between font-semibold uppercase tracking-[0.12em]" htmlFor="audition-velocity"><span>Velocity</span><strong className="text-cyan-200">{velocity}</strong></label>
+          <input id="audition-velocity" max={127} min={1} onChange={(event) => setVelocity(Number(event.target.value))} type="range" value={velocity} />
+        </div>
 
-        <label className="grid gap-1.5 text-xs text-slate-400">
-          <span className="font-semibold uppercase tracking-[0.12em]">Piano starts</span>
+        <div className="grid gap-1.5 text-xs text-slate-400">
+          <label className="font-semibold uppercase tracking-[0.12em]" htmlFor="audition-base-octave">Piano starts</label>
           <select
             className="rounded-xl border border-white/10 bg-slate-950 px-3 py-2.5 text-sm text-white"
+            id="audition-base-octave"
             onChange={(event) => setBaseOctave(Number(event.target.value))}
             value={baseOctave}
           >
             {[1, 2, 3, 4, 5, 6].map((octave) => <option key={octave} value={octave}>C{octave}</option>)}
           </select>
-        </label>
+        </div>
 
         <label className="flex items-center gap-3 rounded-xl border border-white/10 bg-black/20 px-3 py-2.5 text-xs text-slate-300">
           <input checked={autoPush} onChange={(event) => setAutoPush(event.target.checked)} type="checkbox" />
