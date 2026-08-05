@@ -170,7 +170,7 @@ export function AlgorithmGraph({
         </div>
       </div>
 
-      <div className="fm1-algorithm-canvas relative min-h-[300px] overflow-hidden rounded-xl border border-black/80" role="img" aria-label={`DX7 algorithm ${algorithm.number} routing diagram`}>
+      <div className="fm1-algorithm-canvas relative min-h-[300px] overflow-hidden rounded-xl border border-black/80" role="group" aria-label={`DX7 algorithm ${algorithm.number} routing controls`}>
         <svg aria-hidden="true" className="absolute inset-0 h-full w-full" preserveAspectRatio="xMidYMid meet" viewBox={`0 0 ${GRAPH_WIDTH} ${GRAPH_HEIGHT}`}>
           <defs>
             <marker id={`algorithm-arrow-${algorithm.number}`} markerHeight="7" markerWidth="7" orient="auto" refX="6" refY="3.5">
