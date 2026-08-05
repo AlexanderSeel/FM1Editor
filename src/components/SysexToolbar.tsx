@@ -10,6 +10,7 @@ interface SysexToolbarProps {
   onImportBank: (voices: readonly Dx7Voice[]) => void
   onImportToLibrary: (voices: readonly Dx7Voice[], filename: string) => Promise<{ added: number; duplicates: number }>
   onNewVoice: () => void
+  onExportVoice?: () => void
 }
 
 interface FileSysexDiagnostic extends SysexDiagnostic {
@@ -22,7 +23,7 @@ function diagnosticClass(severity: SysexDiagnostic['severity']): string {
   return 'border-cyan-300/20 bg-cyan-300/10 text-cyan-200'
 }
 
-export function SysexToolbar({ voice, onImportVoice, onImportBank, onImportToLibrary, onNewVoice }: SysexToolbarProps) {
+export function SysexToolbar({ voice, onImportVoice, onImportBank, onImportToLibrary, onNewVoice, onExportVoice }: SysexToolbarProps) {
   const inputRef = useRef<HTMLInputElement>(null)
   const folderInputRef = useRef<HTMLInputElement>(null)
   const [status, setStatus] = useState<string | null>(null)
@@ -89,6 +90,7 @@ export function SysexToolbar({ voice, onImportVoice, onImportBank, onImportToLib
   const exportVoice = () => {
     const filename = `${voice.name.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-') || 'fm1-voice'}.syx`
     downloadBytes(encodeSingleVoiceMessage(voice), filename)
+    onExportVoice?.()
     setStatus(`Exported ${filename}.`)
     setError(null)
     setDiagnostics([])
