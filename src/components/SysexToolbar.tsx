@@ -1,4 +1,4 @@
-import { useRef, useState, type DragEvent } from 'react'
+import { useEffect, useRef, useState, type DragEvent } from 'react'
 import type { Dx7Voice } from '../domain/voice'
 import { downloadBytes } from '../files/download'
 import { encodeSingleVoiceMessage } from '../sysex/dx7'
@@ -18,6 +18,10 @@ export function SysexToolbar({ voice, onImportVoice, onImportBank, onImportToLib
   const [status, setStatus] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [dragging, setDragging] = useState(false)
+
+  useEffect(() => {
+    if (folderInputRef.current) folderInputRef.current.webkitdirectory = true
+  }, [])
 
   const importFiles = async (files: readonly File[]) => {
     setError(null)
@@ -87,7 +91,7 @@ export function SysexToolbar({ voice, onImportVoice, onImportBank, onImportToLib
     >
       <div className="flex flex-wrap gap-2">
         <input accept=".syx,.sysex,application/octet-stream" className="hidden" multiple onChange={(event) => void importFiles(Array.from(event.target.files ?? []))} ref={inputRef} type="file" />
-        <input {...({ webkitdirectory: '', directory: '' } as const)} className="hidden" multiple onChange={(event) => void importFiles(Array.from(event.target.files ?? []).filter((file) => /\.syx(?:ex)?$/i.test(file.name)))} ref={folderInputRef} type="file" />
+        <input className="hidden" multiple onChange={(event) => void importFiles(Array.from(event.target.files ?? []).filter((file) => /\.syx(?:ex)?$/i.test(file.name)))} ref={folderInputRef} type="file" />
         <button className="rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm font-semibold text-slate-200 hover:bg-white/10" onClick={() => inputRef.current?.click()} type="button">Import files</button>
         <button className="rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm font-semibold text-slate-200 hover:bg-white/10" onClick={() => folderInputRef.current?.click()} type="button">Import folder</button>
         <button className="rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm font-semibold text-slate-200 hover:bg-white/10" onClick={exportVoice} type="button">Export voice</button>
