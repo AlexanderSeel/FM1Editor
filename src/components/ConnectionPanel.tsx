@@ -28,10 +28,10 @@ function PortSelect({
   onChange: (id: string | null) => void
 }) {
   return (
-    <label className="grid gap-2 text-xs font-medium uppercase tracking-[0.18em] text-slate-400">
+    <label className="grid gap-2 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">
       {label}
       <select
-        className="rounded-xl border border-white/10 bg-slate-950/80 px-3 py-2.5 text-sm normal-case tracking-normal text-slate-100 outline-none transition focus:border-cyan-400/70"
+        className="px-3 py-2.5 text-sm normal-case tracking-normal"
         value={value ?? ''}
         onChange={(event) => onChange(event.target.value || null)}
       >
@@ -48,32 +48,32 @@ function PortSelect({
 
 export function ConnectionPanel(props: ConnectionPanelProps) {
   const connected = props.permission === 'granted'
+  const ready = connected && props.sysexEnabled
 
   return (
-    <section className="rounded-2xl border border-white/10 bg-white/[0.035] p-4 shadow-2xl shadow-black/20 backdrop-blur">
+    <section className="fm1-connection-panel p-4">
       <div className="flex items-start justify-between gap-4">
         <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.22em] text-cyan-300">Device link</p>
-          <h2 className="mt-1 text-lg font-semibold text-white">Web MIDI + SysEx</h2>
+          <p className="fm1-hardware-label text-[10px]">Device link</p>
+          <h2 className="mt-1 text-base font-bold text-white">Web MIDI + SysEx</h2>
         </div>
-        <span
-          className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wider ${
-            connected && props.sysexEnabled
-              ? 'border-emerald-400/30 bg-emerald-400/10 text-emerald-300'
-              : 'border-amber-400/30 bg-amber-400/10 text-amber-200'
-          }`}
-        >
-          {connected && props.sysexEnabled ? 'Ready' : 'Offline'}
+        <span className="flex items-center gap-2 rounded-lg border border-white/5 bg-black/30 px-2.5 py-1.5 text-[9px] font-bold uppercase tracking-[0.12em] text-slate-300">
+          <span
+            aria-hidden="true"
+            className={`inline-block h-2 w-2 rounded-full ${ready ? 'bg-emerald-300 shadow-[0_0_8px_rgba(140,230,118,0.75)]' : 'bg-amber-300 shadow-[0_0_8px_rgba(244,201,102,0.55)]'}`}
+          />
+          {ready ? 'Ready' : 'Standby'}
         </span>
       </div>
 
       {!connected ? (
-        <div className="mt-5 grid gap-4">
+        <div className="mt-4 grid gap-4">
           <p className="text-sm leading-6 text-slate-400">
             The browser will ask for access to MIDI devices and System Exclusive messages. Nothing is sent until you explicitly choose an operation.
           </p>
           <button
-            className="rounded-xl bg-cyan-300 px-4 py-3 text-sm font-bold text-slate-950 transition hover:bg-cyan-200 disabled:cursor-not-allowed disabled:bg-slate-700 disabled:text-slate-400"
+            className="px-4 py-3 text-sm font-black uppercase tracking-[0.08em]"
+            data-active="true"
             disabled={!props.supported || props.permission === 'requesting'}
             onClick={props.onConnect}
             type="button"
@@ -84,7 +84,7 @@ export function ConnectionPanel(props: ConnectionPanelProps) {
           {props.error && <p className="text-sm text-rose-300">{props.error}</p>}
         </div>
       ) : (
-        <div className="mt-5 grid gap-4">
+        <div className="mt-4 grid gap-4">
           <PortSelect
             label="MIDI input"
             ports={props.inputs}
@@ -98,7 +98,7 @@ export function ConnectionPanel(props: ConnectionPanelProps) {
             onChange={props.onSelectOutput}
           />
           {!props.sysexEnabled && (
-            <p className="rounded-xl border border-amber-400/20 bg-amber-400/10 p-3 text-sm text-amber-100">
+            <p className="rounded-lg border border-amber-400/20 bg-amber-400/10 p-3 text-sm text-amber-100">
               MIDI access was granted without SysEx. Revoke the site permission and reconnect with SysEx enabled.
             </p>
           )}
