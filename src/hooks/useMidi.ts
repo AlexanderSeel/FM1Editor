@@ -25,10 +25,6 @@ const INPUT_PREFERENCE_KEY = 'fm1-editor.midi.input'
 const OUTPUT_PREFERENCE_KEY = 'fm1-editor.midi.output'
 const MONITOR_LIMIT = 1000
 
-function listPorts<T extends MIDIPort>(ports: MIDIPortMap<T>): MidiPortInfo[] {
-  return Array.from(ports.values(), describePort).sort((a, b) => a.name.localeCompare(b.name))
-}
-
 function readPreference(key: string): MidiPortPreference | null {
   try {
     const value = localStorage.getItem(key)
@@ -69,8 +65,10 @@ export function useMidi() {
   const clearMonitor = useCallback(() => setMonitorEntries([]), [])
 
   const refreshPorts = useCallback((midiAccess: MIDIAccess) => {
-    const nextInputs = listPorts(midiAccess.inputs)
-    const nextOutputs = listPorts(midiAccess.outputs)
+    const nextInputs = Array.from(midiAccess.inputs.values(), describePort)
+      .sort((left, right) => left.name.localeCompare(right.name))
+    const nextOutputs = Array.from(midiAccess.outputs.values(), describePort)
+      .sort((left, right) => left.name.localeCompare(right.name))
 
     setInputs(nextInputs)
     setOutputs(nextOutputs)
@@ -124,6 +122,7 @@ export function useMidi() {
     if (!input) return
 
     const handleMessage = (event: MIDIMessageEvent) => {
+      if (!event.data) return
       appendMonitorEntry(createMidiMonitorEntry('in', input, event.data))
     }
     input.addEventListener('midimessage', handleMessage)
@@ -137,6 +136,7 @@ export function useMidi() {
     if (!access || !selectedOutputId) return null
     const port = access.outputs.get(selectedOutputId)
     if (!port) return null
+    const clearablePort = port as MIDIOutput & { clear?: () => void }
 
     return {
       id: port.id,
@@ -148,7 +148,9 @@ export function useMidi() {
         else port.send(bytes, timestamp)
         appendMonitorEntry(createMidiMonitorEntry('out', port, bytes))
       },
-      clear: () => port.clear(),
+      ...(typeof clearablePort.clear === 'function'
+        ? { clear: () => { clearablePort.clear?.() } }
+        : {}),
     }
   }, [access, appendMonitorEntry, selectedOutputId])
 
