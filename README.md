@@ -2,20 +2,49 @@
 
 A TypeScript web editor and librarian for the **M-VAVE FM-1** pocket FM synthesizer.
 
-The project targets a complete graphical workflow around the FM-1:
+## Implemented baseline
+
+- React, TypeScript, Vite and Tailwind application shell;
+- Web MIDI capability detection, SysEx permission request and reconnect-aware input/output selection;
+- Yamaha DX7-compatible 155-byte single-voice and 4,096-byte 32-voice bank codecs;
+- Yamaha checksum validation and multi-message `.syx` file classification;
+- `.syx` single-voice import/export and 32-slot bank inspection;
+- graphical six-operator voice editor with amplitude/pitch envelope views, operator frequency/level/scaling controls, algorithm, feedback and LFO controls;
+- documented FM-1 parameter-write, CC, note, program and real-time message encoders;
+- local 16-step sequence editor with note/rest/tie, velocity, gate, tempo, swing, length and MIDI channel;
+- versioned sequence JSON load/save and scheduled Web MIDI playback;
+- Vitest coverage for DX7 codecs, FM-1 message framing and sequence scheduling;
+- GitHub Actions workflow for typecheck, tests and production build.
+
+See [`PLAN.md`](./PLAN.md) for unresolved work.
+
+## Hardware verification boundary
+
+The official FM-1 MIDI document defines a single-parameter write frame and parameter IDs 0–155, but it does not publish a semantic parameter map. Consequently:
+
+- `.syx` file parsing, editing and export are normal supported workflows;
+- MIDI note/transport playback uses documented messages;
+- live voice parameter writes remain explicitly experimental;
+- destructive FM-1 bank transfer is not exposed as verified yet;
+- internal FM-1 sequencer dump/restore is not implemented because no documented pattern protocol was found.
+
+Physical-device tests must record the FM-1 firmware version and must not be reported as passed unless actually executed.
+
+Detailed protocol findings are recorded in [`docs/research/fm1-midi-protocol.md`](./docs/research/fm1-midi-protocol.md).
+
+## Intended complete workflow
 
 - connect through Web MIDI with SysEx access;
-- inspect and edit six-operator FM voices;
-- visualize operator envelopes, pitch envelope, algorithms, feedback, LFO and performance settings;
-- import, inspect and export Yamaha DX7-compatible `.syx` single voices and 32-voice banks;
-- send compatible voice banks to the FM-1 and organize its A/B/C/D banks;
-- maintain a searchable local patch library with tags, favorites, comparisons and duplicate detection;
-- build, save and play 16-step sequences from the browser;
-- provide a protocol adapter boundary for future device-side sequence transfer if a documented or verified FM-1 pattern protocol becomes available.
+- design and audition six-operator FM voices;
+- import, inspect, edit and export DX7-compatible `.syx` patches and banks;
+- organize a searchable local patch library;
+- browse attributed external patch sources without redistributing third-party collections;
+- transfer verified banks to FM-1 destinations A/B/C/D;
+- control documented FM-1 filter and effects CCs;
+- create, save and play sequences from the browser;
+- add device-side pattern transfer only if a stable protocol is documented or hardware-verified.
 
-## Current device facts
-
-The FM-1 is documented as a six-operator FM synthesizer with 32 algorithms, 128 presets, arpeggiator and 16-step sequencer. It receives MIDI notes, pitch bend, control changes and FM-1 voice-bank SysEx. Its manual describes importing standard Yamaha DX7 32-voice banks and choosing an FM-1 destination bank A, B, C or D after receipt.
+## Sources
 
 Official product and firmware documentation:
 
@@ -26,7 +55,7 @@ Reference DX7 patch archive used for interoperability research:
 
 - https://yamahablackboxes.com/collection/yamaha-dx7-synthesizer/patches/
 
-The application does **not** redistribute third-party patch collections. Users import files they are permitted to use, or open source/provider-approved catalog endpoints configured by the application.
+The application does **not** redistribute third-party patch collections. Users import files they are permitted to use, or use source/provider-approved catalog endpoints configured by the application.
 
 ## Technology
 
@@ -34,14 +63,14 @@ The application does **not** redistribute third-party patch collections. Users i
 - Tailwind CSS
 - Web MIDI API with `sysex: true`
 - framework-independent DX7/FM-1 protocol and file-format modules
-- IndexedDB-backed local library
-- Vitest for protocol, codec and state tests
+- local browser persistence planned behind a storage adapter
+- Vitest for protocol, codec and scheduling tests
 
 A desktop wrapper such as Tauri remains possible because device protocol, storage and UI state are kept behind adapters.
 
 ## Browser requirements
 
-Web MIDI and SysEx require a compatible Chromium-based browser, a secure context (`https://` or `localhost`) and explicit user permission. Browser support and device behavior will be documented from real hardware tests; the project will not claim unexecuted FM-1 transfers as verified.
+Web MIDI and SysEx require a compatible Chromium-based browser, a secure context (`https://` or `localhost`) and explicit user permission. Browser support and device behavior will be documented from real hardware tests.
 
 ## Development
 
@@ -57,10 +86,6 @@ npm run typecheck
 npm run test
 npm run build
 ```
-
-## Status
-
-Initial implementation is in progress. See [`PLAN.md`](./PLAN.md) for unresolved work and protocol risks.
 
 ## License
 
