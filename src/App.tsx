@@ -36,7 +36,7 @@ export default function App() {
   const workspaceSummary = workspace === 'voice'
     ? `Six operators · algorithm ${voice.algorithm} · DX7-compatible voice model`
     : workspace === 'library'
-      ? `${patchLibrary.records.length} local voices · merged ZIP and website catalog · search · tags · favorites`
+      ? `${patchLibrary.records.length} local voices · schema v2 · backup/restore · merged ZIP and website catalog`
       : workspace === 'effects'
         ? `Documented CC 0–23 · FX MIDI channel ${effects.midiChannel}`
         : `${sequence.length} steps · ${sequence.bpm} BPM · MIDI channel ${sequence.midiChannel}`
@@ -155,7 +155,9 @@ export default function App() {
                     error={patchLibrary.error}
                     loading={patchLibrary.loading}
                     onDelete={patchLibrary.remove}
+                    onExportBackup={patchLibrary.exportBackup}
                     onLoad={loadCatalogVoice}
+                    onRestoreBackup={patchLibrary.restoreBackup}
                     onSaveCurrent={patchLibrary.saveCurrentVoice}
                     onToggleFavorite={patchLibrary.toggleFavorite}
                     onUpdateTags={patchLibrary.updateTags}
@@ -171,7 +173,7 @@ export default function App() {
           </section>
 
           <footer className="flex flex-wrap items-center justify-between gap-2 px-2 text-xs text-slate-500">
-            <span>Current milestone: merged SysEx browser, persistent library, documented FX controls and monitored MIDI routing.</span>
+            <span>Current milestone: tracked SysEx catalog, schema-v2 patch library, JSON backup/restore and structured import diagnostics.</span>
             <span>Physical FM-1 voice parameter and bank-transfer verification remains pending.</span>
           </footer>
         </main>
