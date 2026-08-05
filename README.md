@@ -10,6 +10,8 @@ A TypeScript web editor and librarian for the **M-VAVE FM-1** pocket FM synthesi
 - timestamped incoming/outgoing MIDI monitor with direction/text filtering, hexadecimal data and JSON export;
 - Yamaha DX7-compatible 155-byte single-voice and 4,096-byte 32-voice bank codecs;
 - Yamaha checksum validation and multi-message `.syx` file classification;
+- structured per-message diagnostics with byte offsets, message indexes, lengths, manufacturer/format bytes and checksum errors;
+- salvage of complete supported messages from mixed files that also contain padding, unsupported messages or incomplete trailing data;
 - drag-and-drop, multi-file and folder ingestion for `.syx` and `.sysex` files;
 - `.syx` single-voice export plus draggable 32-slot bank reordering and bank export;
 - persistent IndexedDB patch library with semantic duplicate detection, tags, favorites, search and A/B parameter comparison;
@@ -23,10 +25,10 @@ A TypeScript web editor and librarian for the **M-VAVE FM-1** pocket FM synthesi
 - documented FM-1 effects workspace for filter, reverb, delay, distortion, chorus and phaser CC 0–23;
 - local 16-step sequence editor with note/rest/tie, velocity, gate, tempo, swing, length and MIDI channel;
 - versioned sequence JSON load/save and scheduled Web MIDI playback through the monitored output adapter;
-- Vitest coverage for DX7 codecs, FM-1 message framing, effects, sequence scheduling, library logic, catalog merging, bank reordering, MIDI monitoring and remote-import safeguards;
+- 32 passing Vitest tests covering codecs, structured imports, the tracked archive, catalog merging, effects, sequencing, library logic and MIDI monitoring;
 - GitHub Actions workflow for typecheck, tests and production build.
 
-See [`PLAN.md`](./PLAN.md) for unresolved work.
+See [`PLAN.md`](./PLAN.md) for unresolved work and [`docs/validation/ci-receipt.md`](./docs/validation/ci-receipt.md) for the latest executed validation.
 
 ## Merged patch catalog
 
@@ -58,6 +60,18 @@ npm run catalog:sync
 The production `prebuild` hook performs the website synchronization in best-effort mode. The tracked ZIP remains available even when the provider page is temporarily unavailable. See [`docs/research/patch-catalog.md`](./docs/research/patch-catalog.md).
 
 Patch ownership and usage permissions vary across the archive. FM1 Editor preserves source metadata and does not claim that every included bank is public domain. Review the generated manifest and source terms before publishing a hosted catalog.
+
+## SysEx diagnostics
+
+The import analyzer scans every complete `F0 … F7` message and reports:
+
+- ignored bytes outside messages;
+- stray `F7` bytes and nested `F0` starts;
+- trailing incomplete messages;
+- unsupported message lengths, manufacturer IDs and format bytes;
+- DX7 decoding and checksum failures with exact offsets.
+
+The UI displays these diagnostics per file while still importing valid complete voices from a mixed file. The strict `importSysexFile` API remains available for callers that must reject structurally incomplete input.
 
 ## Hardware verification boundary
 
