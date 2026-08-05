@@ -1,8 +1,10 @@
 import type { PatchRecord } from './model'
+import { normalizeStoredPatchRecord } from './storageMigration'
 
 const DATABASE_NAME = 'fm1-editor'
-const DATABASE_VERSION = 1
+const DATABASE_VERSION = 2
 const PATCH_STORE = 'patches'
+const METADATA_STORE = 'metadata'
 
 let databasePromise: Promise<IDBDatabase> | null = null
 
@@ -21,6 +23,25 @@ function transactionComplete(transaction: IDBTransaction): Promise<void> {
   })
 }
 
+function ensurePatchIndexes(store: IDBObjectStore): void {
+  if (!store.indexNames.contains('fingerprint')) store.createIndex('fingerprint', 'fingerprint', { unique: false })
+  if (!store.indexNames.contains('updatedAt')) store.createIndex('updatedAt', 'updatedAt', { unique: false })
+  if (!store.indexNames.contains('favorite')) store.createIndex('favorite', 'favorite', { unique: false })
+  if (!store.indexNames.contains('originKind')) store.createIndex('originKind', 'origin.kind', { unique: false })
+}
+
+function migrateStoredRecords(store: IDBObjectStore): void {
+  const request = store.openCursor()
+  request.addEventListener('success', () => {
+    const cursor = request.result
+    if (!cursor) return
+    const normalized = normalizeStoredPatchRecord(cursor.value)
+    if (normalized) cursor.update(normalized)
+    else cursor.delete()
+    cursor.continue()
+  })
+}
+
 function openDatabase(): Promise<IDBDatabase> {
   if (databasePromise) return databasePromise
   if (typeof indexedDB === 'undefined') return Promise.reject(new Error('IndexedDB is not available in this browser.'))
@@ -29,17 +50,35 @@ function openDatabase(): Promise<IDBDatabase> {
     const request = indexedDB.open(DATABASE_NAME, DATABASE_VERSION)
     request.addEventListener('upgradeneeded', () => {
       const database = request.result
-      const store = database.objectStoreNames.contains(PATCH_STORE)
-        ? request.transaction?.objectStore(PATCH_STORE)
+      const transaction = request.transaction
+      if (!transaction) return
+
+      const patchStore = database.objectStoreNames.contains(PATCH_STORE)
+        ? transaction.objectStore(PATCH_STORE)
         : database.createObjectStore(PATCH_STORE, { keyPath: 'id' })
-      if (!store) return
-      if (!store.indexNames.contains('fingerprint')) store.createIndex('fingerprint', 'fingerprint', { unique: false })
-      if (!store.indexNames.contains('updatedAt')) store.createIndex('updatedAt', 'updatedAt', { unique: false })
+      ensurePatchIndexes(patchStore)
+      if (request.oldVersion < 2) migrateStoredRecords(patchStore)
+
+      const metadataStore = database.objectStoreNames.contains(METADATA_STORE)
+        ? transaction.objectStore(METADATA_STORE)
+        : database.createObjectStore(METADATA_STORE, { keyPath: 'key' })
+      metadataStore.put({
+        key: 'schema',
+        version: DATABASE_VERSION,
+        migratedAt: new Date().toISOString(),
+      })
     })
     request.addEventListener('success', () => {
       const database = request.result
-      database.addEventListener('versionchange', () => database.close())
+      database.addEventListener('versionchange', () => {
+        database.close()
+        databasePromise = null
+      })
       resolve(database)
+    }, { once: true })
+    request.addEventListener('blocked', () => {
+      databasePromise = null
+      reject(new Error('The patch library upgrade is blocked by another open FM1 Editor tab. Close the other tab and retry.'))
     }, { once: true })
     request.addEventListener('error', () => {
       databasePromise = null
@@ -54,9 +93,12 @@ export async function listPatchRecords(): Promise<readonly PatchRecord[]> {
   const database = await openDatabase()
   const transaction = database.transaction(PATCH_STORE, 'readonly')
   const completion = transactionComplete(transaction)
-  const records = await requestResult(transaction.objectStore(PATCH_STORE).getAll() as IDBRequest<PatchRecord[]>)
+  const stored = await requestResult(transaction.objectStore(PATCH_STORE).getAll() as IDBRequest<unknown[]>)
   await completion
-  return records.sort((left, right) => right.updatedAt.localeCompare(left.updatedAt))
+  return stored
+    .map((record) => normalizeStoredPatchRecord(record))
+    .filter((record): record is PatchRecord => record !== null)
+    .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt))
 }
 
 export async function savePatchRecords(records: readonly PatchRecord[]): Promise<void> {
@@ -65,6 +107,16 @@ export async function savePatchRecords(records: readonly PatchRecord[]): Promise
   const transaction = database.transaction(PATCH_STORE, 'readwrite')
   const completion = transactionComplete(transaction)
   const store = transaction.objectStore(PATCH_STORE)
+  records.forEach((record) => store.put(record))
+  await completion
+}
+
+export async function replacePatchRecords(records: readonly PatchRecord[]): Promise<void> {
+  const database = await openDatabase()
+  const transaction = database.transaction(PATCH_STORE, 'readwrite')
+  const completion = transactionComplete(transaction)
+  const store = transaction.objectStore(PATCH_STORE)
+  store.clear()
   records.forEach((record) => store.put(record))
   await completion
 }
