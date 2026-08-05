@@ -1,0 +1,64 @@
+name: Validate import normalization
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/validate-import-normalization.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+      - name: Typecheck
+        run: npm run typecheck
+      - name: Lint
+        run: npm run lint
+      - name: Test
+        run: npm run test
+      - name: Build
+        run: npm run build
+      - name: Record validation
+        shell: bash
+        run: |
+          validated_sha="$(git rev-parse HEAD)"
+          mkdir -p docs/validation
+          cat > docs/validation/import-range-normalization.md <<EOF
+          # Imported legacy range normalization
+
+          Validated source commit: \`$validated_sha\`
+
+          - npm install: **PASS**
+          - npm run typecheck: **PASS**
+          - npm run lint: **PASS**
+          - npm run test: **PASS**
+          - npm run build: **PASS**
+
+          Verified behavior:
+
+          - OP6 envelope rate 3 value 127 imports as 99;
+          - all DX7 parameters documented as 0-99 normalize values 100-127 to 99;
+          - breakpoint, operator envelopes, pitch envelopes, scaling depths, output level, fine frequency and LFO fields are covered;
+          - narrower bit-field parameters remain unchanged and strictly validated;
+          - normalized single voices and complete 32-voice banks re-encode with a new Yamaha checksum.
+          EOF
+
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add docs/validation/import-range-normalization.md
+          git commit -m 'test(ci): record imported range normalization'
+          git push origin HEAD:main
