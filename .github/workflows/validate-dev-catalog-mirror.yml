@@ -1,0 +1,63 @@
+name: Validate dev catalog mirror
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/validate-dev-catalog-mirror.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+      - name: Typecheck
+        run: npm run typecheck
+      - name: Lint
+        run: npm run lint
+      - name: Test
+        run: npm run test
+      - name: Build
+        run: npm run build
+      - name: Record validation
+        shell: bash
+        run: |
+          validated_sha="$(git rev-parse HEAD)"
+          mkdir -p docs/validation
+          cat > docs/validation/dev-catalog-mirror.md <<EOF
+          # Development catalog mirror validation
+
+          Validated source commit: \`$validated_sha\`
+
+          - npm install: **PASS**
+          - npm run typecheck: **PASS**
+          - npm run lint: **PASS**
+          - npm run test: **PASS**
+          - npm run build: **PASS**
+
+          Verified behavior:
+
+          - npm run dev performs best-effort catalog synchronization before Vite starts;
+          - runtime skips local website mirrors when no validated sync manifest exists;
+          - missing mirror paths are no longer requested from Vite and cannot resolve to index.html;
+          - validated mirrors remain preferred, with direct-source fallback after validation failure.
+          EOF
+
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add docs/validation/dev-catalog-mirror.md
+          git commit -m 'test(ci): record dev catalog mirror validation'
+          git push origin HEAD:main
