@@ -156,10 +156,11 @@ export function VirtualPiano({ output, midiChannel, velocity, baseOctave }: Virt
 
   return (
     <div
-      aria-label="Virtual MIDI piano"
+      aria-label="Virtual MIDI piano. Focus this area to play with computer keys A through semicolon."
       className="rounded-2xl border border-white/10 bg-black/20 p-3 outline-none focus:border-cyan-300/40 sm:p-4"
       onKeyDown={handleKeyDown}
       onKeyUp={handleKeyUp}
+      role="application"
       tabIndex={0}
     >
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
