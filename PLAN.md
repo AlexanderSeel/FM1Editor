@@ -50,7 +50,6 @@
 
 - [ ] Add legal/public-domain or user-provided SysEx fixtures and broader codec compatibility tests.
 - [ ] Add property-based round-trip tests for all valid parameter ranges and preserved reserved bits.
-- [ ] Run and fix the complete GitHub CI pipeline for typecheck, tests and production build.
 - [ ] Test Chrome and Edge on Windows with a physical FM-1 over USB MIDI; test BLE MIDI where browser/platform support permits.
 - [ ] Add GitHub Pages deployment after secure-context routing and Web MIDI behavior are verified.
 - [ ] Document firmware-specific limitations, recovery steps and tested hardware/browser combinations.
