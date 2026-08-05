@@ -4,11 +4,10 @@ import { fetchRemoteSysex } from './remoteSysex'
 import { buildPatchCatalog, type PatchCatalog, type PatchCatalogEntry } from './patchCatalog'
 import { YAMAHA_BLACK_BOXES_BANKS, type WebsiteCatalogBank } from './yamahaBlackBoxesCatalog'
 
-const ARCHIVE_REMOTE_URL = 'https://github.com/probonopd/MiniDexed/files/11312517/sysexFinal.zip'
 const ARCHIVE_EXPECTED_SHA256 = 'fde5aad29b215aa3ea67e9f57bf55d4443cc6efe7562d6cb6dc375b3c780b263'
 
 export interface LoadedPatchCatalog extends PatchCatalog {
-  archiveSource: 'build-mirror' | 'original-source'
+  archiveSource: 'bundled-source'
   archiveIntegrity: 'verified' | 'changed' | 'unavailable'
   websiteSource: 'sync-manifest' | 'static-fallback'
 }
@@ -31,6 +30,14 @@ async function fetchJson(url: string): Promise<unknown> {
   return response.json() as Promise<unknown>
 }
 
+function assertZipArchive(bytes: Uint8Array): void {
+  const hasLocalHeader = bytes[0] === 0x50 && bytes[1] === 0x4b && bytes[2] === 0x03 && bytes[3] === 0x04
+  const hasEmptyHeader = bytes[0] === 0x50 && bytes[1] === 0x4b && bytes[2] === 0x05 && bytes[3] === 0x06
+  if (!hasLocalHeader && !hasEmptyHeader) {
+    throw new Error('The tracked public/catalog/sysexFinal.zip asset is missing or is not valid ZIP data.')
+  }
+}
+
 async function digestSha256(bytes: Uint8Array): Promise<string | null> {
   if (!globalThis.crypto?.subtle) return null
   const copy = Uint8Array.from(bytes)
@@ -38,18 +45,10 @@ async function digestSha256(bytes: Uint8Array): Promise<string | null> {
   return Array.from(new Uint8Array(digest), (value) => value.toString(16).padStart(2, '0')).join('')
 }
 
-async function loadArchive(): Promise<{ bytes: Uint8Array; source: LoadedPatchCatalog['archiveSource'] }> {
-  try {
-    return { bytes: await fetchBytes(assetUrl('catalog/sysexFinal.zip')), source: 'build-mirror' }
-  } catch {
-    try {
-      return { bytes: await fetchBytes(ARCHIVE_REMOTE_URL), source: 'original-source' }
-    } catch (cause) {
-      throw new Error(
-        `The bundled patch archive is unavailable. Run npm run catalog:sync for local development. ${cause instanceof Error ? cause.message : ''}`.trim(),
-      )
-    }
-  }
+async function loadArchive(): Promise<Uint8Array> {
+  const bytes = await fetchBytes(assetUrl('catalog/sysexFinal.zip'))
+  assertZipArchive(bytes)
+  return bytes
 }
 
 async function loadWebsiteBanks(): Promise<{
@@ -66,12 +65,12 @@ async function loadWebsiteBanks(): Promise<{
 
 export async function loadPatchCatalog(): Promise<LoadedPatchCatalog> {
   catalogPromise ??= (async () => {
-    const [archive, website] = await Promise.all([loadArchive(), loadWebsiteBanks()])
-    const actualSha256 = await digestSha256(archive.bytes)
-    const catalog = buildPatchCatalog(unzipSync(archive.bytes), website.banks)
+    const [archiveBytes, website] = await Promise.all([loadArchive(), loadWebsiteBanks()])
+    const actualSha256 = await digestSha256(archiveBytes)
+    const catalog = buildPatchCatalog(unzipSync(archiveBytes), website.banks)
     return {
       ...catalog,
-      archiveSource: archive.source,
+      archiveSource: 'bundled-source',
       archiveIntegrity: actualSha256 === null
         ? 'unavailable'
         : actualSha256 === ARCHIVE_EXPECTED_SHA256
@@ -87,7 +86,7 @@ export async function loadCatalogEntryBytes(entry: PatchCatalogEntry): Promise<U
   if (entry.archivePath) {
     const catalog = await loadPatchCatalog()
     const bytes = catalog.files.get(entry.archivePath)
-    if (!bytes) throw new Error(`The archive no longer contains ${entry.archivePath}.`)
+    if (!bytes) throw new Error(`The bundled archive no longer contains ${entry.archivePath}.`)
     return bytes
   }
 
