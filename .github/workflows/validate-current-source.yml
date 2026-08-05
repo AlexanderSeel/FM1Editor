@@ -35,8 +35,9 @@ jobs:
         run: |
           set +e
           validated_sha="$(git rev-parse HEAD)"
+          mkdir -p docs/validation .validation-logs
 
-          npm install --no-audit --no-fund
+          npm install --no-audit --no-fund >.validation-logs/install.log 2>&1
           install_status=$?
 
           expected='fde5aad29b215aa3ea67e9f57bf55d4443cc6efe7562d6cb6dc375b3c780b263'
@@ -44,19 +45,18 @@ jobs:
           [[ "$actual" == "$expected" ]]
           archive_hash_status=$?
 
-          unzip -t public/catalog/sysexFinal.zip >/dev/null 2>&1
+          unzip -t public/catalog/sysexFinal.zip >.validation-logs/archive.log 2>&1
           archive_zip_status=$?
 
-          npm run typecheck
+          npm run typecheck >.validation-logs/typecheck.log 2>&1
           typecheck_status=$?
 
-          npm run test
+          npm run test >.validation-logs/test.log 2>&1
           test_status=$?
 
-          npm run build
+          npm run build >.validation-logs/build.log 2>&1
           build_status=$?
 
-          mkdir -p docs/validation
           status_word() {
             if [[ "$1" -eq 0 ]]; then printf 'PASS'; else printf 'FAIL (%s)' "$1"; fi
           }
@@ -77,6 +77,14 @@ jobs:
 
           Actual archive SHA-256: \`${actual:-unavailable}\`
           EOF
+
+          for log in install archive typecheck test build; do
+            {
+              printf '\n## %s output\n\n```text\n' "$log"
+              tail -n 160 ".validation-logs/$log.log"
+              printf '\n```\n'
+            } >> docs/validation/ci-receipt.md
+          done
 
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
