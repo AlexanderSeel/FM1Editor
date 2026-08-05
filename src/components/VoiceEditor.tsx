@@ -1,9 +1,11 @@
 import { useState } from 'react'
 import type { Dx7Curve, Dx7LfoWaveform, Dx7Operator, Dx7Voice, FourValues } from '../domain/voice'
 import { EnvelopeGraph } from './EnvelopeGraph'
+import { OperatorRoutingEditor } from './OperatorRoutingEditor'
 import { RangeControl } from './RangeControl'
 
 interface VoiceEditorProps {
+  documentKey: number
   voice: Dx7Voice
   onChange: (voice: Dx7Voice) => void
 }
@@ -38,7 +40,7 @@ function cloneOperators(voice: Dx7Voice): [Dx7Operator, Dx7Operator, Dx7Operator
   })) as [Dx7Operator, Dx7Operator, Dx7Operator, Dx7Operator, Dx7Operator, Dx7Operator]
 }
 
-export function VoiceEditor({ voice, onChange }: VoiceEditorProps) {
+export function VoiceEditor({ documentKey, voice, onChange }: VoiceEditorProps) {
   const [selectedOperator, setSelectedOperator] = useState(0)
   const operator = voice.operators[selectedOperator]
 
@@ -88,86 +90,88 @@ export function VoiceEditor({ voice, onChange }: VoiceEditorProps) {
         </div>
       </section>
 
-      <section className="rounded-2xl border border-white/10 bg-white/[0.025] p-4">
-        <div className="flex flex-wrap gap-2">
-          {voice.operators.map((candidate, index) => (
-            <button
-              className={`min-w-24 flex-1 rounded-xl border px-4 py-3 text-left transition ${
-                index === selectedOperator
-                  ? 'border-cyan-300/50 bg-cyan-300/10 text-white'
-                  : 'border-white/10 bg-black/15 text-slate-400 hover:border-white/20 hover:text-white'
-              }`}
-              key={index}
-              onClick={() => setSelectedOperator(index)}
-              type="button"
-            >
-              <span className="block text-[10px] font-semibold uppercase tracking-[0.18em]">Operator {index + 1}</span>
-              <span className="mt-1 block font-mono text-sm">{candidate.oscillatorMode === 'fixed' ? 'FIX' : 'RATIO'} {candidate.frequencyCoarse}.{String(candidate.frequencyFine).padStart(2, '0')}</span>
-              <span className="mt-1 block text-xs text-cyan-200">Level {candidate.outputLevel}</span>
-            </button>
-          ))}
-        </div>
+      <OperatorRoutingEditor
+        key={documentKey}
+        onChange={onChange}
+        onSelect={setSelectedOperator}
+        selectedOperator={selectedOperator}
+        voice={voice}
+      />
 
+      <section className="rounded-2xl border border-white/10 bg-white/[0.025] p-4">
         {operator && (
-          <div className="mt-4 grid gap-4 xl:grid-cols-[1.2fr_1fr]">
-            <div className="grid gap-4">
-              <EnvelopeGraph envelope={operator.envelope} label={`Operator ${selectedOperator + 1} amplitude envelope`} />
-              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-                {operator.envelope.rates.map((value, index) => (
-                  <RangeControl
-                    key={`rate-${index}`}
-                    label={`Rate ${index + 1}`}
-                    onChange={(next) => updateOperator((current) => ({ ...current, envelope: { ...current.envelope, rates: updateFour(current.envelope.rates, index, next) } }))}
-                    value={value}
-                  />
-                ))}
-                {operator.envelope.levels.map((value, index) => (
-                  <RangeControl
-                    key={`level-${index}`}
-                    label={`Level ${index + 1}`}
-                    onChange={(next) => updateOperator((current) => ({ ...current, envelope: { ...current.envelope, levels: updateFour(current.envelope.levels, index, next) } }))}
-                    value={value}
-                  />
-                ))}
+          <>
+            <div className="mb-4 flex flex-wrap items-end justify-between gap-3 border-b border-white/8 pb-4">
+              <div>
+                <p className="fm1-hardware-label text-[10px] text-lime-200">Selected operator</p>
+                <h3 className="mt-1 text-xl font-black text-white">Operator {selectedOperator + 1}</h3>
+              </div>
+              <div className="text-right font-mono text-xs text-slate-400">
+                <p>{operator.oscillatorMode === 'fixed' ? 'FIXED' : 'RATIO'} {operator.frequencyCoarse}.{String(operator.frequencyFine).padStart(2, '0')}</p>
+                <p className="mt-1 text-sky-200">OUTPUT LEVEL {operator.outputLevel}</p>
               </div>
             </div>
 
-            <div className="grid content-start gap-3 sm:grid-cols-2">
-              <RangeControl label="Output level" onChange={(outputLevel) => updateOperator((current) => ({ ...current, outputLevel }))} value={operator.outputLevel} />
-              <RangeControl label="Coarse" max={31} onChange={(frequencyCoarse) => updateOperator((current) => ({ ...current, frequencyCoarse }))} value={operator.frequencyCoarse} />
-              <RangeControl label="Fine" onChange={(frequencyFine) => updateOperator((current) => ({ ...current, frequencyFine }))} value={operator.frequencyFine} />
-              <RangeControl label="Detune" max={14} onChange={(detune) => updateOperator((current) => ({ ...current, detune }))} value={operator.detune} />
-              <RangeControl label="Rate scaling" max={7} onChange={(rateScaling) => updateOperator((current) => ({ ...current, keyboardScaling: { ...current.keyboardScaling, rateScaling } }))} value={operator.keyboardScaling.rateScaling} />
-              <RangeControl label="Velocity" max={7} onChange={(keyVelocitySensitivity) => updateOperator((current) => ({ ...current, keyVelocitySensitivity }))} value={operator.keyVelocitySensitivity} />
-              <RangeControl label="Amp mod" max={3} onChange={(amplitudeModulationSensitivity) => updateOperator((current) => ({ ...current, amplitudeModulationSensitivity }))} value={operator.amplitudeModulationSensitivity} />
-              <RangeControl label="Break point" onChange={(breakPoint) => updateOperator((current) => ({ ...current, keyboardScaling: { ...current.keyboardScaling, breakPoint } }))} value={operator.keyboardScaling.breakPoint} />
+            <div className="grid gap-4 xl:grid-cols-[1.2fr_1fr]">
+              <div className="grid gap-4">
+                <EnvelopeGraph envelope={operator.envelope} label={`Operator ${selectedOperator + 1} amplitude envelope`} />
+                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                  {operator.envelope.rates.map((value, index) => (
+                    <RangeControl
+                      key={`rate-${index}`}
+                      label={`Rate ${index + 1}`}
+                      onChange={(next) => updateOperator((current) => ({ ...current, envelope: { ...current.envelope, rates: updateFour(current.envelope.rates, index, next) } }))}
+                      value={value}
+                    />
+                  ))}
+                  {operator.envelope.levels.map((value, index) => (
+                    <RangeControl
+                      key={`level-${index}`}
+                      label={`Level ${index + 1}`}
+                      onChange={(next) => updateOperator((current) => ({ ...current, envelope: { ...current.envelope, levels: updateFour(current.envelope.levels, index, next) } }))}
+                      value={value}
+                    />
+                  ))}
+                </div>
+              </div>
 
-              <label className="grid gap-2 rounded-xl border border-white/8 bg-black/15 p-3 text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">
-                Oscillator mode
-                <select
-                  className="rounded-lg border border-white/10 bg-slate-950 px-3 py-2 text-sm normal-case tracking-normal text-white"
-                  onChange={(event) => updateOperator((current) => ({ ...current, oscillatorMode: event.target.value as Dx7Operator['oscillatorMode'] }))}
-                  value={operator.oscillatorMode}
-                >
-                  <option value="ratio">Ratio</option>
-                  <option value="fixed">Fixed</option>
-                </select>
-              </label>
+              <div className="grid content-start gap-3 sm:grid-cols-2">
+                <RangeControl label="Output level" onChange={(outputLevel) => updateOperator((current) => ({ ...current, outputLevel }))} value={operator.outputLevel} />
+                <RangeControl label="Coarse" max={31} onChange={(frequencyCoarse) => updateOperator((current) => ({ ...current, frequencyCoarse }))} value={operator.frequencyCoarse} />
+                <RangeControl label="Fine" onChange={(frequencyFine) => updateOperator((current) => ({ ...current, frequencyFine }))} value={operator.frequencyFine} />
+                <RangeControl label="Detune" max={14} onChange={(detune) => updateOperator((current) => ({ ...current, detune }))} value={operator.detune} />
+                <RangeControl label="Rate scaling" max={7} onChange={(rateScaling) => updateOperator((current) => ({ ...current, keyboardScaling: { ...current.keyboardScaling, rateScaling } }))} value={operator.keyboardScaling.rateScaling} />
+                <RangeControl label="Velocity" max={7} onChange={(keyVelocitySensitivity) => updateOperator((current) => ({ ...current, keyVelocitySensitivity }))} value={operator.keyVelocitySensitivity} />
+                <RangeControl label="Amp mod" max={3} onChange={(amplitudeModulationSensitivity) => updateOperator((current) => ({ ...current, amplitudeModulationSensitivity }))} value={operator.amplitudeModulationSensitivity} />
+                <RangeControl label="Break point" onChange={(breakPoint) => updateOperator((current) => ({ ...current, keyboardScaling: { ...current.keyboardScaling, breakPoint } }))} value={operator.keyboardScaling.breakPoint} />
 
-              {(['leftCurve', 'rightCurve'] as const).map((side) => (
-                <label className="grid gap-2 rounded-xl border border-white/8 bg-black/15 p-3 text-xs font-semibold uppercase tracking-[0.14em] text-slate-400" key={side}>
-                  {side === 'leftCurve' ? 'Left curve' : 'Right curve'}
+                <label className="grid gap-2 rounded-xl border border-white/8 bg-black/15 p-3 text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">
+                  Oscillator mode
                   <select
                     className="rounded-lg border border-white/10 bg-slate-950 px-3 py-2 text-sm normal-case tracking-normal text-white"
-                    onChange={(event) => updateOperator((current) => ({ ...current, keyboardScaling: { ...current.keyboardScaling, [side]: event.target.value as Dx7Curve } }))}
-                    value={operator.keyboardScaling[side]}
+                    onChange={(event) => updateOperator((current) => ({ ...current, oscillatorMode: event.target.value as Dx7Operator['oscillatorMode'] }))}
+                    value={operator.oscillatorMode}
                   >
-                    {curves.map((curve) => <option key={curve.value} value={curve.value}>{curve.label}</option>)}
+                    <option value="ratio">Ratio</option>
+                    <option value="fixed">Fixed</option>
                   </select>
                 </label>
-              ))}
+
+                {(['leftCurve', 'rightCurve'] as const).map((side) => (
+                  <label className="grid gap-2 rounded-xl border border-white/8 bg-black/15 p-3 text-xs font-semibold uppercase tracking-[0.14em] text-slate-400" key={side}>
+                    {side === 'leftCurve' ? 'Left curve' : 'Right curve'}
+                    <select
+                      className="rounded-lg border border-white/10 bg-slate-950 px-3 py-2 text-sm normal-case tracking-normal text-white"
+                      onChange={(event) => updateOperator((current) => ({ ...current, keyboardScaling: { ...current.keyboardScaling, [side]: event.target.value as Dx7Curve } }))}
+                      value={operator.keyboardScaling[side]}
+                    >
+                      {curves.map((curve) => <option key={curve.value} value={curve.value}>{curve.label}</option>)}
+                    </select>
+                  </label>
+                ))}
+              </div>
             </div>
-          </div>
+          </>
         )}
       </section>
 
