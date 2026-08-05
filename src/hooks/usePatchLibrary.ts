@@ -1,6 +1,16 @@
 import { useCallback, useEffect, useState } from 'react'
 import type { Dx7Voice } from '../domain/voice'
-import { deletePatchRecord, listPatchRecords, savePatchRecords } from '../library/indexedDbPatchLibrary'
+import {
+  mergePatchBackupRecords,
+  parsePatchLibraryBackup,
+  serializePatchLibraryBackup,
+} from '../library/backup'
+import {
+  deletePatchRecord,
+  listPatchRecords,
+  replacePatchRecords,
+  savePatchRecords,
+} from '../library/indexedDbPatchLibrary'
 import {
   mergeImportedVoices,
   updatePatchMetadata,
@@ -11,6 +21,15 @@ import {
 export interface PatchLibraryImportSummary {
   added: number
   duplicates: number
+}
+
+export type PatchLibraryRestoreMode = 'merge' | 'replace'
+
+export interface PatchLibraryRestoreSummary {
+  mode: PatchLibraryRestoreMode
+  imported: number
+  duplicates: number
+  total: number
 }
 
 export function usePatchLibrary() {
@@ -54,6 +73,39 @@ export function usePatchLibrary() {
     })
   }, [importVoices])
 
+  const exportBackup = useCallback(async (): Promise<string> => {
+    return serializePatchLibraryBackup(await listPatchRecords())
+  }, [])
+
+  const restoreBackup = useCallback(async (
+    text: string,
+    mode: PatchLibraryRestoreMode,
+  ): Promise<PatchLibraryRestoreSummary> => {
+    const backup = parsePatchLibraryBackup(text)
+
+    if (mode === 'replace') {
+      await replacePatchRecords(backup.records)
+      setRecords(backup.records)
+      return {
+        mode,
+        imported: backup.records.length,
+        duplicates: 0,
+        total: backup.records.length,
+      }
+    }
+
+    const current = await listPatchRecords()
+    const result = mergePatchBackupRecords(current, backup.records)
+    await savePatchRecords(result.added)
+    setRecords(result.records)
+    return {
+      mode,
+      imported: result.added.length,
+      duplicates: result.duplicates.length,
+      total: result.records.length,
+    }
+  }, [])
+
   const toggleFavorite = useCallback(async (id: string) => {
     const record = records.find((candidate) => candidate.id === id)
     if (!record) return
@@ -82,6 +134,8 @@ export function usePatchLibrary() {
     reload,
     importVoices,
     saveCurrentVoice,
+    exportBackup,
+    restoreBackup,
     toggleFavorite,
     updateTags,
     remove,
