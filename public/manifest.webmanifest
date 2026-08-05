@@ -1,13 +1,13 @@
 {
   "name": "FM1 Editor",
   "short_name": "FM1 Editor",
-  "description": "Graphical MIDI and SysEx editor for the M-VAVE FM-1 synthesizer.",
+  "description": "Graphical MIDI and SysEx editor styled after the M-VAVE FM-1 synthesizer.",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
   "orientation": "any",
-  "background_color": "#070b12",
-  "theme_color": "#070b12",
+  "background_color": "#070907",
+  "theme_color": "#101310",
   "categories": ["music", "utilities"],
   "icons": [
     {
