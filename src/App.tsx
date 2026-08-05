@@ -43,6 +43,7 @@ export default function App() {
   const sequenceHistory = useUndoableState(() => createInitializedSequence())
   const [bank, setBank] = useState<readonly Dx7Voice[]>([])
   const [selectedBankSlot, setSelectedBankSlot] = useState<number | null>(null)
+  const [voiceDocumentVersion, setVoiceDocumentVersion] = useState(0)
 
   const voice = voiceHistory.value
   const effects = effectsHistory.value
@@ -92,6 +93,7 @@ export default function App() {
 
   const loadVoiceDocument = (nextVoice: Dx7Voice, bankSlot: number | null = null) => {
     voiceHistory.reset(nextVoice)
+    setVoiceDocumentVersion((current) => current + 1)
     setSelectedBankSlot(bankSlot)
   }
 
@@ -308,7 +310,7 @@ export default function App() {
                     storageKey="voice-editor"
                     title="Voice editor"
                   >
-                    <VoiceEditor onChange={voiceHistory.setValue} voice={voice} />
+                    <VoiceEditor documentKey={voiceDocumentVersion} onChange={voiceHistory.setValue} voice={voice} />
                   </CollapsibleSection>
                 </>
               ) : workspace === 'library' ? (
