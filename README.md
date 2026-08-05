@@ -8,12 +8,16 @@ A TypeScript web editor and librarian for the **M-VAVE FM-1** pocket FM synthesi
 - Web MIDI capability detection, SysEx permission request and reconnect-aware input/output selection;
 - Yamaha DX7-compatible 155-byte single-voice and 4,096-byte 32-voice bank codecs;
 - Yamaha checksum validation and multi-message `.syx` file classification;
-- `.syx` single-voice import/export and 32-slot bank inspection;
+- drag-and-drop, multi-file and folder ingestion for `.syx` and `.sysex` files;
+- `.syx` single-voice export plus draggable 32-slot bank reordering and bank export;
+- persistent IndexedDB patch library with semantic duplicate detection, tags, favorites, search and A/B parameter comparison;
+- attributed external source registry with a Yamaha Black Boxes browser entry;
+- guarded user-triggered direct HTTPS SysEx URL imports with CORS, extension and 2 MB size checks;
 - graphical six-operator voice editor with amplitude/pitch envelope views, operator frequency/level/scaling controls, algorithm, feedback and LFO controls;
 - documented FM-1 parameter-write, CC, note, program and real-time message encoders;
 - local 16-step sequence editor with note/rest/tie, velocity, gate, tempo, swing, length and MIDI channel;
 - versioned sequence JSON load/save and scheduled Web MIDI playback;
-- Vitest coverage for DX7 codecs, FM-1 message framing and sequence scheduling;
+- Vitest coverage for DX7 codecs, FM-1 message framing, sequence scheduling, library logic, bank reordering and remote-import safeguards;
 - GitHub Actions workflow for typecheck, tests and production build.
 
 See [`PLAN.md`](./PLAN.md) for unresolved work.
@@ -44,7 +48,9 @@ Detailed protocol findings are recorded in [`docs/research/fm1-midi-protocol.md`
 - create, save and play sequences from the browser;
 - add device-side pattern transfer only if a stable protocol is documented or hardware-verified.
 
-## Sources
+## External sources and downloads
+
+The built-in source registry links to providers rather than mirroring their files. A direct URL import is only attempted after explicit user action and only for an HTTPS URL ending in `.syx` or `.sysex`. Browser CORS policy still applies.
 
 Official product and firmware documentation:
 
@@ -63,8 +69,8 @@ The application does **not** redistribute third-party patch collections. Users i
 - Tailwind CSS
 - Web MIDI API with `sysex: true`
 - framework-independent DX7/FM-1 protocol and file-format modules
-- local browser persistence planned behind a storage adapter
-- Vitest for protocol, codec and scheduling tests
+- IndexedDB-backed local patch library
+- Vitest for protocol, codec, scheduling, library and import tests
 
 A desktop wrapper such as Tauri remains possible because device protocol, storage and UI state are kept behind adapters.
 
