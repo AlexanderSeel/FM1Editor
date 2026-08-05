@@ -1,12 +1,13 @@
 import { useRef, useState } from 'react'
 import type { Fm1Sequence, SequenceStep } from '../domain/sequence'
 import { parseSequenceProject, validateSequence } from '../domain/sequence'
+import type { MidiOutputTarget } from '../midi/output'
 import { scheduleSequence, stopSequence } from '../midi/sequenceScheduler'
 import { RangeControl } from './RangeControl'
 
 interface SequenceEditorProps {
   sequence: Fm1Sequence
-  output: MIDIOutput | null
+  output: MidiOutputTarget | null
   onChange: (sequence: Fm1Sequence) => void
 }
 
