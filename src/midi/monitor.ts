@@ -48,7 +48,7 @@ export function summarizeMidiMessage(data: ArrayLike<number>): string {
 
 export function createMidiMonitorEntry(
   direction: MidiMonitorDirection,
-  port: { id: string; name: string | null },
+  port: { id: string; name?: string | null },
   data: ArrayLike<number>,
   timestamp = Date.now(),
 ): MidiMonitorEntry {
