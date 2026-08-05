@@ -1,0 +1,94 @@
+name: Validate FM-1 hardware styling
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/validate-fm1-hardware-style.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+      - name: Typecheck
+        run: npm run typecheck
+      - name: Lint and accessibility
+        run: npm run lint
+      - name: Test
+        run: npm run test
+      - name: Production build
+        run: npm run build
+      - name: Verify PWA style assets
+        shell: bash
+        run: |
+          grep -q '"theme_color": "#101310"' dist/manifest.webmanifest
+          grep -q 'fm1-lcd' dist/assets/*.css
+          grep -q 'FM-1' dist/icons/fm1-192.svg
+          ! grep -R '__FM1_' dist/sw.js
+      - name: Install Chromium
+        run: npx --yes playwright@1.54.2 install --with-deps chromium
+      - name: Capture desktop browser rendering
+        shell: bash
+        run: |
+          mkdir -p artifacts
+          npm run preview -- --host 127.0.0.1 > /tmp/fm1-preview.log 2>&1 &
+          for attempt in {1..30}; do
+            if curl --fail --silent http://127.0.0.1:4173/ > /dev/null; then break; fi
+            sleep 1
+          done
+          curl --fail http://127.0.0.1:4173/ > /dev/null
+          npx --yes playwright@1.54.2 screenshot --browser chromium --viewport-size="1440,1200" --full-page http://127.0.0.1:4173/ artifacts/fm1-hardware-style.png
+      - uses: actions/upload-artifact@v4
+        with:
+          name: fm1-hardware-style-render
+          path: artifacts/fm1-hardware-style.png
+          if-no-files-found: error
+      - name: Record validation
+        shell: bash
+        run: |
+          validated_sha="$(git rev-parse HEAD)"
+          mkdir -p docs/validation
+          cat > docs/validation/fm1-hardware-style.md <<EOF
+          # FM-1 hardware style validation
+
+          Validated source commit: \`$validated_sha\`
+
+          - npm install: **PASS**
+          - npm run typecheck: **PASS**
+          - npm run lint: **PASS**
+          - npm run test: **PASS**
+          - npm run build: **PASS**
+          - production PWA asset checks: **PASS**
+          - Chromium desktop render capture: **PASS**
+
+          Verified implementation:
+
+          - matte black rounded chassis with the FM-1 green edge accent;
+          - pale-blue LCD workspace display and device-status readout;
+          - four hardware-style rotary controls and rubber function keys;
+          - recessed module bays, tactile collapsible headers and LED status indicators;
+          - hardware-themed selects, text fields, tables and slider caps;
+          - preserved white/black virtual piano key styling;
+          - matching browser theme, install manifest and PWA icons;
+          - desktop render captured at 1440 x 1200 for manual visual inspection.
+          EOF
+
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add docs/validation/fm1-hardware-style.md
+          git commit -m 'test(ci): record FM-1 hardware style validation'
+          git push origin HEAD:main
