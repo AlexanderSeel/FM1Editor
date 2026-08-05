@@ -1,65 +1,61 @@
 # FM1 Editor — unresolved work
 
-## 1. Protocol verification
+## 1. FM-1 protocol verification
 
-- [ ] Download and archive the current official FM-1 MIDI-control document in research notes without redistributing restricted binaries.
-- [ ] Transcribe the documented parameter addresses, ranges and message framing into typed protocol definitions.
-- [ ] Verify whether FM-1 firmware accepts standard Yamaha DX7 32-voice bulk dumps byte-for-byte or requires FM-1-specific framing.
-- [ ] Capture real FM-1 input/output traffic for parameter edits, bank imports and bank selection.
-- [ ] Determine whether the FM-1 exposes voice-dump requests or only receives dumps.
-- [ ] Determine whether sequencer patterns have any undocumented but stable MIDI/SysEx transfer protocol.
-- [ ] Record firmware version with every hardware verification.
+- [ ] Verify on physical FM-1 hardware whether standard Yamaha DX7 32-voice bulk dumps are accepted byte-for-byte and document the tested firmware version.
+- [ ] Capture FM-1 MIDI traffic for live parameter edits, program changes, bank imports and A/B/C/D destination selection.
+- [ ] Derive and verify the semantic meaning of FM-1 parameter IDs 0–155; keep byte-index live editing experimental until proven.
+- [ ] Determine whether the FM-1 can transmit voice dumps or only receive them.
+- [ ] Determine whether sequencer patterns expose a stable MIDI/SysEx dump and restore protocol.
+- [ ] Add hardware-safe pacing, retry, cancellation and recovery behavior for long SysEx transfers.
 
 ## 2. Application foundation
 
-- [ ] Create the Vite + React + TypeScript + Tailwind application shell.
-- [ ] Add strict TypeScript, linting, tests and production build scripts.
-- [ ] Add a browser capability/permission screen for Web MIDI and SysEx.
-- [ ] Add resilient MIDI input/output selection and reconnect handling.
-- [ ] Add a protocol monitor showing timestamped incoming/outgoing MIDI messages.
+- [ ] Add ESLint and accessibility checks.
+- [ ] Add a timestamped incoming/outgoing MIDI monitor with filtering and export.
+- [ ] Persist selected ports and reconnect them safely when browser/device state changes.
+- [ ] Add application-level undo/redo and unsaved-change protection.
+- [ ] Add installable PWA metadata and offline application caching.
 
-## 3. Voice codecs and library
+## 3. Voice library and SysEx explorer
 
-- [ ] Implement Yamaha DX7 155-byte single-voice decoding and encoding.
-- [ ] Implement Yamaha DX7 4,104-byte 32-voice bank decoding and encoding with checksum validation.
-- [ ] Preserve unknown/reserved bits to avoid destructive round-trips.
-- [ ] Add `.syx` drag/drop, file picker and export.
-- [ ] Add IndexedDB library storage, metadata, tags, favorites, search and duplicate detection.
-- [ ] Add a pluggable online catalog model; do not scrape or redistribute third-party archives without permission.
-- [ ] Add explicit source attribution and license metadata per imported patch pack.
+- [ ] Add drag-and-drop import and multi-file/folder ingestion.
+- [ ] Add 32-voice bank export and non-destructive slot reordering.
+- [ ] Add IndexedDB storage, tags, favorites, search, comparison and duplicate detection.
+- [ ] Add a pluggable online catalog/explorer with source attribution, licensing metadata and user-initiated downloads.
+- [ ] Add Yamaha Black Boxes as a browsable external source without scraping or redistributing its files.
+- [ ] Add detailed diagnostics for unsupported, malformed and multi-message SysEx files.
 
-## 4. Graphical synth editor
+## 4. Graphical voice editor
 
-- [ ] Add six-operator overview with algorithm routing and carrier/modulator distinction.
-- [ ] Add interactive four-rate/four-level operator envelope graphs.
-- [ ] Add pitch envelope editor.
-- [ ] Add frequency ratio/fixed mode, detune, output level, scaling, sensitivity and velocity controls.
-- [ ] Add algorithm, feedback, oscillator sync, transpose, mono/poly and pitch-bend controls.
-- [ ] Add LFO waveform, speed, delay, pitch modulation and amplitude modulation controls.
-- [ ] Add undo/redo, A/B comparison, randomization constraints and initialized voice creation.
-- [ ] Batch and throttle live parameter writes to avoid overrunning the device.
+- [ ] Add graphical algorithm routing with carrier/modulator distinction and operator enable/solo controls.
+- [ ] Make operator and pitch envelopes directly draggable while retaining numeric precision controls.
+- [ ] Add keyboard-scaling depth controls and visual scaling curves.
+- [ ] Add mono/poly, portamento, pitch-bend and performance controls where supported by the FM-1.
+- [ ] Add constrained randomization, mutation, initialized-voice variants and A/B comparison.
+- [ ] Add opt-in throttled live parameter writes after the parameter map is hardware-verified.
 
-## 5. Banks and device workflow
+## 5. FM-1 bank/device workflow
 
-- [ ] Add 32-slot bank browser and drag/drop reordering.
-- [ ] Add A/B/C/D FM-1 destination workflow with explicit confirmation.
-- [ ] Add send progress, cancellation, retry and checksum diagnostics.
-- [ ] Add safe backup workflow if device-side dump requests can be verified.
-- [ ] Distinguish verified device operations from file-only operations in the UI.
+- [ ] Add A/B/C/D destination selection with explicit destructive-operation confirmation.
+- [ ] Add transfer progress, checksum diagnostics, retry and cancellation.
+- [ ] Add backup/restore only if device-originated dumps are verified.
+- [ ] Keep verified operations visually distinct from experimental or file-only operations.
+- [ ] Add documented FX-channel controls for filter, reverb, delay, distortion, chorus and phaser CCs.
 
 ## 6. Sequencer
 
-- [ ] Add local 16-step note, rest, tie, velocity, gate and octave editing.
-- [ ] Add tempo, swing, length, direction and transport controls.
-- [ ] Save/load sequence projects locally and export/import a documented JSON format.
-- [ ] Play sequences through Web MIDI with stable scheduling.
-- [ ] Add FM-1 pattern transfer only after protocol verification; otherwise keep it explicitly local/playback-only.
+- [ ] Add octave-oriented note entry, direction modes, copy/paste, rotation and pattern randomization.
+- [ ] Add a playhead and timing diagnostics while browser MIDI events are scheduled.
+- [ ] Add MIDI clock output at 24 PPQN and selectable internal/external clock behavior.
+- [ ] Add pattern chaining and a small song-arrangement view.
+- [ ] Add FM-1 internal pattern transfer only after a stable protocol is verified.
 
 ## 7. Validation and delivery
 
-- [ ] Add codec fixture tests with known legal/public-domain or user-provided SysEx files.
-- [ ] Add property-based round-trip tests for valid parameter ranges.
-- [ ] Test Chrome/Edge on Windows, macOS and Linux where hardware is available.
-- [ ] Perform real FM-1 tests for USB MIDI and, where feasible, BLE MIDI.
-- [ ] Add GitHub Pages deployment after browser routing and secure-context behavior are verified.
-- [ ] Document known firmware-specific limitations and recovery steps.
+- [ ] Add legal/public-domain or user-provided SysEx fixtures and broader codec compatibility tests.
+- [ ] Add property-based round-trip tests for all valid parameter ranges and preserved reserved bits.
+- [ ] Run and fix the complete GitHub CI pipeline for typecheck, tests and production build.
+- [ ] Test Chrome and Edge on Windows with a physical FM-1 over USB MIDI; test BLE MIDI where browser/platform support permits.
+- [ ] Add GitHub Pages deployment after secure-context routing and Web MIDI behavior are verified.
+- [ ] Document firmware-specific limitations, recovery steps and tested hardware/browser combinations.
