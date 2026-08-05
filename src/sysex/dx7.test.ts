@@ -24,7 +24,7 @@ describe('DX7 single voice', () => {
 
     expect(message).toHaveLength(163)
     expect(decoded.channel).toBe(3)
-    expect(decoded.voice.name).toBe('TEST VOIC')
+    expect(decoded.voice.name).toBe('TEST VOICE')
     expect(decoded.voice.algorithm).toBe(1)
     expect(decoded.voice.operators[0].outputLevel).toBe(99)
   })
