@@ -13,7 +13,6 @@
 
 ## 2. Application foundation
 
-- [ ] Add ESLint and automated accessibility checks.
 - [ ] Add application-level undo/redo and unsaved-change protection.
 - [ ] Add installable PWA metadata and offline application caching.
 

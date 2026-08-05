@@ -43,7 +43,7 @@ export default function App() {
   const workspaceSummary = workspace === 'voice'
     ? `Six operators · algorithm ${voice.algorithm} · FM-1 push and virtual piano audition`
     : workspace === 'library'
-      ? `${patchLibrary.records.length} local voices · schema v2 · backup/restore · merged ZIP and website catalog`
+      ? `${patchLibrary.records.length} local voices · schema v3 · backup/restore · merged ZIP and website catalog`
       : workspace === 'effects'
         ? `Documented CC 0–23 · FX MIDI channel ${effects.midiChannel}`
         : `${sequence.length} steps · ${sequence.bpm} BPM · MIDI channel ${sequence.midiChannel}`

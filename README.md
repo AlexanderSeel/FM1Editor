@@ -30,8 +30,8 @@ A TypeScript web editor and librarian for the **M-VAVE FM-1** pocket FM synthesi
 - documented FM-1 effects workspace for filter, reverb, delay, distortion, chorus and phaser CC 0–23;
 - local 16-step sequence editor with note/rest/tie, velocity, gate, tempo, swing, length and MIDI channel;
 - versioned sequence JSON load/save and scheduled Web MIDI playback through the monitored output adapter;
-- 40 passing Vitest tests across 15 files covering codecs, imports, catalog, library migration/backup, voice audition, effects, sequencing and MIDI monitoring;
-- GitHub Actions workflow for typecheck, tests and production build.
+- 44 passing Vitest tests across 15 files covering codecs, imports, catalog, library migration/backup, voice audition, effects, sequencing and MIDI monitoring;
+- GitHub Actions workflow for typecheck, ESLint/JSX accessibility, tests and production build.
 
 See [`PLAN.md`](./PLAN.md) for unresolved work and [`docs/validation/ci-receipt.md`](./docs/validation/ci-receipt.md) for the latest executed validation.
 
@@ -159,6 +159,7 @@ Quality checks:
 
 ```bash
 npm run typecheck
+npm run lint
 npm run test
 npm run build
 ```
