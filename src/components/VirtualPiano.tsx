@@ -14,6 +14,8 @@ interface VirtualPianoProps {
   midiChannel: number
   velocity: number
   baseOctave: number
+  disabled?: boolean
+  disabledReason?: string
 }
 
 const WHITE_OFFSETS = [0, 2, 4, 5, 7, 9, 11, 12, 14, 16, 17, 19, 21, 23, 24] as const
@@ -55,19 +57,26 @@ function midiNoteName(note: number): string {
   return `${name}${Math.floor(note / 12) - 1}`
 }
 
-export function VirtualPiano({ output, midiChannel, velocity, baseOctave }: VirtualPianoProps) {
+export function VirtualPiano({
+  output,
+  midiChannel,
+  velocity,
+  baseOctave,
+  disabled = false,
+  disabledReason,
+}: VirtualPianoProps) {
   const activeNotesRef = useRef<Set<number>>(new Set())
   const [activeNotes, setActiveNotes] = useState<ReadonlySet<number>>(() => new Set())
   const [error, setError] = useState<string | null>(null)
   const baseNote = (baseOctave + 1) * 12
-  const disabled = output === null
+  const unavailable = output === null || disabled
 
   const refreshActiveNotes = useCallback(() => {
     setActiveNotes(new Set(activeNotesRef.current))
   }, [])
 
   const noteOn = useCallback((note: number) => {
-    if (!output || activeNotesRef.current.has(note)) return
+    if (!output || disabled || activeNotesRef.current.has(note)) return
     try {
       output.send(encodeNoteOn(midiChannel, note, velocity))
       activeNotesRef.current.add(note)
@@ -76,7 +85,7 @@ export function VirtualPiano({ output, midiChannel, velocity, baseOctave }: Virt
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'The MIDI note could not be sent.')
     }
-  }, [midiChannel, output, refreshActiveNotes, velocity])
+  }, [disabled, midiChannel, output, refreshActiveNotes, velocity])
 
   const noteOff = useCallback((note: number) => {
     if (!activeNotesRef.current.has(note)) return
@@ -102,6 +111,10 @@ export function VirtualPiano({ output, midiChannel, velocity, baseOctave }: Virt
     activeNotesRef.current.clear()
     refreshActiveNotes()
   }, [midiChannel, output, refreshActiveNotes])
+
+  useEffect(() => {
+    if (disabled) releaseAll()
+  }, [disabled, releaseAll])
 
   useEffect(() => {
     const handleBlur = () => releaseAll()
@@ -165,7 +178,7 @@ export function VirtualPiano({ output, midiChannel, velocity, baseOctave }: Virt
           <button
             aria-label="Focus computer keyboard piano input. Use keys A through semicolon."
             className="rounded-lg border border-cyan-300/20 bg-cyan-300/5 px-3 py-1.5 text-xs font-semibold text-cyan-200 hover:bg-cyan-300/10 focus:bg-cyan-300/15 disabled:opacity-40"
-            disabled={disabled}
+            disabled={unavailable}
             onBlur={releaseAll}
             onKeyDown={handleKeyDown}
             onKeyUp={handleKeyUp}
@@ -175,7 +188,7 @@ export function VirtualPiano({ output, midiChannel, velocity, baseOctave }: Virt
           </button>
           <button
             className="rounded-lg border border-white/10 px-3 py-1.5 text-xs font-semibold text-slate-300 hover:bg-white/5 disabled:opacity-40"
-            disabled={disabled}
+            disabled={output === null}
             onClick={releaseAll}
             type="button"
           >
@@ -184,7 +197,7 @@ export function VirtualPiano({ output, midiChannel, velocity, baseOctave }: Virt
         </div>
       </div>
 
-      <div className={`relative h-36 select-none overflow-hidden rounded-xl border border-white/15 sm:h-44 ${disabled ? 'opacity-45' : ''}`} onContextMenu={(event) => event.preventDefault()}>
+      <div className={`relative h-36 select-none overflow-hidden rounded-xl border border-white/15 sm:h-44 ${unavailable ? 'opacity-45' : ''}`} onContextMenu={(event) => event.preventDefault()}>
         <div className="flex h-full">
           {WHITE_OFFSETS.map((offset) => {
             const note = baseNote + offset
@@ -193,7 +206,7 @@ export function VirtualPiano({ output, midiChannel, velocity, baseOctave }: Virt
               <button
                 aria-label={`Play ${midiNoteName(note)}`}
                 className={`relative min-w-0 flex-1 touch-none border-r border-slate-500/40 pb-3 text-center align-bottom text-[10px] font-bold transition last:border-r-0 ${active ? 'bg-cyan-200 text-slate-950' : 'bg-gradient-to-b from-slate-100 to-slate-300 text-slate-700 hover:from-white hover:to-cyan-100'}`}
-                disabled={disabled}
+                disabled={unavailable}
                 key={offset}
                 type="button"
                 {...pointerHandlers(note)}
@@ -211,7 +224,7 @@ export function VirtualPiano({ output, midiChannel, velocity, baseOctave }: Virt
             <button
               aria-label={`Play ${midiNoteName(note)}`}
               className={`absolute top-0 z-10 h-[62%] touch-none rounded-b-md border border-black/80 shadow-lg transition ${active ? 'bg-cyan-400 text-slate-950' : 'bg-gradient-to-b from-slate-700 to-slate-950 text-slate-300 hover:from-slate-600 hover:to-slate-900'}`}
-              disabled={disabled}
+              disabled={unavailable}
               key={offset}
               style={{
                 left: `${((afterWhite + 1) / WHITE_OFFSETS.length) * 100 - 2.25}%`,
@@ -226,7 +239,11 @@ export function VirtualPiano({ output, midiChannel, velocity, baseOctave }: Virt
         })}
       </div>
 
-      {disabled && <p className="mt-2 text-xs text-amber-200">Connect and select a MIDI output to play.</p>}
+      {unavailable && (
+        <p className="mt-2 text-xs text-amber-200">
+          {disabledReason ?? (output ? 'Piano input is temporarily disabled.' : 'Connect and select a MIDI output to play.')}
+        </p>
+      )}
       {error && <p className="mt-2 text-xs text-rose-300">{error}</p>}
     </div>
   )
