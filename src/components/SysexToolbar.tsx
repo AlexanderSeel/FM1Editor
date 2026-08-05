@@ -11,7 +11,8 @@ interface SysexToolbarProps {
 }
 
 function downloadBytes(bytes: Uint8Array, filename: string): void {
-  const blob = new Blob([bytes], { type: 'application/octet-stream' })
+  const copy = Uint8Array.from(bytes)
+  const blob = new Blob([copy.buffer], { type: 'application/octet-stream' })
   const url = URL.createObjectURL(blob)
   const anchor = document.createElement('a')
   anchor.href = url
