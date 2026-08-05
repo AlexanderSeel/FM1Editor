@@ -23,14 +23,16 @@ A TypeScript web editor and librarian for the **M-VAVE FM-1** pocket FM synthesi
 - merged ZIP/website catalog: matching website banks use the tracked ZIP copy while website-only banks use the mirrored source file;
 - catalog checksum diagnostics, archive SHA-256 verification, source/availability filters and paginated bank grid;
 - graphical six-operator voice editor with amplitude/pitch envelope views, operator frequency/level/scaling controls, algorithm, feedback and LFO controls;
-- experimental paced push of 155 DX7 edit-buffer values through the documented FM-1 single-parameter SysEx frame;
-- opt-in auto-push when a bank or library voice is selected, without resending every editor slider change;
+- explicit selected-slot tracking that remains stable while a bank voice is edited;
+- guarded merge of the current edited voice into one slot of an exact 32-voice base bank;
+- export of both unchanged recovery bank and merged bank before device transfer;
+- explicitly confirmed 4,104-byte whole-bank SysEx transfer with A/B/C/D destination and preset mapping;
 - two-octave virtual piano for mouse, touch and focused computer-key input, with channel, velocity, octave and all-notes-off controls;
-- documented FM-1 parameter-write, CC, note, program and real-time message encoders;
+- documented FM-1 CC, note, program and real-time message encoders;
 - documented FM-1 effects workspace for filter, reverb, delay, distortion, chorus and phaser CC 0–23;
 - local 16-step sequence editor with note/rest/tie, velocity, gate, tempo, swing, length and MIDI channel;
 - versioned sequence JSON load/save and scheduled Web MIDI playback through the monitored output adapter;
-- 44 passing Vitest tests across 15 files covering codecs, imports, catalog, library migration/backup, voice audition, effects, sequencing and MIDI monitoring;
+- 46 passing Vitest tests across 16 files covering codecs, imports, catalog, library migration/backup, bank merging, audition, effects, sequencing and MIDI monitoring;
 - GitHub Actions workflow for typecheck, ESLint/JSX accessibility, tests and production build.
 
 See [`PLAN.md`](./PLAN.md) for unresolved work and [`docs/validation/ci-receipt.md`](./docs/validation/ci-receipt.md) for the latest executed validation.
@@ -66,18 +68,30 @@ The production `prebuild` hook performs the website synchronization in best-effo
 
 Patch ownership and usage permissions vary across the archive. FM1 Editor preserves source metadata and does not claim that every included bank is public domain. Review the generated manifest and source terms before publishing a hosted catalog.
 
-## Voice push and virtual piano
+## Bank merge and virtual piano
 
-The Voice workspace contains an FM-1 audition panel:
+The FM-1 documents standard Yamaha DX7 **32-voice bank** import, followed by device-side A/B/C/D destination selection. It does not document an immediately playable isolated single-voice transfer or a bank-read operation.
 
-1. Connect Web MIDI with SysEx permission and select the FM-1 output.
-2. Load or select a voice from a bank or the local library.
-3. Recall a known preset and use **Test C4** to verify the selected output and note channel.
-4. Use **Push voice parameters**, or enable **Auto-push bank/library selections**.
-5. Play notes on the virtual piano with mouse, touch or the focused A–; computer-key range.
-6. Use **Recall preset** or **All notes off** to recover from an invalid edit buffer or stuck note.
+The Voice workspace therefore uses this guarded workflow:
 
-The former 163-byte Yamaha single-voice bulk send was removed after a physical FM-1 became silent after receiving it. Voice push now emits 155 individually paced `F0 43 10 pp qq vv F7` parameter writes. The byte-index mapping remains experimental until confirmed against the device. Preset recall uses documented Program Change messages; the virtual piano uses normal MIDI note-on, note-off and CC 123 all-notes-off messages.
+1. Load the exact 32-voice base or backup bank that should remain in the destination.
+2. Select the slot to edit in the bank grid.
+3. Edit the selected voice.
+4. Choose destination bank A/B/C/D. The selected slot and bank determine preset 1–128.
+5. Export the unchanged base bank as a recovery copy.
+6. Optionally export the merged bank for inspection.
+7. Click **Send merged 32-voice bank** and accept the whole-bank overwrite confirmation.
+8. On the FM-1 destination screen, choose the same A/B/C/D bank.
+9. After the FM-1 confirms the save, use **Recall target preset**, **Test C4** or the virtual piano.
+
+The application replaces exactly one selected slot and preserves the other 31 voices from the loaded base bank. It cannot retrieve those voices from the FM-1, so the loaded base bank must be correct.
+
+Both attempted isolated-voice methods are disabled after physical tests left the FM-1 active sound silent:
+
+- a 163-byte Yamaha DX7 single-voice bulk message;
+- a guessed byte-index stream through FM-1 parameter IDs 0–154.
+
+Neither method will be re-enabled without a verified semantic FM-1 parameter map or documented edit-buffer protocol.
 
 ## SysEx diagnostics
 
@@ -96,11 +110,11 @@ The UI displays these diagnostics per file while still importing valid complete 
 The official FM-1 MIDI document defines a single-parameter write frame and parameter IDs 0–155, but it does not publish a semantic parameter map. Consequently:
 
 - `.syx` parsing, editing, local storage and export are normal supported workflows;
-- MIDI note/transport playback uses documented messages;
-- the effects workspace uses the documented FX-channel CC 0–23 map, but physical-device behavior is not yet recorded;
-- isolated Yamaha single-voice bulk push is disabled after it produced a silent active sound on physical hardware;
-- the paced FM-1 parameter stream remains explicitly experimental until its 0–154 byte-index mapping is verified;
-- destructive FM-1 bank transfer is not exposed as verified yet;
+- MIDI note/transport playback and preset recall use documented messages;
+- the effects workspace uses the documented FX-channel CC 0–23 map, but physical-device behavior is not yet fully recorded;
+- isolated single-voice and guessed byte-index parameter transfers are disabled;
+- the guarded standard 32-voice bank merge/send workflow is implemented but still requires physical verification on the user's FM-1 and firmware;
+- device-originated bank readback/backup is unavailable until a supported dump request is identified;
 - internal FM-1 sequencer dump/restore is not implemented because no documented pattern protocol was found.
 
 Physical-device tests must record the FM-1 firmware version and must not be reported as passed unless actually executed.
@@ -113,10 +127,10 @@ Detailed protocol findings are recorded in [`docs/research/fm1-midi-protocol.md`
 - design and audition six-operator FM voices;
 - import, browse, inspect, edit and export DX7-compatible `.syx` patches and banks;
 - organize, back up and restore a searchable local patch library;
-- transfer verified banks to FM-1 destinations A/B/C/D;
+- merge one edited voice into an exact 32-voice base bank and transfer it to FM-1 destination A/B/C/D;
 - control documented FM-1 filter and effects CCs;
 - create, save and play sequences from the browser;
-- add device-side pattern transfer only if a stable protocol is documented or hardware-verified.
+- add device-originated backup and pattern transfer only if stable protocols are documented or hardware-verified.
 
 ## Sources
 
