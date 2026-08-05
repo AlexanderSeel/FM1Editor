@@ -15,7 +15,7 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  VALIDATION_REVISION: '5'
+  VALIDATION_REVISION: '6'
 
 jobs:
   validate:
@@ -85,7 +85,7 @@ jobs:
           for log in install typecheck test build; do
             {
               printf '\n## %s output\n\n```text\n' "$log"
-              tail -n 180 ".validation-logs/$log.log"
+              tail -n 220 ".validation-logs/$log.log"
               printf '\n```\n'
             } >> docs/validation/ci-receipt.md
           done
