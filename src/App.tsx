@@ -18,7 +18,14 @@ import { useMidi } from './hooks/useMidi'
 import { usePatchLibrary } from './hooks/usePatchLibrary'
 import { useUndoableState } from './hooks/useUndoableState'
 
-type Workspace = 'voice' | 'library' | 'effects' | 'sequencer'
+const WORKSPACES = [
+  { id: 'voice', hardwareLabel: 'EDIT', label: 'Voice' },
+  { id: 'library', hardwareLabel: 'PRESETS', label: 'Library' },
+  { id: 'effects', hardwareLabel: 'FX', label: 'Effects' },
+  { id: 'sequencer', hardwareLabel: 'SEQ', label: 'Sequencer' },
+] as const
+
+type Workspace = (typeof WORKSPACES)[number]['id']
 
 function isTextEditingTarget(target: EventTarget | null): boolean {
   return target instanceof HTMLInputElement
@@ -48,6 +55,8 @@ export default function App() {
         ? sequenceHistory
         : null
   const hasUnsavedChanges = voiceHistory.dirty || effectsHistory.dirty || sequenceHistory.dirty
+  const deviceReady = midi.state.permission === 'granted' && midi.state.sysexEnabled
+  const workspaceNumber = String(WORKSPACES.findIndex((item) => item.id === workspace) + 1).padStart(3, '0')
 
   useEffect(() => {
     const handleBeforeUnload = (event: BeforeUnloadEvent) => {
@@ -119,25 +128,41 @@ export default function App() {
   }
 
   return (
-    <div className="min-h-[100dvh] overflow-x-hidden bg-[#070b12] text-slate-100">
-      <div className="pointer-events-none fixed inset-0 bg-[radial-gradient(circle_at_18%_10%,rgba(34,211,238,0.12),transparent_30%),radial-gradient(circle_at_88%_22%,rgba(168,85,247,0.10),transparent_26%)]" />
-      <div className="relative mx-auto grid min-h-[100dvh] max-w-[1900px] grid-cols-1 items-start gap-4 p-3 sm:p-4 lg:grid-cols-[minmax(272px,310px)_minmax(0,1fr)] lg:gap-5 lg:p-5 xl:grid-cols-[320px_minmax(0,1fr)] xl:p-6">
-        <aside className="sidebar-scroll grid min-w-0 content-start gap-4 lg:sticky lg:top-5 lg:max-h-[calc(100dvh-2.5rem)] lg:overflow-y-auto lg:overscroll-contain lg:pr-1 xl:top-6 xl:max-h-[calc(100dvh-3rem)]">
-          <header className="rounded-2xl border border-white/10 bg-white/[0.035] p-5 backdrop-blur">
-            <p className="text-xs font-semibold uppercase tracking-[0.3em] text-cyan-300">M-VAVE</p>
-            <h1 className="mt-2 text-3xl font-black tracking-tight text-white">FM1 Editor</h1>
-            <p className="mt-3 text-sm leading-6 text-slate-400">Voice design, merged SysEx library, documented effects and sequence workspace.</p>
+    <div className="fm1-app min-h-[100dvh] overflow-x-hidden text-slate-100">
+      <div className="fm1-room-glow" />
+      <div className="fm1-chassis relative mx-auto grid min-h-[100dvh] max-w-[1900px] grid-cols-1 items-start gap-3 p-2 sm:m-3 sm:min-h-[calc(100dvh-1.5rem)] sm:p-3 lg:grid-cols-[minmax(280px,318px)_minmax(0,1fr)] lg:gap-4 lg:p-4 xl:grid-cols-[330px_minmax(0,1fr)] xl:p-5">
+        <aside className="fm1-sidebar sidebar-scroll grid min-w-0 content-start gap-4 p-3 lg:sticky lg:top-4 lg:max-h-[calc(100dvh-2rem)] lg:overflow-y-auto lg:overscroll-contain xl:top-5 xl:max-h-[calc(100dvh-2.5rem)]">
+          <header className="fm1-brandplate p-5">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <p className="fm1-brand-kicker text-[11px]">M-VAVE</p>
+                <h1 className="fm1-brand-title mt-2">FM-1</h1>
+                <p className="fm1-hardware-label mt-3 text-[10px]">Editor / Control Surface</p>
+              </div>
+              <div className="fm1-knob-unit" aria-hidden="true">
+                <span className="fm1-knob-label">Master</span>
+                <div className="fm1-knob" />
+              </div>
+            </div>
+            <div className="fm1-mini-display mt-5 grid grid-cols-[1fr_auto] gap-x-4 gap-y-1 px-3 py-2.5 text-[11px]">
+              <span>USB MIDI</span>
+              <strong>{deviceReady ? 'READY' : 'STANDBY'}</strong>
+              <span>SYSEX</span>
+              <strong>{midi.state.sysexEnabled ? 'ON' : 'OFF'}</strong>
+            </div>
           </header>
 
-          <nav className="grid grid-cols-2 gap-2 rounded-2xl border border-white/10 bg-white/[0.025] p-2" aria-label="Workspace navigation">
-            {(['voice', 'library', 'effects', 'sequencer'] as const).map((item) => (
+          <nav className="fm1-function-grid grid grid-cols-2 gap-2 p-2" aria-label="Workspace navigation">
+            {WORKSPACES.map((item) => (
               <button
-                className={`min-w-0 rounded-xl px-3 py-3 text-xs font-bold capitalize transition ${workspace === item ? 'bg-cyan-300 text-slate-950' : 'text-slate-400 hover:bg-white/8 hover:text-white'}`}
-                key={item}
-                onClick={() => setWorkspace(item)}
+                className="min-w-0 px-3 py-3 text-left transition"
+                data-active={workspace === item.id}
+                key={item.id}
+                onClick={() => setWorkspace(item.id)}
                 type="button"
               >
-                <span className="block truncate">{item}</span>
+                <span className="block text-[11px] font-black uppercase tracking-[0.11em]">{item.hardwareLabel}</span>
+                <span className="mt-1 block truncate text-[9px] uppercase tracking-[0.12em] opacity-65">{item.label}</span>
               </button>
             ))}
           </nav>
@@ -166,65 +191,86 @@ export default function App() {
             <MidiMonitor entries={midi.monitorEntries} onClear={midi.clearMonitor} />
           </CollapsibleSection>
 
-          <section className="rounded-2xl border border-white/10 bg-white/[0.025] p-4 text-sm text-slate-400">
-            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-amber-200">Safety boundary</p>
+          <section className="p-4 text-sm text-slate-400">
+            <p className="fm1-hardware-label text-[10px] text-amber-200">Safety boundary</p>
             <p className="mt-2 leading-6">File operations, documented FX CCs and MIDI note playback are active. Immediate single-voice transfer is disabled; device writes use an explicitly confirmed complete 32-voice bank.</p>
           </section>
         </aside>
 
-        <main className="grid min-w-0 content-start gap-5">
-          <section className="overflow-hidden rounded-3xl border border-white/10 bg-slate-950/65 shadow-2xl shadow-black/40">
-            <div className="border-b border-white/10 px-5 py-4 sm:px-7">
-              <div className="flex flex-wrap items-start justify-between gap-4">
-                <div className="min-w-0">
-                  <p className="text-xs font-semibold uppercase tracking-[0.2em] text-violet-300">{workspace} workspace</p>
-                  <h2 className="mt-1 truncate text-2xl font-bold text-white">{workspaceTitle}</h2>
-                  <p className="mt-1 text-sm text-slate-500">{workspaceSummary}</p>
+        <main className="grid min-w-0 content-start gap-4">
+          <section className="fm1-main-panel overflow-hidden rounded-[22px]">
+            <div className="fm1-control-deck">
+              <div className="fm1-lcd p-4 sm:p-5">
+                <div className="fm1-lcd-topline">
+                  <span>{workspaceNumber} {workspace.toUpperCase()}</span>
+                  <span>{hasUnsavedChanges ? 'EDIT' : 'MEM'}</span>
                 </div>
-                <div className="flex min-w-0 flex-wrap items-start justify-end gap-3">
-                  {activeHistory && (
-                    <HistoryControls
-                      canRedo={activeHistory.canRedo}
-                      canUndo={activeHistory.canUndo}
-                      dirty={activeHistory.dirty}
-                      onRedo={activeHistory.redo}
-                      onUndo={activeHistory.undo}
-                    />
-                  )}
-                  {workspace === 'voice' && (
-                    <SysexToolbar
-                      onExportVoice={voiceHistory.markSaved}
-                      onImportBank={(voices) => {
-                        if (!confirmDiscardVoiceChanges('Importing another bank')) return
-                        setBank(voices)
-                        const first = voices[0]
-                        if (first) loadVoiceDocument(first, 0)
-                        else setSelectedBankSlot(null)
-                      }}
-                      onImportToLibrary={(voices, filename) => patchLibrary.importVoices(voices, {
-                        kind: 'file',
-                        label: 'Local SysEx import',
-                        importedAt: new Date().toISOString(),
-                        filename,
-                      })}
-                      onImportVoice={(nextVoice) => {
-                        if (!confirmDiscardVoiceChanges('Importing another voice')) return
-                        setBank([])
-                        loadVoiceDocument(nextVoice)
-                      }}
-                      onNewVoice={() => {
-                        if (!confirmDiscardVoiceChanges('Creating a new patch')) return
-                        setBank([])
-                        loadVoiceDocument(createInitializedVoice())
-                      }}
-                      voice={voice}
-                    />
-                  )}
+                <h2 className="fm1-lcd-title">{workspaceTitle}</h2>
+                <p className="fm1-lcd-summary">{workspaceSummary}</p>
+                <div className="fm1-lcd-footer">
+                  <span>{deviceReady ? 'MIDI READY' : 'MIDI STANDBY'}</span>
+                  <span>{bank.length === 32 ? 'BANK 32/32' : `BANK ${bank.length}/32`}</span>
                 </div>
+              </div>
+
+              <div className="fm1-knob-bank" aria-label="FM-1 parameter knob styling">
+                {['SELECT', 'ALGORITHM', 'KNOB 3', 'KNOB 4'].map((label) => (
+                  <div className="fm1-knob-unit" key={label}>
+                    <span className="fm1-knob-label">{label}</span>
+                    <div className="fm1-knob" aria-hidden="true" />
+                  </div>
+                ))}
               </div>
             </div>
 
-            <div className="grid gap-5 p-4 sm:p-5 xl:p-7">
+            <div className="flex flex-wrap items-start justify-between gap-4 border-b border-black/70 px-4 py-4 sm:px-6">
+              <div className="min-w-0">
+                <p className="fm1-hardware-label text-[10px]">Current program</p>
+                <p className="mt-1 text-sm text-slate-400">Use the hardware-style keys and recessed editor panels below.</p>
+              </div>
+              <div className="flex min-w-0 flex-wrap items-start justify-end gap-3">
+                {activeHistory && (
+                  <HistoryControls
+                    canRedo={activeHistory.canRedo}
+                    canUndo={activeHistory.canUndo}
+                    dirty={activeHistory.dirty}
+                    onRedo={activeHistory.redo}
+                    onUndo={activeHistory.undo}
+                  />
+                )}
+                {workspace === 'voice' && (
+                  <SysexToolbar
+                    onExportVoice={voiceHistory.markSaved}
+                    onImportBank={(voices) => {
+                      if (!confirmDiscardVoiceChanges('Importing another bank')) return
+                      setBank(voices)
+                      const first = voices[0]
+                      if (first) loadVoiceDocument(first, 0)
+                      else setSelectedBankSlot(null)
+                    }}
+                    onImportToLibrary={(voices, filename) => patchLibrary.importVoices(voices, {
+                      kind: 'file',
+                      label: 'Local SysEx import',
+                      importedAt: new Date().toISOString(),
+                      filename,
+                    })}
+                    onImportVoice={(nextVoice) => {
+                      if (!confirmDiscardVoiceChanges('Importing another voice')) return
+                      setBank([])
+                      loadVoiceDocument(nextVoice)
+                    }}
+                    onNewVoice={() => {
+                      if (!confirmDiscardVoiceChanges('Creating a new patch')) return
+                      setBank([])
+                      loadVoiceDocument(createInitializedVoice())
+                    }}
+                    voice={voice}
+                  />
+                )}
+              </div>
+            </div>
+
+            <div className="grid gap-5 p-4 sm:p-5 xl:p-6">
               {workspace === 'voice' ? (
                 <>
                   {bank.length > 0 && (
@@ -322,9 +368,9 @@ export default function App() {
             </div>
           </section>
 
-          <footer className="flex flex-wrap items-center justify-between gap-2 px-2 text-xs text-slate-500">
-            <span>Current milestone: collapsible workspaces, application history, guarded bank merge transfer and virtual piano.</span>
-            <span>Physical FM-1 bank-import verification and device readback remain pending.</span>
+          <footer className="flex flex-wrap items-center justify-between gap-2 px-3 text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-500">
+            <span>FM-1 editor · guarded bank merge · virtual piano</span>
+            <span>Physical bank import and device readback remain pending</span>
           </footer>
         </main>
       </div>
