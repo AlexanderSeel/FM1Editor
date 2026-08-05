@@ -4,7 +4,8 @@ A TypeScript web editor and librarian for the **M-VAVE FM-1** pocket FM synthesi
 
 ## Implemented baseline
 
-- React, TypeScript, Vite and Tailwind application shell;
+- React, TypeScript, Vite and Tailwind application shell with a viewport-safe sticky/scrollable sidebar;
+- responsive two-column workspace navigation that remains inside the sidebar at desktop widths;
 - Web MIDI capability detection, SysEx permission request and reconnect-aware input/output selection;
 - persisted MIDI port preferences with descriptor fallback when browser port IDs change;
 - timestamped incoming/outgoing MIDI monitor with direction/text filtering, hexadecimal data and JSON export;
@@ -14,18 +15,22 @@ A TypeScript web editor and librarian for the **M-VAVE FM-1** pocket FM synthesi
 - salvage of complete supported messages from mixed files that also contain padding, unsupported messages or incomplete trailing data;
 - drag-and-drop, multi-file and folder ingestion for `.syx` and `.sysex` files;
 - `.syx` single-voice export plus draggable 32-slot bank reordering and bank export;
-- persistent IndexedDB patch library with semantic duplicate detection, tags, favorites, search and A/B parameter comparison;
+- persistent IndexedDB schema-v2 patch library with semantic duplicate detection, tags, favorites, search and A/B comparison;
+- portable JSON library backup with merge restore and explicitly confirmed full replacement;
 - the supplied `public/catalog/sysexFinal.zip` tracked directly in the repository as the catalog source;
 - direct in-app ZIP browser indexed by source folder, bank and voice name;
 - build-time parser for the Yamaha Black Boxes DX7 page and mirror of every discovered direct `.syx` link;
 - merged ZIP/website catalog: matching website banks use the tracked ZIP copy while website-only banks use the mirrored source file;
 - catalog checksum diagnostics, archive SHA-256 verification, source/availability filters and paginated bank grid;
 - graphical six-operator voice editor with amplitude/pitch envelope views, operator frequency/level/scaling controls, algorithm, feedback and LFO controls;
+- experimental push of the current voice as a standard 163-byte Yamaha single-voice SysEx message;
+- opt-in auto-push when a bank or library voice is selected, without resending every editor slider change;
+- two-octave virtual piano for mouse, touch and focused computer-key input, with channel, velocity, octave and all-notes-off controls;
 - documented FM-1 parameter-write, CC, note, program and real-time message encoders;
 - documented FM-1 effects workspace for filter, reverb, delay, distortion, chorus and phaser CC 0–23;
 - local 16-step sequence editor with note/rest/tie, velocity, gate, tempo, swing, length and MIDI channel;
 - versioned sequence JSON load/save and scheduled Web MIDI playback through the monitored output adapter;
-- 32 passing Vitest tests covering codecs, structured imports, the tracked archive, catalog merging, effects, sequencing, library logic and MIDI monitoring;
+- 40 passing Vitest tests across 15 files covering codecs, imports, catalog, library migration/backup, voice audition, effects, sequencing and MIDI monitoring;
 - GitHub Actions workflow for typecheck, tests and production build.
 
 See [`PLAN.md`](./PLAN.md) for unresolved work and [`docs/validation/ci-receipt.md`](./docs/validation/ci-receipt.md) for the latest executed validation.
@@ -61,6 +66,18 @@ The production `prebuild` hook performs the website synchronization in best-effo
 
 Patch ownership and usage permissions vary across the archive. FM1 Editor preserves source metadata and does not claim that every included bank is public domain. Review the generated manifest and source terms before publishing a hosted catalog.
 
+## Voice push and virtual piano
+
+The Voice workspace contains an FM-1 audition panel:
+
+1. Connect Web MIDI with SysEx permission and select the FM-1 output.
+2. Load or select a voice from a bank or the local library.
+3. Use **Push voice to FM-1**, or enable **Auto-push selections**.
+4. Play notes on the virtual piano with mouse, touch or the focused A–; computer-key range.
+5. Use **All notes off** if a note remains active after a device or browser interruption.
+
+Voice push sends a checksum-valid Yamaha single-voice message on the selected MIDI channel. This transport is intentionally marked experimental because physical FM-1 acceptance has not yet been recorded. The virtual piano uses normal MIDI note-on, note-off and CC 123 all-notes-off messages.
+
 ## SysEx diagnostics
 
 The import analyzer scans every complete `F0 … F7` message and reports:
@@ -77,9 +94,10 @@ The UI displays these diagnostics per file while still importing valid complete 
 
 The official FM-1 MIDI document defines a single-parameter write frame and parameter IDs 0–155, but it does not publish a semantic parameter map. Consequently:
 
-- `.syx` file parsing, editing and export are normal supported workflows;
+- `.syx` parsing, editing, local storage and export are normal supported workflows;
 - MIDI note/transport playback uses documented messages;
 - the effects workspace uses the documented FX-channel CC 0–23 map, but physical-device behavior is not yet recorded;
+- Yamaha single-voice push is implemented but remains explicitly experimental until tested on the FM-1;
 - live voice parameter writes remain explicitly experimental;
 - destructive FM-1 bank transfer is not exposed as verified yet;
 - internal FM-1 sequencer dump/restore is not implemented because no documented pattern protocol was found.
@@ -93,7 +111,7 @@ Detailed protocol findings are recorded in [`docs/research/fm1-midi-protocol.md`
 - connect through Web MIDI with SysEx access;
 - design and audition six-operator FM voices;
 - import, browse, inspect, edit and export DX7-compatible `.syx` patches and banks;
-- organize a searchable local patch library;
+- organize, back up and restore a searchable local patch library;
 - transfer verified banks to FM-1 destinations A/B/C/D;
 - control documented FM-1 filter and effects CCs;
 - create, save and play sequences from the browser;
