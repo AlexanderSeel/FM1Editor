@@ -1,0 +1,115 @@
+name: Validate browser layout receipt
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'docs/validation/.trigger-browser-layout-receipt'
+
+permissions:
+  contents: write
+
+jobs:
+  validate:
+    runs-on: windows-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - id: checks
+        continue-on-error: true
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Continue'
+          New-Item -ItemType Directory -Force -Path docs/validation | Out-Null
+
+          npm install --no-audit --no-fund
+          $install = $LASTEXITCODE
+
+          npm run typecheck
+          $typecheck = $LASTEXITCODE
+
+          npm run lint
+          $lint = $LASTEXITCODE
+
+          npm run test
+          $test = $LASTEXITCODE
+
+          npm run build
+          $build = $LASTEXITCODE
+
+          $env:PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD = '1'
+          npm install --no-save --package-lock=false playwright@1.55.0
+          $playwrightInstall = $LASTEXITCODE
+
+          $env:BROWSER_CHANNELS = 'chrome,msedge'
+          node scripts/browser-layout-smoke.mjs *>&1 | Tee-Object -FilePath docs/validation/browser-layout-run.log
+          $browser = $LASTEXITCODE
+
+          "install=$install" >> $env:GITHUB_OUTPUT
+          "typecheck=$typecheck" >> $env:GITHUB_OUTPUT
+          "lint=$lint" >> $env:GITHUB_OUTPUT
+          "test=$test" >> $env:GITHUB_OUTPUT
+          "build=$build" >> $env:GITHUB_OUTPUT
+          "playwright_install=$playwrightInstall" >> $env:GITHUB_OUTPUT
+          "browser=$browser" >> $env:GITHUB_OUTPUT
+
+      - name: Record receipt and clean successful validator
+        shell: pwsh
+        env:
+          INSTALL: ${{ steps.checks.outputs.install }}
+          TYPECHECK: ${{ steps.checks.outputs.typecheck }}
+          LINT: ${{ steps.checks.outputs.lint }}
+          TEST: ${{ steps.checks.outputs.test }}
+          BUILD: ${{ steps.checks.outputs.build }}
+          PLAYWRIGHT_INSTALL: ${{ steps.checks.outputs.playwright_install }}
+          BROWSER: ${{ steps.checks.outputs.browser }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          function Result([string]$value) { if ($value -eq '0') { 'SUCCESS' } else { 'FAILURE' } }
+          $allPassed = @($env:INSTALL, $env:TYPECHECK, $env:LINT, $env:TEST, $env:BUILD, $env:PLAYWRIGHT_INSTALL, $env:BROWSER) | ForEach-Object { $_ -eq '0' } | Where-Object { -not $_ } | Measure-Object | Select-Object -ExpandProperty Count
+          $success = $allPassed -eq 0
+
+          $receipt = @(
+            '# Chrome and Edge responsive layout validation'
+            ''
+            "Validated source commit: ``$env:GITHUB_SHA``"
+            ''
+            "- npm install: **$(Result $env:INSTALL)**"
+            "- TypeScript typecheck: **$(Result $env:TYPECHECK)**"
+            "- ESLint and JSX accessibility: **$(Result $env:LINT)**"
+            "- Full Vitest suite: **$(Result $env:TEST)**"
+            "- Production build: **$(Result $env:BUILD)**"
+            "- Transient Playwright install: **$(Result $env:PLAYWRIGHT_INSTALL)**"
+            "- Installed Chrome and Microsoft Edge layout smoke: **$(Result $env:BROWSER)**"
+            ''
+            'Viewport matrix for each browser:'
+            ''
+            '- desktop: 1440 × 900'
+            '- tablet: 820 × 1180'
+            '- narrow mobile: 390 × 844'
+            ''
+            'Assertions cover horizontal page overflow, sticky desktop sidebar bounds, FM-1 bank-merge controls, and all 25 virtual-piano keys remaining inside their panel.'
+          ) -join "`n"
+          Set-Content -Path docs/validation/browser-layout.md -Value $receipt -Encoding utf8
+
+          if ($success) {
+            $plan = Get-Content PLAN.md -Raw
+            $item = '- [ ] Test the viewport-safe sidebar, bank-merge controls and virtual piano in Chrome and Edge at desktop, tablet and narrow mobile widths.'
+            if (-not $plan.Contains($item)) { throw 'Expected PLAN.md browser-layout item was not found.' }
+            Set-Content -Path PLAN.md -Value ($plan.Replace("$item`r`n", '').Replace("$item`n", '')) -Encoding utf8
+            Remove-Item .github/workflows/validate-browser-layout-receipt.yml
+            Remove-Item docs/validation/.trigger-browser-layout-receipt
+            Remove-Item docs/validation/browser-layout-run.log
+          }
+
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git commit -m $(if ($success) { 'test(browser): record Chrome and Edge layout validation' } else { 'test(browser): record layout validation failure' })
+          git push
+
+          if (-not $success) { exit 1 }
