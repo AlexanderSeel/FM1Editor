@@ -1,0 +1,146 @@
+name: Validate flat variation editor
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/validate-flat-variation-editor.yml
+
+permissions:
+  contents: write
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+      - name: Typecheck
+        run: npm run typecheck
+      - name: Lint and accessibility
+        run: npm run lint
+      - name: Test
+        run: npm run test
+      - name: Production build
+        run: npm run build
+      - name: Install Playwright and Chromium
+        run: |
+          npm install --no-save --package-lock=false --no-audit --no-fund playwright@1.54.2
+          npx playwright install --with-deps chromium
+      - name: Validate UI in Chromium
+        shell: bash
+        run: |
+          mkdir -p artifacts
+          npm run preview -- --host 127.0.0.1 > /tmp/fm1-preview.log 2>&1 &
+          for attempt in {1..30}; do
+            if curl --fail --silent http://127.0.0.1:4173/ > /dev/null; then break; fi
+            sleep 1
+          done
+          curl --fail http://127.0.0.1:4173/ > /dev/null
+          cat > artifacts/validate-flat-variation.mjs <<'JS'
+          import { chromium } from 'playwright'
+          import { strict as assert } from 'node:assert'
+
+          const browser = await chromium.launch({ headless: true })
+          const page = await browser.newPage({ viewport: { width: 1440, height: 1200 } })
+          await page.goto('http://127.0.0.1:4173/', { waitUntil: 'networkidle' })
+
+          const chassisRadius = Number.parseFloat(await page.locator('.fm1-chassis').evaluate((element) => getComputedStyle(element).borderTopLeftRadius))
+          assert.ok(chassisRadius <= 14)
+          const buttonRadius = Number.parseFloat(await page.getByRole('button', { name: 'Undo last editor change' }).evaluate((element) => getComputedStyle(element).borderTopLeftRadius))
+          assert.ok(buttonRadius <= 5)
+
+          const variationHeading = page.getByRole('heading', { name: 'Variations and A/B comparison' })
+          await variationHeading.scrollIntoViewIfNeeded()
+          await variationHeading.waitFor()
+          const slotA = page.getByRole('button', { name: 'Recall comparison A' })
+          const slotB = page.getByRole('button', { name: 'Recall comparison B' })
+          assert.equal(await slotB.isDisabled(), true)
+          await page.getByRole('button', { name: 'Randomize voice' }).click()
+          assert.equal(await page.getByLabel('Voice name').inputValue(), 'RANDOM')
+          assert.equal(await slotB.isDisabled(), false)
+          await slotA.click()
+          assert.equal(await page.getByLabel('Voice name').inputValue(), 'INIT VOICE')
+          await slotB.click()
+          assert.equal(await page.getByLabel('Voice name').inputValue(), 'RANDOM')
+
+          const graph = page.getByRole('group', { name: /DX7 algorithm \d+ routing controls/ })
+          await graph.scrollIntoViewIfNeeded()
+          const nodes = graph.locator('.fm1-algorithm-node')
+          assert.equal(await nodes.count(), 6)
+          for (let index = 0; index < 6; index += 1) {
+            const node = nodes.nth(index)
+            assert.equal(await node.locator('span').count(), 2)
+            assert.equal(await node.evaluate((element) => element.scrollHeight <= element.clientHeight + 1 && element.scrollWidth <= element.clientWidth + 1), true)
+          }
+          const boxes = await nodes.evaluateAll((elements) => elements.map((element) => {
+            const rectangle = element.getBoundingClientRect()
+            return { left: rectangle.left, right: rectangle.right, top: rectangle.top, bottom: rectangle.bottom }
+          }))
+          for (let left = 0; left < boxes.length; left += 1) {
+            for (let right = left + 1; right < boxes.length; right += 1) {
+              const a = boxes[left]
+              const b = boxes[right]
+              assert.equal(a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top, false)
+            }
+          }
+
+          const envelope = page.getByRole('group', { name: /Operator 1 amplitude envelope draggable controls/ })
+          await envelope.scrollIntoViewIfNeeded()
+          const rangeHeight = await page.getByRole('slider', { name: 'Output level' }).locator('..').evaluate((element) => element.getBoundingClientRect().height)
+          assert.ok(rangeHeight < 70)
+          await page.screenshot({ path: 'artifacts/flat-variation-editor.png', fullPage: true })
+          await browser.close()
+          JS
+          node artifacts/validate-flat-variation.mjs
+          rm artifacts/validate-flat-variation.mjs
+      - uses: actions/upload-artifact@v4
+        with:
+          name: flat-variation-editor-render
+          path: artifacts/flat-variation-editor.png
+          if-no-files-found: error
+      - name: Record validation
+        shell: bash
+        run: |
+          validated_sha="$(git rev-parse HEAD)"
+          mkdir -p docs/validation
+          cat > docs/validation/flat-variation-editor.md <<EOF
+          # Flat hardware and voice variation validation
+
+          Validated source commit: \`$validated_sha\`
+
+          - npm install: **PASS**
+          - npm run typecheck: **PASS**
+          - npm run lint: **PASS**
+          - npm run test: **PASS**
+          - npm run build: **PASS**
+          - flat chassis and button geometry: **PASS**
+          - six non-overlapping two-line algorithm nodes: **PASS**
+          - compact envelope and range controls: **PASS**
+          - constrained randomization and A/B recall: **PASS**
+          - Chromium desktop render capture: **PASS**
+
+          Verified behavior:
+
+          - surfaces use a flatter short-bevel hardware treatment;
+          - algorithm labels stay inside their nodes without node collisions;
+          - envelope summaries and range modules remain compact;
+          - initialized variants, randomization and mutation produce valid DX7 voices;
+          - transformed voices discard stale encoded source representations;
+          - generated results stage the prior voice in A and the result in B;
+          - applied changes remain part of normal undo/redo history.
+          EOF
+
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add docs/validation/flat-variation-editor.md
+          git commit -m 'test(ci): record flat variation editor validation'
+          git push origin HEAD:main
