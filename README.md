@@ -15,7 +15,7 @@ A TypeScript web editor and librarian with separate, persistent target modes for
 - Yamaha checksum validation and multi-message `.syx` file classification;
 - strict DX7 semantic ranges for edited voices, with legacy reserved values normalized only at import;
 - parameter `155` modeled separately as six-bit edit-session operator state, never embedded in voice payloads;
-- DX7 function parameters `64–77` modeled separately from voice data, without constructing or sending SysEx;
+- guarded Yamaha DX7 voice parameters `0–155` and function parameters `64–77`, kept separate from file payloads and exposed only through explicit SysEx and hardware-readiness gates;
 - structured compatibility-normalization records and visible per-parameter import warnings;
 - byte-for-byte preservation and unchanged download of each imported SysEx file before normalization;
 - structured per-message diagnostics with byte offsets, message indexes, lengths, manufacturer/format bytes and checksum errors;
@@ -33,7 +33,7 @@ A TypeScript web editor and librarian with separate, persistent target modes for
 - explicit selected-slot tracking that remains stable while a bank voice is edited;
 - guarded merge of the current edited voice into one slot of an exact 32-voice base bank;
 - export of both unchanged recovery bank and merged bank before device transfer;
-- explicitly confirmed 4,104-byte whole-bank SysEx transfer with A/B/C/D destination and preset mapping;
+- guarded 4,104-byte whole-bank SysEx transfer with explicit confirmation, A/B/C/D destination selection and preset mapping;
 - two-octave virtual piano for mouse, touch and focused computer-key input, with channel, velocity, octave and all-notes-off controls;
 - browser-local audio-input recording with explicit permission, FM-1-labelled device suggestion, manual selection, live level/clipping diagnostics, lossless WAV output and optional browser-compressed fallback;
 - documented FM-1 CC, note, program and real-time message encoders;
@@ -44,7 +44,7 @@ A TypeScript web editor and librarian with separate, persistent target modes for
 - Vitest coverage for codecs, imports, catalog, library migration/backup, bank merging, audition, audio recording, effects, sequencing and MIDI monitoring;
 - GitHub Actions workflow for typecheck, ESLint/JSX accessibility, tests and production build.
 
-See [`PLAN.md`](./PLAN.md) for unresolved work, [`docs/validation/ci-receipt.md`](./docs/validation/ci-receipt.md) for the general validation receipt, [`docs/validation/audio-recorder.md`](./docs/validation/audio-recorder.md) for mocked-media recorder validation, [`docs/validation/target-capability-routing.md`](./docs/validation/target-capability-routing.md) for target routing, and [`docs/validation/dx7-bulk-transfer.md`](./docs/validation/dx7-bulk-transfer.md) for the guarded DX7 bulk-transfer gate. DX7 compatibility handling is validated in [`docs/validation/dx7-semantic-ranges.md`](./docs/validation/dx7-semantic-ranges.md) and [`docs/validation/dx7-original-import.md`](./docs/validation/dx7-original-import.md). Parameter `155` isolation is validated in [`docs/validation/dx7-edit-session.md`](./docs/validation/dx7-edit-session.md), and detached function data in [`docs/validation/dx7-function-state.md`](./docs/validation/dx7-function-state.md).
+See [`PLAN.md`](./PLAN.md) for unresolved work and [`docs/validation/support-matrix-and-recovery.md`](./docs/validation/support-matrix-and-recovery.md) for current support status, known limitations, tested combinations and conservative recovery procedures. General validation receipts include [`docs/validation/ci-receipt.md`](./docs/validation/ci-receipt.md), [`docs/validation/audio-recorder.md`](./docs/validation/audio-recorder.md), [`docs/validation/target-capability-routing.md`](./docs/validation/target-capability-routing.md) and [`docs/validation/dx7-bulk-transfer.md`](./docs/validation/dx7-bulk-transfer.md). DX7 compatibility handling is recorded in [`docs/validation/dx7-semantic-ranges.md`](./docs/validation/dx7-semantic-ranges.md), [`docs/validation/dx7-original-import.md`](./docs/validation/dx7-original-import.md), [`docs/validation/dx7-edit-session.md`](./docs/validation/dx7-edit-session.md), [`docs/validation/dx7-function-state.md`](./docs/validation/dx7-function-state.md) and [`docs/validation/dx7-primary-source-parameter-format.md`](./docs/validation/dx7-primary-source-parameter-format.md).
 
 ## Merged patch catalog
 
@@ -81,14 +81,14 @@ Patch ownership and usage permissions vary across the archive. FM1 Editor preser
 
 Selecting **Yamaha DX7** keeps file editing, the local library, audio recording and MIDI note audition available while hiding FM-1-only effects and bank/preset mapping. Device transmission is never automatic.
 
-The DX7 audition panel supports two separately confirmed standard Yamaha receive operations:
+The DX7 audition panel supports two guarded standard Yamaha receive-message operations:
 
 1. **Send current voice to edit buffer** transmits one channel-addressed 163-byte single-voice bulk message. It does not automatically store the voice in a numbered internal slot.
 2. **Overwrite DX7 with loaded 32-voice bank** transmits one channel-addressed 4,104-byte bank message and is treated as a destructive replacement of the complete internal bank.
 
 Both controls require Web MIDI SysEx permission, a manually verified output, a matching DX7 MIDI channel, confirmation that System Info is available and confirmation that Memory Protect is off. The application sends all-notes-off before the bulk message and records the transfer in the MIDI monitor.
 
-Parameter `155` operator enable state is modeled as an independent edit session: OP1 uses bit 5 through OP6 using bit 0, all 64 masks round-trip, and the state is excluded from 155-byte single-voice and 128-byte packed voice data. Mono/poly, pitch-bend, portamento, modulation-wheel, foot-control, breath-control and aftertouch function values are modeled independently as parameters `64–77`; they are not embedded in voice files and are not transmitted. Voice-parameter changes, function-parameter transmission and programmatic dump requests remain disabled. No dump-request frame will be added unless an original Yamaha data-format source proves that the stock DX7 supports it; initiate outgoing dumps from the DX7 front panel meanwhile. Physical stock-DX7 reception remains unverified and must not be reported as passed until tested.
+Parameter `155` operator enable state is modeled as an independent edit session: OP1 uses bit 5 through OP6 using bit 0, all 64 masks round-trip, and the state is excluded from 155-byte single-voice and 128-byte packed voice data. Graphical voice values map to guarded Yamaha parameters `0–155`; mono/poly, pitch-bend, portamento, modulation-wheel, foot-control, breath-control and aftertouch values map to guarded function parameters `64–77`. Voice writes can send the full semantic state or coalesced changed parameters, and function writes send one selected semantic value. Both require a manually selected SysEx-capable output, matching channel, System Info and Memory Protect confirmations, plus session and operation confirmation. No arbitrary raw parameter entry, automatic store command or programmatic dump request is exposed. Initiate outgoing dumps from the DX7 front panel. Physical stock-DX7 reception remains unverified and must not be reported as passed until tested.
 
 ## Bank merge and virtual piano
 
@@ -166,7 +166,7 @@ The official FM-1 MIDI document defines a single-parameter write frame and param
 
 Physical-device tests must record the FM-1 firmware version and must not be reported as passed unless actually executed.
 
-Detailed protocol findings are recorded in [`docs/research/fm1-midi-protocol.md`](./docs/research/fm1-midi-protocol.md).
+Detailed protocol findings are recorded in [`docs/research/fm1-midi-protocol.md`](./docs/research/fm1-midi-protocol.md). Current support status and recovery procedures are maintained in [`docs/validation/support-matrix-and-recovery.md`](./docs/validation/support-matrix-and-recovery.md).
 
 ## Intended complete workflow
 
@@ -208,7 +208,7 @@ A desktop wrapper such as Tauri remains possible because device protocol, storag
 
 ## Browser requirements
 
-Web MIDI, SysEx and audio-input capture require a compatible Chromium-based browser, a secure context (`https://` or `localhost`) and explicit user permission. MIDI and microphone permissions are separate. Browser support and physical device behavior will be documented from real hardware tests.
+Web MIDI, SysEx and audio-input capture require a compatible Chromium-based browser, a secure context (`https://` or `localhost`) and explicit user permission. MIDI and microphone permissions are separate. The configured Chrome/Edge matrices and all physically tested combinations are tracked in [`docs/validation/support-matrix-and-recovery.md`](./docs/validation/support-matrix-and-recovery.md).
 
 ## Development
 
