@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { createInitializedVoice } from '../domain/voice'
+import { createInitializedVoice, type Dx7Operator } from '../domain/voice'
 import {
   diffDx7VoiceParameterValues,
   encodeDx7VoiceParameterChange,
@@ -7,6 +7,8 @@ import {
   getDx7VoiceParameterValues,
   type Dx7VoiceParameterValue,
 } from './dx7VoiceParameterChange'
+
+type SixOperators = [Dx7Operator, Dx7Operator, Dx7Operator, Dx7Operator, Dx7Operator, Dx7Operator]
 
 describe('DX7 voice parameter changes', () => {
   it('maps the semantic voice and edit-session mask to parameters 0 through 155', () => {
@@ -19,7 +21,7 @@ describe('DX7 voice parameter changes', () => {
 
   it('uses Yamaha OP6-first parameter blocks while the model remains OP1-first', () => {
     const voice = createInitializedVoice()
-    const operators = [...voice.operators] as typeof voice.operators
+    const operators = voice.operators.map((operator) => ({ ...operator })) as SixOperators
     operators[0] = { ...operators[0], outputLevel: 88 }
     operators[5] = { ...operators[5], outputLevel: 66 }
     const values = getDx7VoiceParameterValues({ ...voice, operators })
@@ -47,8 +49,8 @@ describe('DX7 voice parameter changes', () => {
 
   it('encodes common parameters with Yamaha high parameter bits', () => {
     const algorithm = getDx7VoiceParameterValues(createInitializedVoice())[134]
-    expect(algorithm).toBeDefined()
-    expect(Array.from(encodeDx7VoiceParameterChange(algorithm!, 1))).toEqual([
+    if (!algorithm) throw new Error('Algorithm parameter 134 is missing.')
+    expect(Array.from(encodeDx7VoiceParameterChange(algorithm, 1))).toEqual([
       0xf0, 0x43, 0x10, 0x01, 0x06, 0x00, 0xf7,
     ])
   })
