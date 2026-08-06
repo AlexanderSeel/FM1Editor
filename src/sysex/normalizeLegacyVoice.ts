@@ -1,45 +1,77 @@
 import type { Dx7Operator, Dx7Voice, FourValues } from '../domain/voice'
 
-function normalizeParameter99(value: number): number {
-  return Math.min(value, 99)
+export interface Dx7CompatibilityNormalization {
+  path: string
+  originalValue: number
+  normalizedValue: number
 }
 
-function normalizeFour(values: FourValues): FourValues {
+export interface NormalizedLegacyVoice {
+  voice: Dx7Voice
+  normalizations: readonly Dx7CompatibilityNormalization[]
+}
+
+function normalizeParameter(
+  value: number,
+  maximum: number,
+  path: string,
+  normalizations: Dx7CompatibilityNormalization[],
+): number {
+  const normalizedValue = Math.min(value, maximum)
+  if (normalizedValue !== value) {
+    normalizations.push({ path, originalValue: value, normalizedValue })
+  }
+  return normalizedValue
+}
+
+function normalizeFour(
+  values: FourValues,
+  path: string,
+  normalizations: Dx7CompatibilityNormalization[],
+): FourValues {
   return [
-    normalizeParameter99(values[0]),
-    normalizeParameter99(values[1]),
-    normalizeParameter99(values[2]),
-    normalizeParameter99(values[3]),
+    normalizeParameter(values[0], 99, `${path}[1]`, normalizations),
+    normalizeParameter(values[1], 99, `${path}[2]`, normalizations),
+    normalizeParameter(values[2], 99, `${path}[3]`, normalizations),
+    normalizeParameter(values[3], 99, `${path}[4]`, normalizations),
   ]
 }
 
-function normalizeOperator(operator: Dx7Operator): Dx7Operator {
+function normalizeOperator(
+  operator: Dx7Operator,
+  operatorIndex: number,
+  normalizations: Dx7CompatibilityNormalization[],
+): Dx7Operator {
+  const path = `OP${operatorIndex + 1}`
   return {
     ...operator,
     envelope: {
-      rates: normalizeFour(operator.envelope.rates),
-      levels: normalizeFour(operator.envelope.levels),
+      rates: normalizeFour(operator.envelope.rates, `${path}.envelope.rates`, normalizations),
+      levels: normalizeFour(operator.envelope.levels, `${path}.envelope.levels`, normalizations),
     },
     keyboardScaling: {
       ...operator.keyboardScaling,
-      breakPoint: normalizeParameter99(operator.keyboardScaling.breakPoint),
-      leftDepth: normalizeParameter99(operator.keyboardScaling.leftDepth),
-      rightDepth: normalizeParameter99(operator.keyboardScaling.rightDepth),
+      breakPoint: normalizeParameter(operator.keyboardScaling.breakPoint, 99, `${path}.keyboardScaling.breakPoint`, normalizations),
+      leftDepth: normalizeParameter(operator.keyboardScaling.leftDepth, 99, `${path}.keyboardScaling.leftDepth`, normalizations),
+      rightDepth: normalizeParameter(operator.keyboardScaling.rightDepth, 99, `${path}.keyboardScaling.rightDepth`, normalizations),
     },
-    outputLevel: normalizeParameter99(operator.outputLevel),
-    frequencyFine: normalizeParameter99(operator.frequencyFine),
-    detune: Math.min(operator.detune, 14),
+    outputLevel: normalizeParameter(operator.outputLevel, 99, `${path}.outputLevel`, normalizations),
+    frequencyFine: normalizeParameter(operator.frequencyFine, 99, `${path}.frequencyFine`, normalizations),
+    detune: normalizeParameter(operator.detune, 14, `${path}.detune`, normalizations),
   }
 }
 
 /**
  * Some legacy and third-party DX7 banks use reserved 7-bit values 100..127
- * in parameters whose documented range is 0..99. Normalize those values at
- * the import boundary so editing and re-encoding cannot fail one field at a
- * time. Narrow bit-field parameters remain unchanged and strictly validated.
+ * in parameters whose documented range is 0..99, or detune value 15 where
+ * 0..14 is defined. Normalize those values only at the import boundary and
+ * retain a structured record of every changed parameter.
  */
-export function normalizeLegacyVoice(voice: Dx7Voice): Dx7Voice {
-  const operators = voice.operators.map(normalizeOperator) as [
+export function normalizeLegacyVoiceWithReport(voice: Dx7Voice): NormalizedLegacyVoice {
+  const normalizations: Dx7CompatibilityNormalization[] = []
+  const operators = voice.operators.map((operator, index) =>
+    normalizeOperator(operator, index, normalizations),
+  ) as [
     Dx7Operator,
     Dx7Operator,
     Dx7Operator,
@@ -49,18 +81,35 @@ export function normalizeLegacyVoice(voice: Dx7Voice): Dx7Voice {
   ]
 
   return {
-    ...voice,
-    operators,
-    pitchEnvelope: {
-      rates: normalizeFour(voice.pitchEnvelope.rates),
-      levels: normalizeFour(voice.pitchEnvelope.levels),
+    voice: {
+      ...voice,
+      operators,
+      pitchEnvelope: {
+        rates: normalizeFour(voice.pitchEnvelope.rates, 'pitchEnvelope.rates', normalizations),
+        levels: normalizeFour(voice.pitchEnvelope.levels, 'pitchEnvelope.levels', normalizations),
+      },
+      lfo: {
+        ...voice.lfo,
+        speed: normalizeParameter(voice.lfo.speed, 99, 'lfo.speed', normalizations),
+        delay: normalizeParameter(voice.lfo.delay, 99, 'lfo.delay', normalizations),
+        pitchModulationDepth: normalizeParameter(
+          voice.lfo.pitchModulationDepth,
+          99,
+          'lfo.pitchModulationDepth',
+          normalizations,
+        ),
+        amplitudeModulationDepth: normalizeParameter(
+          voice.lfo.amplitudeModulationDepth,
+          99,
+          'lfo.amplitudeModulationDepth',
+          normalizations,
+        ),
+      },
     },
-    lfo: {
-      ...voice.lfo,
-      speed: normalizeParameter99(voice.lfo.speed),
-      delay: normalizeParameter99(voice.lfo.delay),
-      pitchModulationDepth: normalizeParameter99(voice.lfo.pitchModulationDepth),
-      amplitudeModulationDepth: normalizeParameter99(voice.lfo.amplitudeModulationDepth),
-    },
+    normalizations,
   }
+}
+
+export function normalizeLegacyVoice(voice: Dx7Voice): Dx7Voice {
+  return normalizeLegacyVoiceWithReport(voice).voice
 }
