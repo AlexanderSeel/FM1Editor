@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { suggestMidiPortId, type DeviceTarget } from '../domain/deviceTarget'
+import { publishMidiInputMessage } from '../midi/inputBus'
 import { createMidiMonitorEntry, type MidiMonitorEntry } from '../midi/monitor'
 import type { MidiOutputTarget } from '../midi/output'
 import {
@@ -139,6 +140,7 @@ export function useMidi(target: DeviceTarget = 'fm1') {
     const handleMessage = (event: MIDIMessageEvent) => {
       if (!event.data) return
       appendMonitorEntry(createMidiMonitorEntry('in', input, event.data))
+      publishMidiInputMessage(event.data, event.timeStamp || performance.now())
     }
     input.addEventListener('midimessage', handleMessage)
     void input.open().catch((cause: unknown) => {
