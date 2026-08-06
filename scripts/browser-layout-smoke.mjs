@@ -20,12 +20,19 @@ function assert(condition, message) {
 }
 
 function startPreviewServer() {
-  const command = process.platform === 'win32' ? 'npm.cmd' : 'npm'
-  return spawn(command, ['run', 'preview', '--', '--host', HOST, '--port', String(PORT)], {
-    detached: process.platform !== 'win32',
+  if (process.platform === 'win32') {
+    const command = process.env.ComSpec ?? 'C:\\Windows\\System32\\cmd.exe'
+    return spawn(command, ['/d', '/s', '/c', `npm run preview -- --host ${HOST} --port ${PORT}`], {
+      env: process.env,
+      stdio: ['ignore', 'pipe', 'pipe'],
+      windowsHide: true,
+    })
+  }
+
+  return spawn('npm', ['run', 'preview', '--', '--host', HOST, '--port', String(PORT)], {
+    detached: true,
     env: process.env,
     stdio: ['ignore', 'pipe', 'pipe'],
-    windowsHide: true,
   })
 }
 
