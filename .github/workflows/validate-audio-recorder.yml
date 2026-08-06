@@ -1,0 +1,201 @@
+name: Validate USB audio recorder
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/validate-audio-recorder.yml
+
+permissions:
+  contents: write
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Capture validated commit
+        run: echo "VALIDATED_SHA=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install dependencies
+        id: install
+        continue-on-error: true
+        run: npm install --no-audit --no-fund
+
+      - name: Typecheck
+        id: typecheck
+        continue-on-error: true
+        run: npm run typecheck
+
+      - name: Lint and accessibility
+        id: lint
+        continue-on-error: true
+        run: npm run lint
+
+      - name: Unit tests
+        id: test
+        continue-on-error: true
+        run: npm run test
+
+      - name: Production build
+        id: build
+        continue-on-error: true
+        run: npm run build
+
+      - name: Install Playwright and Chromium
+        id: playwright
+        continue-on-error: true
+        run: |
+          npm install --no-save --package-lock=false --no-audit --no-fund playwright@1.54.2
+          npx playwright install --with-deps chromium
+
+      - name: Validate mocked audio recording in Chromium
+        id: chromium
+        continue-on-error: true
+        shell: bash
+        run: |
+          mkdir -p artifacts
+          python3 - <<'PY'
+          import math
+          import struct
+          import wave
+
+          sample_rate = 48000
+          duration = 3
+          with wave.open('artifacts/fake-input.wav', 'wb') as output:
+              output.setnchannels(1)
+              output.setsampwidth(2)
+              output.setframerate(sample_rate)
+              frames = bytearray()
+              for index in range(sample_rate * duration):
+                  sample = int(0.22 * 32767 * math.sin(2 * math.pi * 440 * index / sample_rate))
+                  frames.extend(struct.pack('<h', sample))
+              output.writeframes(frames)
+          PY
+
+          npm run preview -- --host 127.0.0.1 > /tmp/fm1-preview.log 2>&1 &
+          for attempt in {1..30}; do
+            if curl --fail --silent http://127.0.0.1:4173/ > /dev/null; then break; fi
+            sleep 1
+          done
+          curl --fail http://127.0.0.1:4173/ > /dev/null
+
+          cat > artifacts/validate-audio-recorder.mjs <<'JS'
+          import { chromium } from 'playwright'
+          import { strict as assert } from 'node:assert'
+          import path from 'node:path'
+
+          const fakeAudio = path.resolve('artifacts/fake-input.wav')
+          const browser = await chromium.launch({
+            headless: true,
+            args: [
+              '--use-fake-device-for-media-stream',
+              '--use-fake-ui-for-media-stream',
+              `--use-file-for-fake-audio-capture=${fakeAudio}`,
+            ],
+          })
+          const context = await browser.newContext({ viewport: { width: 1440, height: 1200 } })
+          await context.grantPermissions(['microphone'], { origin: 'http://127.0.0.1:4173' })
+          const page = await context.newPage()
+          await page.goto('http://127.0.0.1:4173/', { waitUntil: 'networkidle' })
+
+          const sectionToggle = page.getByRole('button', { name: /FM-1 USB audio/i })
+          await sectionToggle.click()
+          await page.getByRole('heading', { name: 'Audio recorder' }).waitFor()
+          assert.equal(await page.getByRole('button', { name: 'Start recording' }).isDisabled(), true)
+
+          await page.getByRole('button', { name: 'Allow and connect input' }).click()
+          await page.getByRole('button', { name: 'Reconnect selected input' }).waitFor()
+          await page.getByText(/audio input connected/i).waitFor()
+          assert.match(await page.locator('text=Sample rate').locator('..').innerText(), /\d+ Hz/)
+          assert.equal(await page.getByRole('button', { name: 'Start recording' }).isDisabled(), false)
+
+          await page.waitForFunction(() => Number(document.querySelector('[role="meter"]')?.getAttribute('aria-valuenow') ?? 0) > 0)
+          await page.getByRole('button', { name: 'Start recording' }).click()
+          await page.waitForTimeout(900)
+          await page.getByRole('button', { name: 'Stop' }).click()
+          await page.getByRole('button', { name: 'Save recording' }).waitFor()
+          assert.match(await page.getByText(/\.wav$/).first().innerText(), /fm-1.*\.wav$/)
+
+          page.once('dialog', (dialog) => dialog.accept())
+          await page.getByRole('button', { name: 'Monitoring off' }).click()
+          await page.getByRole('button', { name: 'Monitoring on' }).waitFor()
+          await page.getByRole('button', { name: 'Monitoring on' }).click()
+          await page.getByRole('button', { name: 'Monitoring off' }).waitFor()
+
+          await page.screenshot({ path: 'artifacts/audio-recorder.png', fullPage: true })
+          await browser.close()
+          JS
+
+          node artifacts/validate-audio-recorder.mjs
+          rm artifacts/validate-audio-recorder.mjs
+
+      - name: Upload Chromium capture
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: audio-recorder-validation
+          path: artifacts/audio-recorder.png
+          if-no-files-found: warn
+
+      - name: Record validation receipt
+        if: always()
+        shell: bash
+        env:
+          INSTALL: ${{ steps.install.outcome }}
+          TYPECHECK: ${{ steps.typecheck.outcome }}
+          LINT: ${{ steps.lint.outcome }}
+          TEST: ${{ steps.test.outcome }}
+          BUILD: ${{ steps.build.outcome }}
+          PLAYWRIGHT: ${{ steps.playwright.outcome }}
+          CHROMIUM: ${{ steps.chromium.outcome }}
+        run: |
+          result() {
+            if [ "$1" = "success" ]; then printf '**PASS**'; else printf '**FAIL**'; fi
+          }
+
+          mkdir -p docs/validation
+          cat > docs/validation/audio-recorder.md <<EOF
+          # FM-1 USB audio recorder validation
+
+          Validated source commit: \`$VALIDATED_SHA\`
+
+          - npm install: $(result "$INSTALL")
+          - npm run typecheck: $(result "$TYPECHECK")
+          - npm run lint: $(result "$LINT")
+          - npm run test: $(result "$TEST")
+          - npm run build: $(result "$BUILD")
+          - Playwright and Chromium installation: $(result "$PLAYWRIGHT")
+          - Chromium mocked-media recording check: $(result "$CHROMIUM")
+
+          Validation scope:
+
+          - explicit permission/connect action;
+          - mocked audio-input connection and diagnostics;
+          - synthetic live input level;
+          - local PCM WAV start/stop/finalization;
+          - generated patch-aware filename;
+          - explicit monitoring warning and toggle;
+          - no physical FM-1 USB audio claim.
+          EOF
+
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add docs/validation/audio-recorder.md
+          git commit -m 'test(ci): record USB audio recorder validation'
+          git push origin HEAD:main
+
+          if [ "$INSTALL" != "success" ] || [ "$TYPECHECK" != "success" ] || [ "$LINT" != "success" ] || [ "$TEST" != "success" ] || [ "$BUILD" != "success" ] || [ "$PLAYWRIGHT" != "success" ] || [ "$CHROMIUM" != "success" ]; then
+            exit 1
+          fi
