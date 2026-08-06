@@ -8,6 +8,7 @@ import {
 } from '../domain/operatorLevels'
 import type { Dx7Operator, Dx7Voice } from '../domain/voice'
 import { AlgorithmGraph } from './AlgorithmGraph'
+import { VoiceVariationPanel } from './VoiceVariationPanel'
 
 interface OperatorRoutingEditorProps {
   voice: Dx7Voice
@@ -97,14 +98,17 @@ export function OperatorRoutingEditor({
   }
 
   return (
-    <AlgorithmGraph
-      algorithm={voice.algorithm}
-      onSelect={onSelect}
-      onSolo={toggleSolo}
-      onToggleEnabled={toggleEnabled}
-      operators={voice.operators}
-      selectedOperator={selectedOperator}
-      soloOperator={soloOperator}
-    />
+    <div className="grid gap-4">
+      <VoiceVariationPanel onChange={onChange} voice={voice} />
+      <AlgorithmGraph
+        algorithm={voice.algorithm}
+        onSelect={onSelect}
+        onSolo={toggleSolo}
+        onToggleEnabled={toggleEnabled}
+        operators={voice.operators}
+        selectedOperator={selectedOperator}
+        soloOperator={soloOperator}
+      />
+    </div>
   )
 }
