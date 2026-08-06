@@ -1,0 +1,90 @@
+name: Validate DX7 codec properties
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - .github/workflows/validate-dx7-properties.yml
+      - docs/validation/.trigger-dx7-properties
+      - src/sysex/dx7.property.test.ts
+      - src/sysex/dx7.ts
+      - src/domain/voice.ts
+
+permissions:
+  contents: write
+
+jobs:
+  property-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm install
+      - run: npx vitest run src/sysex/dx7.property.test.ts
+
+  quality:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm install
+      - run: npm run typecheck
+      - run: npm run lint
+      - run: npm run test
+      - run: npm run build
+
+  receipt:
+    if: always()
+    needs:
+      - property-tests
+      - quality
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Record validation receipt
+        env:
+          PROPERTY_RESULT: ${{ needs.property-tests.result }}
+          QUALITY_RESULT: ${{ needs.quality.result }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p docs/validation
+          {
+            echo '# DX7 generated codec property validation'
+            echo
+            echo "Validated source commit: \`${GITHUB_SHA}\`"
+            echo
+            echo "- generated codec property suite: **${PROPERTY_RESULT^^}**"
+            echo "- typecheck, lint, full tests and production build: **${QUALITY_RESULT^^}**"
+            echo
+            echo '- deterministic generated cases sweep every declared numeric parameter range family.'
+            echo '- single-voice messages round-trip across all 16 MIDI channels with valid Yamaha checksums.'
+            echo '- packed voices round-trip byte-for-byte while preserving legal seven-bit reserved fields.'
+            echo '- 32-voice banks round-trip across all 16 MIDI channels with valid Yamaha checksums.'
+            echo '- no hardware transmission behavior was added or changed.'
+          } > docs/validation/dx7-property-roundtrips.md
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add docs/validation/dx7-property-roundtrips.md
+          if ! git diff --cached --quiet; then
+            git commit -m "test(ci): record DX7 codec property validation"
+            git push
+          fi
+
+      - name: Fail when validation failed
+        env:
+          PROPERTY_RESULT: ${{ needs.property-tests.result }}
+          QUALITY_RESULT: ${{ needs.quality.result }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$PROPERTY_RESULT" == 'success' ]]
+          [[ "$QUALITY_RESULT" == 'success' ]]
