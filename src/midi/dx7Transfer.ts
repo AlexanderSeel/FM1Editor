@@ -46,7 +46,7 @@ async function sendDx7BulkMessage(
  * message. The stock DX7 must have matching MIDI channel/System Info settings;
  * Memory Protect requirements remain a hardware-side responsibility.
  */
-export function sendSingleVoiceToDx7(
+export async function sendSingleVoiceToDx7(
   output: MidiOutputTarget,
   voice: Dx7Voice,
   midiChannel = 1,
@@ -61,7 +61,7 @@ export function sendSingleVoiceToDx7(
 }
 
 /** Sends one standard Yamaha 4,104-byte, 32-voice bank SysEx message. */
-export function sendVoiceBankToDx7(
+export async function sendVoiceBankToDx7(
   output: MidiOutputTarget,
   voices: readonly Dx7Voice[],
   midiChannel = 1,
