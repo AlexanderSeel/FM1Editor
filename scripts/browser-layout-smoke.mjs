@@ -10,7 +10,8 @@ const CHANNELS = (process.env.BROWSER_CHANNELS ?? 'chrome,msedge')
   .filter(Boolean)
 
 const VIEWPORTS = [
-  { name: 'desktop', width: 1440, height: 900 },
+  { name: 'desktop-wide', width: 1440, height: 900 },
+  { name: 'desktop-compact', width: 1100, height: 900 },
   { name: 'tablet', width: 820, height: 1180 },
   { name: 'mobile', width: 390, height: 844 },
 ]
@@ -78,6 +79,76 @@ async function assertInsideViewport(locator, viewport, label) {
   assert(box.x + box.width <= viewport.width + 1, `${label} extends beyond ${viewport.width}px at x=${box.x + box.width}.`)
 }
 
+async function addSidebarStressContent(page) {
+  await page.evaluate(() => {
+    const sidebar = document.querySelector('aside.fm1-sidebar')
+    const connectionPanel = sidebar?.querySelector('.fm1-connection-panel')
+    if (!(sidebar instanceof HTMLElement) || !(connectionPanel instanceof HTMLElement)) {
+      throw new Error('Sidebar connection panel was not found for stress content.')
+    }
+
+    const label = document.createElement('label')
+    label.dataset.layoutStress = 'midi-port'
+    label.className = 'mt-4 grid gap-2 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400'
+    label.append('MIDI output stress fixture')
+
+    const select = document.createElement('select')
+    select.className = 'px-3 py-2.5 text-sm normal-case tracking-normal'
+    const option = document.createElement('option')
+    option.value = 'stress-port'
+    option.textContent = 'FM-1 USB MIDI Output — Studio Interface Rack — Extremely Long Manufacturer and Endpoint Name — Channel Bridge A/B/C/D'
+    select.append(option)
+    label.append(select)
+    connectionPanel.append(label)
+
+    const safetyText = sidebar.querySelector('section:last-of-type p:last-child')
+    if (safetyText instanceof HTMLElement) {
+      safetyText.textContent = 'Safety verification text with a deliberately long endpoint identifier FM1_USB_MIDI_AUDIO_COMBINED_INTERFACE_WITHOUT_BREAKPOINTS_0123456789 and additional recovery guidance that must wrap inside the sidebar.'
+    }
+  })
+}
+
+async function assertSidebarContract(sidebar, viewport, channel) {
+  const metrics = await sidebar.evaluate((element) => {
+    const style = getComputedStyle(element)
+    const html = element
+    html.scrollLeft = 100
+    const attemptedScrollLeft = html.scrollLeft
+    html.scrollLeft = 0
+    return {
+      clientWidth: html.clientWidth,
+      scrollWidth: html.scrollWidth,
+      attemptedScrollLeft,
+      overflowX: style.overflowX,
+      overflowY: style.overflowY,
+    }
+  })
+
+  assert(
+    metrics.scrollWidth <= metrics.clientWidth + 1,
+    `${channel}/${viewport.name} sidebar has internal horizontal overflow: ${metrics.scrollWidth}px > ${metrics.clientWidth}px.`,
+  )
+  assert(
+    metrics.overflowX === 'clip' || metrics.overflowX === 'hidden',
+    `${channel}/${viewport.name} sidebar overflow-x is ${metrics.overflowX}, expected clip or hidden.`,
+  )
+  assert(
+    Math.abs(metrics.attemptedScrollLeft) <= 1,
+    `${channel}/${viewport.name} sidebar accepted horizontal scrolling to ${metrics.attemptedScrollLeft}px.`,
+  )
+
+  if (viewport.width >= 1024) {
+    assert(metrics.overflowY === 'auto', `${channel}/${viewport.name} sidebar overflow-y is ${metrics.overflowY}, expected auto.`)
+    const box = await sidebar.boundingBox()
+    assert(box !== null, `${channel}/${viewport.name} sidebar has no desktop bounding box.`)
+    if (viewport.width >= 1280) {
+      assert(box.width >= 409 && box.width <= 411, `${channel}/${viewport.name} sidebar width ${box.width}px is outside the 410px contract.`)
+    } else {
+      assert(box.width >= 339 && box.width <= 381, `${channel}/${viewport.name} sidebar width ${box.width}px is outside the 340–380px contract.`)
+    }
+  }
+}
+
 async function checkLayout(page, viewport, channel) {
   const pageErrors = []
   const consoleErrors = []
@@ -108,6 +179,8 @@ async function checkLayout(page, viewport, channel) {
   const sidebar = page.locator('aside.fm1-sidebar')
   await sidebar.waitFor({ state: 'visible' })
   await assertInsideViewport(sidebar, viewport, `${channel}/${viewport.name} sidebar`)
+  await addSidebarStressContent(page)
+  await assertSidebarContract(sidebar, viewport, channel)
 
   if (viewport.width >= 1024) {
     await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight))
