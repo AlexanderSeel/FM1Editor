@@ -11,8 +11,11 @@ export interface DeviceTargetDefinition {
   id: DeviceTarget
   label: string
   shortLabel: string
+  manufacturerLabel: string
   description: string
   portHint: string
+  safetyBoundary: string
+  unavailableEffectsReason: string | null
   capabilities: DeviceTargetCapabilities
 }
 
@@ -30,8 +33,11 @@ export const DEVICE_TARGETS = [
     id: 'fm1',
     label: 'M-VAVE FM-1',
     shortLabel: 'FM-1',
+    manufacturerLabel: 'M-VAVE',
     description: 'Guarded FM-1 whole-bank workflow, documented effects CCs and general MIDI note playback.',
     portHint: 'A MIDI port containing FM-1 or M-VAVE is suggested when available.',
+    safetyBoundary: 'File operations, documented FM-1 FX CCs, MIDI note playback and browser-local audio recording are active. Immediate single-voice transfer is disabled; device writes require an explicitly confirmed complete 32-voice bank.',
+    unavailableEffectsReason: null,
     capabilities: {
       fm1BankTransfer: true,
       fm1Effects: true,
@@ -43,8 +49,11 @@ export const DEVICE_TARGETS = [
     id: 'dx7',
     label: 'Yamaha DX7',
     shortLabel: 'DX7',
+    manufacturerLabel: 'YAMAHA',
     description: 'Stock DX7 target foundation. File editing and MIDI notes remain available while DX7-specific SysEx operations stay disabled until routed explicitly.',
     portHint: 'A MIDI port containing DX7 or DX-7 is suggested when available.',
+    safetyBoundary: 'File editing, MIDI note playback and browser-local audio recording are active. FM-1 bank and effects writes are disabled. DX7 SysEx transmission remains disabled until each documented operation is routed with target-specific confirmation and tests.',
+    unavailableEffectsReason: 'The documented CC 0–23 effects map belongs to the FM-1 and is not sent while Yamaha DX7 is selected.',
     capabilities: {
       fm1BankTransfer: false,
       fm1Effects: false,
