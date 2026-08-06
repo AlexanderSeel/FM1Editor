@@ -1,15 +1,17 @@
 # FM1 Editor
 
-A TypeScript web editor and librarian for the **M-VAVE FM-1** pocket FM synthesizer.
+A TypeScript web editor and librarian with separate, persistent target modes for the **M-VAVE FM-1** pocket FM synthesizer and a stock **Yamaha DX7**.
 
 ## Implemented baseline
 
 - React, TypeScript, Vite and Tailwind application shell with a viewport-safe sticky/scrollable sidebar;
 - responsive two-column workspace navigation that remains inside the sidebar at desktop widths;
 - Web MIDI capability detection, SysEx permission request and reconnect-aware input/output selection;
-- persisted MIDI port preferences with descriptor fallback when browser port IDs change;
+- persisted device target selection plus per-target MIDI port preferences, descriptor fallback and non-binding FM-1/DX7 port-name suggestions;
+- target-routed safety boundaries that prevent FM-1 bank/effects operations from appearing in Yamaha DX7 mode;
 - timestamped incoming/outgoing MIDI monitor with direction/text filtering, hexadecimal data and JSON export;
 - Yamaha DX7-compatible 155-byte single-voice and 4,096-byte 32-voice bank codecs;
+- guarded stock-DX7 transmission of standard 163-byte single-voice and 4,104-byte 32-voice bank messages with matching-channel, System Info, Memory Protect and destructive-bank confirmations;
 - Yamaha checksum validation and multi-message `.syx` file classification;
 - structured per-message diagnostics with byte offsets, message indexes, lengths, manufacturer/format bytes and checksum errors;
 - salvage of complete supported messages from mixed files that also contain padding, unsupported messages or incomplete trailing data;
@@ -36,7 +38,7 @@ A TypeScript web editor and librarian for the **M-VAVE FM-1** pocket FM synthesi
 - Vitest coverage for codecs, imports, catalog, library migration/backup, bank merging, audition, audio recording, effects, sequencing and MIDI monitoring;
 - GitHub Actions workflow for typecheck, ESLint/JSX accessibility, tests and production build.
 
-See [`PLAN.md`](./PLAN.md) for unresolved work, [`docs/validation/ci-receipt.md`](./docs/validation/ci-receipt.md) for the general validation receipt and [`docs/validation/audio-recorder.md`](./docs/validation/audio-recorder.md) for the mocked-media recorder validation.
+See [`PLAN.md`](./PLAN.md) for unresolved work, [`docs/validation/ci-receipt.md`](./docs/validation/ci-receipt.md) for the general validation receipt, [`docs/validation/audio-recorder.md`](./docs/validation/audio-recorder.md) for mocked-media recorder validation, [`docs/validation/target-capability-routing.md`](./docs/validation/target-capability-routing.md) for target routing, and [`docs/validation/dx7-bulk-transfer.md`](./docs/validation/dx7-bulk-transfer.md) for the guarded DX7 bulk-transfer gate.
 
 ## Merged patch catalog
 
@@ -68,6 +70,19 @@ npm run catalog:sync
 Both `npm run dev` and `npm run build` execute the synchronization in best-effort mode before Vite starts. This prevents a missing `.syx` mirror path from being answered by Vite's SPA fallback `index.html`. When no validated sync manifest exists, runtime loading skips the local mirror and attempts the direct source instead. See [`docs/research/patch-catalog.md`](./docs/research/patch-catalog.md).
 
 Patch ownership and usage permissions vary across the archive. FM1 Editor preserves source metadata and does not claim that every included bank is public domain. Review the generated manifest and source terms before publishing a hosted catalog.
+
+## Stock Yamaha DX7 target
+
+Selecting **Yamaha DX7** keeps file editing, the local library, audio recording and MIDI note audition available while hiding FM-1-only effects and bank/preset mapping. Device transmission is never automatic.
+
+The DX7 audition panel supports two separately confirmed standard Yamaha receive operations:
+
+1. **Send current voice to edit buffer** transmits one channel-addressed 163-byte single-voice bulk message. It does not automatically store the voice in a numbered internal slot.
+2. **Overwrite DX7 with loaded 32-voice bank** transmits one channel-addressed 4,104-byte bank message and is treated as a destructive replacement of the complete internal bank.
+
+Both controls require Web MIDI SysEx permission, a manually verified output, a matching DX7 MIDI channel, confirmation that System Info is available and confirmation that Memory Protect is off. The application sends all-notes-off before the bulk message and records the transfer in the MIDI monitor.
+
+Voice-parameter changes, function/performance data and programmatic dump requests remain disabled. No dump-request frame will be added unless an original Yamaha data-format source proves that the stock DX7 supports it; initiate outgoing dumps from the DX7 front panel meanwhile. Physical stock-DX7 reception remains unverified and must not be reported as passed until tested.
 
 ## Bank merge and virtual piano
 
