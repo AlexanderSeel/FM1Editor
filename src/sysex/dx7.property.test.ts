@@ -173,7 +173,11 @@ describe('DX7 generated codec properties', () => {
 
       const decoded = decodeVoiceBankMessage(message)
       expect(decoded.channel).toBe(channel)
-      decoded.voices.forEach((voice, index) => expect(voice).toMatchObject(voices[index]))
+      decoded.voices.forEach((voice, index) => {
+        const expected = voices[index]
+        if (!expected) throw new Error(`Missing generated bank voice ${index + 1}.`)
+        expect(voice).toMatchObject(expected)
+      })
       expect(encodeVoiceBankMessage(decoded.voices, channel)).toEqual(message)
     }
   })
