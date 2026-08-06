@@ -6,13 +6,17 @@ import {
   DX7_SINGLE_MESSAGE_LENGTH,
   Dx7SysexError,
 } from './dx7'
-import { normalizeLegacyVoice } from './normalizeLegacyVoice'
+import {
+  normalizeLegacyVoiceWithReport,
+  type Dx7CompatibilityNormalization,
+} from './normalizeLegacyVoice'
 
 export interface ImportedSingleVoice {
   kind: 'single-voice'
   channel: number
   voice: Dx7Voice
   raw: Uint8Array
+  normalizations: readonly Dx7CompatibilityNormalization[]
 }
 
 export interface ImportedVoiceBank {
@@ -20,6 +24,7 @@ export interface ImportedVoiceBank {
   channel: number
   voices: readonly Dx7Voice[]
   raw: Uint8Array
+  normalizations: readonly Dx7CompatibilityNormalization[]
 }
 
 export interface UnsupportedSysexMessage {
@@ -39,6 +44,7 @@ export type SysexDiagnosticCode =
   | 'incomplete-message'
   | 'unsupported-message'
   | 'decode-error'
+  | 'compatibility-normalization'
 
 export interface SysexDiagnostic {
   code: SysexDiagnosticCode
@@ -70,6 +76,11 @@ interface ExtractionReport {
   messages: readonly ExtractedSysexMessage[]
   diagnostics: readonly SysexDiagnostic[]
   ignoredByteCount: number
+}
+
+interface DecodedMessageResult {
+  entry: ImportedSysexMessage
+  diagnostics: readonly SysexDiagnostic[]
 }
 
 function hexByte(value: number | undefined): string {
@@ -154,10 +165,33 @@ function scanSysexFile(file: Uint8Array): ExtractionReport {
   return { messages, diagnostics, ignoredByteCount }
 }
 
-function decodeMessage(message: ExtractedSysexMessage): {
-  entry: ImportedSysexMessage
-  diagnostic?: SysexDiagnostic
-} {
+function createNormalizationDiagnostics(
+  normalizations: readonly Dx7CompatibilityNormalization[],
+  message: ExtractedSysexMessage,
+): SysexDiagnostic[] {
+  return normalizations.map((normalization) => ({
+    code: 'compatibility-normalization',
+    severity: 'warning',
+    message: `Normalized ${normalization.path} from ${normalization.originalValue} to ${normalization.normalizedValue} for Yamaha DX7 compatibility.`,
+    offset: message.start,
+    messageIndex: message.index,
+    length: message.raw.length,
+    ...(message.raw[1] === undefined ? {} : { manufacturer: message.raw[1] }),
+    ...(message.raw[3] === undefined ? {} : { format: message.raw[3] }),
+  }))
+}
+
+function prefixNormalization(
+  normalization: Dx7CompatibilityNormalization,
+  voiceIndex: number,
+): Dx7CompatibilityNormalization {
+  return {
+    ...normalization,
+    path: `voice[${voiceIndex + 1}].${normalization.path}`,
+  }
+}
+
+function decodeMessage(message: ExtractedSysexMessage): DecodedMessageResult {
   const { raw, start, index } = message
   const manufacturer = raw[1]
   const format = raw[3]
@@ -165,31 +199,36 @@ function decodeMessage(message: ExtractedSysexMessage): {
   try {
     if (raw.length === DX7_SINGLE_MESSAGE_LENGTH && format === 0x00) {
       const decoded = decodeSingleVoiceMessage(raw)
+      const normalized = normalizeLegacyVoiceWithReport(decoded.voice)
       return {
         entry: {
           kind: 'single-voice',
           ...decoded,
-          voice: normalizeLegacyVoice(decoded.voice),
+          voice: normalized.voice,
           raw,
+          normalizations: normalized.normalizations,
         },
+        diagnostics: createNormalizationDiagnostics(normalized.normalizations, message),
       }
     }
     if (raw.length === DX7_BANK_MESSAGE_LENGTH && format === 0x09) {
-      const decoded = decodeVoiceBankMessage(raw)
+      const normalizedVoices = decodedVoiceBank(message)
       return {
         entry: {
           kind: 'voice-bank',
-          ...decoded,
-          voices: decoded.voices.map(normalizeLegacyVoice),
+          channel: normalizedVoices.channel,
+          voices: normalizedVoices.voices,
           raw,
+          normalizations: normalizedVoices.normalizations,
         },
+        diagnostics: createNormalizationDiagnostics(normalizedVoices.normalizations, message),
       }
     }
 
     const reason = `Unsupported SysEx message (${raw.length} bytes, manufacturer ${hexByte(manufacturer)}, format ${hexByte(format)}).`
     return {
       entry: { kind: 'unsupported', raw, reason },
-      diagnostic: {
+      diagnostics: [{
         code: 'unsupported-message',
         severity: 'warning',
         message: reason,
@@ -198,13 +237,13 @@ function decodeMessage(message: ExtractedSysexMessage): {
         length: raw.length,
         ...(manufacturer === undefined ? {} : { manufacturer }),
         ...(format === undefined ? {} : { format }),
-      },
+      }],
     }
   } catch (cause) {
     const reason = cause instanceof Error ? cause.message : 'Could not parse SysEx message.'
     return {
       entry: { kind: 'unsupported', raw, reason },
-      diagnostic: {
+      diagnostics: [{
         code: 'decode-error',
         severity: 'error',
         message: reason,
@@ -213,9 +252,24 @@ function decodeMessage(message: ExtractedSysexMessage): {
         length: raw.length,
         ...(manufacturer === undefined ? {} : { manufacturer }),
         ...(format === undefined ? {} : { format }),
-      },
+      }],
     }
   }
+}
+
+function decodedVoiceBank(message: ExtractedSysexMessage): {
+  channel: number
+  voices: readonly Dx7Voice[]
+  normalizations: readonly Dx7CompatibilityNormalization[]
+} {
+  const decoded = decodeVoiceBankMessage(message.raw)
+  const normalizations: Dx7CompatibilityNormalization[] = []
+  const voices = decoded.voices.map((voice, voiceIndex) => {
+    const normalized = normalizeLegacyVoiceWithReport(voice)
+    normalizations.push(...normalized.normalizations.map((entry) => prefixNormalization(entry, voiceIndex)))
+    return normalized.voice
+  })
+  return { channel: decoded.channel, voices, normalizations }
 }
 
 export function analyzeSysexFile(file: Uint8Array): SysexImportReport {
@@ -224,7 +278,7 @@ export function analyzeSysexFile(file: Uint8Array): SysexImportReport {
   const entries = decoded.map((result) => result.entry)
   const diagnostics = [
     ...extraction.diagnostics,
-    ...decoded.flatMap((result) => result.diagnostic ? [result.diagnostic] : []),
+    ...decoded.flatMap((result) => result.diagnostics),
   ]
 
   return {
