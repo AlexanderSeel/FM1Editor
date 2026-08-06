@@ -21,142 +21,115 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - name: Run static verification
-        id: static
-        shell: bash
-        run: |
-          set +e
-          npm install --no-audit --no-fund > /tmp/install.log 2>&1
-          install_status=$?
-          npm run typecheck > /tmp/typecheck.log 2>&1
-          typecheck_status=$?
-          npm run lint > /tmp/lint.log 2>&1
-          lint_status=$?
-          npm run test > /tmp/test.log 2>&1
-          test_status=$?
-          npm run build > /tmp/build.log 2>&1
-          build_status=$?
-          set -e
-          echo "install=$install_status" >> "$GITHUB_OUTPUT"
-          echo "typecheck=$typecheck_status" >> "$GITHUB_OUTPUT"
-          echo "lint=$lint_status" >> "$GITHUB_OUTPUT"
-          echo "test=$test_status" >> "$GITHUB_OUTPUT"
-          echo "build=$build_status" >> "$GITHUB_OUTPUT"
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+      - name: Typecheck
+        run: npm run typecheck
+      - name: Lint and accessibility
+        run: npm run lint
+      - name: Test
+        run: npm run test
+      - name: Production build
+        run: npm run build
       - name: Install Playwright and Chromium
-        if: steps.static.outputs.install == '0' && steps.static.outputs.build == '0'
         run: |
           npm install --no-save --package-lock=false --no-audit --no-fund playwright@1.54.2
           npx playwright install --with-deps chromium
-      - name: Run browser verification
-        id: browser
-        if: steps.static.outputs.install == '0' && steps.static.outputs.build == '0'
+      - name: Validate keyboard scaling in Chromium
         shell: bash
         run: |
-          mkdir -p artifacts docs/validation
+          mkdir -p artifacts
           npm run preview -- --host 127.0.0.1 > /tmp/fm1-preview.log 2>&1 &
           for attempt in {1..30}; do
             if curl --fail --silent http://127.0.0.1:4173/ > /dev/null; then break; fi
             sleep 1
           done
+          curl --fail http://127.0.0.1:4173/ > /dev/null
           cat > artifacts/verify-keyboard-scaling.mjs <<'JS'
           import { chromium } from 'playwright'
           import { strict as assert } from 'node:assert'
-          import { writeFile } from 'node:fs/promises'
 
           async function sliderValue(locator) {
             return Number(await locator.getAttribute('aria-valuenow'))
           }
 
-          let browser
-          try {
-            browser = await chromium.launch({ headless: true })
-            const page = await browser.newPage({ viewport: { width: 1440, height: 1200 } })
-            await page.goto('http://127.0.0.1:4173/', { waitUntil: 'networkidle' })
+          const browser = await chromium.launch({ headless: true })
+          const page = await browser.newPage({ viewport: { width: 1440, height: 1200 } })
+          await page.goto('http://127.0.0.1:4173/', { waitUntil: 'networkidle' })
 
-            async function drag(locator, deltaX, deltaY) {
-              await locator.scrollIntoViewIfNeeded()
-              const box = await locator.boundingBox()
-              assert.ok(box)
-              const x = box.x + box.width / 2
-              const y = box.y + box.height / 2
-              await locator.hover()
-              await page.mouse.move(x, y)
-              await page.mouse.down()
-              await page.mouse.move(x + deltaX, y + deltaY, { steps: 8 })
-              await page.mouse.up()
-            }
-
-            const graph = page.getByRole('group', { name: 'Operator 1 keyboard scaling draggable controls' })
-            await graph.scrollIntoViewIfNeeded()
-            await graph.waitFor()
-            assert.equal(await graph.getByRole('slider').count(), 3)
-
-            const breakpoint = page.getByRole('slider', { name: 'Operator 1 keyboard scaling breakpoint' })
-            const breakpointNumeric = page.getByRole('slider', { name: 'Break point', exact: true })
-            assert.equal(await sliderValue(breakpoint), 39)
-            assert.equal(await breakpointNumeric.inputValue(), '39')
-            await drag(breakpoint, 58, 0)
-            const draggedBreakpoint = await sliderValue(breakpoint)
-            assert.ok(draggedBreakpoint > 39)
-            assert.equal(await breakpointNumeric.inputValue(), String(draggedBreakpoint))
-
-            await page.getByRole('button', { name: 'Undo last editor change' }).click()
-            await page.waitForFunction(() => document.querySelector('[aria-label="Operator 1 keyboard scaling breakpoint"]')?.getAttribute('aria-valuenow') === '39')
-            assert.equal(await breakpointNumeric.inputValue(), '39')
-
-            const leftDepth = page.getByRole('slider', { name: 'Operator 1 keyboard scaling left depth' })
-            const leftDepthNumeric = page.getByRole('slider', { name: 'Left depth', exact: true })
-            await drag(leftDepth, 0, 42)
-            const draggedLeftDepth = await sliderValue(leftDepth)
-            assert.ok(draggedLeftDepth > 0)
-            assert.equal(await leftDepthNumeric.inputValue(), String(draggedLeftDepth))
-
-            const rightCurve = page.getByLabel('Right curve', { exact: true })
-            await rightCurve.selectOption('positive-linear')
-            assert.equal(await rightCurve.inputValue(), 'positive-linear')
-
-            const rightDepth = page.getByRole('slider', { name: 'Operator 1 keyboard scaling right depth' })
-            const rightDepthNumeric = page.getByRole('slider', { name: 'Right depth', exact: true })
-            await drag(rightDepth, 0, -42)
-            const draggedRightDepth = await sliderValue(rightDepth)
-            assert.ok(draggedRightDepth > 0)
-            assert.equal(await rightDepthNumeric.inputValue(), String(draggedRightDepth))
-
-            await breakpoint.focus()
-            await page.keyboard.press('Home')
-            assert.equal(await sliderValue(breakpoint), 0)
-            assert.equal(await breakpointNumeric.inputValue(), '0')
-            await page.keyboard.press('End')
-            assert.equal(await sliderValue(breakpoint), 99)
-            assert.equal(await breakpointNumeric.inputValue(), '99')
-
-            await page.screenshot({ path: 'artifacts/keyboard-scaling-editor.png', fullPage: true })
-            await writeFile('/tmp/browser-status', '0')
-          } catch (error) {
-            await writeFile('/tmp/browser-error.log', error instanceof Error ? error.stack ?? error.message : String(error))
-            await writeFile('/tmp/browser-status', '1')
-          } finally {
-            await browser?.close()
+          async function drag(locator, deltaX, deltaY) {
+            await locator.scrollIntoViewIfNeeded()
+            const box = await locator.boundingBox()
+            assert.ok(box)
+            const x = box.x + box.width / 2
+            const y = box.y + box.height / 2
+            await locator.hover()
+            await page.mouse.move(x, y)
+            await page.mouse.down()
+            await page.mouse.move(x + deltaX, y + deltaY, { steps: 8 })
+            await page.mouse.up()
           }
+
+          const graph = page.getByRole('group', { name: 'Operator 1 keyboard scaling draggable controls' })
+          await graph.scrollIntoViewIfNeeded()
+          await graph.waitFor()
+          assert.equal(await graph.getByRole('slider').count(), 3)
+
+          const breakpoint = page.getByRole('slider', { name: 'Operator 1 keyboard scaling breakpoint' })
+          const breakpointNumeric = page.getByRole('slider', { name: 'Break point', exact: true })
+          assert.equal(await sliderValue(breakpoint), 39)
+          assert.equal(await breakpointNumeric.inputValue(), '39')
+          await drag(breakpoint, 58, 0)
+          const draggedBreakpoint = await sliderValue(breakpoint)
+          assert.ok(draggedBreakpoint > 39)
+          assert.equal(await breakpointNumeric.inputValue(), String(draggedBreakpoint))
+
+          await page.getByRole('button', { name: 'Undo last editor change' }).click()
+          await page.waitForFunction(() => document.querySelector('[aria-label="Operator 1 keyboard scaling breakpoint"]')?.getAttribute('aria-valuenow') === '39')
+          assert.equal(await breakpointNumeric.inputValue(), '39')
+
+          const leftDepth = page.getByRole('slider', { name: 'Operator 1 keyboard scaling left depth' })
+          const leftDepthNumeric = page.getByRole('slider', { name: 'Left depth', exact: true })
+          await drag(leftDepth, 0, 42)
+          const draggedLeftDepth = await sliderValue(leftDepth)
+          assert.ok(draggedLeftDepth > 0)
+          assert.equal(await leftDepthNumeric.inputValue(), String(draggedLeftDepth))
+
+          const rightCurve = page.getByLabel('Right curve')
+          await rightCurve.selectOption('positive-linear')
+          assert.equal(await rightCurve.inputValue(), 'positive-linear')
+
+          const rightDepth = page.getByRole('slider', { name: 'Operator 1 keyboard scaling right depth' })
+          const rightDepthNumeric = page.getByRole('slider', { name: 'Right depth', exact: true })
+          await drag(rightDepth, 0, -42)
+          const draggedRightDepth = await sliderValue(rightDepth)
+          assert.ok(draggedRightDepth > 0)
+          assert.equal(await rightDepthNumeric.inputValue(), String(draggedRightDepth))
+
+          await breakpoint.focus()
+          await page.keyboard.press('Home')
+          assert.equal(await sliderValue(breakpoint), 0)
+          assert.equal(await breakpointNumeric.inputValue(), '0')
+          await page.keyboard.press('End')
+          assert.equal(await sliderValue(breakpoint), 99)
+          assert.equal(await breakpointNumeric.inputValue(), '99')
+
+          await page.screenshot({ path: 'artifacts/keyboard-scaling-editor.png', fullPage: true })
+          await browser.close()
           JS
           node artifacts/verify-keyboard-scaling.mjs
           rm artifacts/verify-keyboard-scaling.mjs
-          echo "status=$(cat /tmp/browser-status)" >> "$GITHUB_OUTPUT"
-      - name: Record deterministic result
+      - uses: actions/upload-artifact@v4
+        with:
+          name: keyboard-scaling-render
+          path: artifacts/keyboard-scaling-editor.png
+          if-no-files-found: error
+      - name: Record validation
         shell: bash
         run: |
-          install_status="${{ steps.static.outputs.install }}"
-          typecheck_status="${{ steps.static.outputs.typecheck }}"
-          lint_status="${{ steps.static.outputs.lint }}"
-          test_status="${{ steps.static.outputs.test }}"
-          build_status="${{ steps.static.outputs.build }}"
-          browser_status="${{ steps.browser.outputs.status }}"
-          browser_status="${browser_status:-1}"
           validated_sha="$(git rev-parse HEAD)"
           mkdir -p docs/validation
-
-          if [ "$install_status" = 0 ] && [ "$typecheck_status" = 0 ] && [ "$lint_status" = 0 ] && [ "$test_status" = 0 ] && [ "$build_status" = 0 ] && [ "$browser_status" = 0 ]; then
-            cat > docs/validation/keyboard-scaling-editor.md <<EOF
+          cat > docs/validation/keyboard-scaling-editor.md <<EOF
           # Keyboard scaling editor validation
 
           Validated source commit: \`$validated_sha\`
@@ -186,45 +159,11 @@ jobs:
           - breakpoint, depths, rate scaling and curve selects remain available as precise controls;
           - edits flow through voice history, SysEx export and bank merge data.
           EOF
-            rm -f docs/validation/keyboard-scaling-final-diagnostics.md
-            commit_message='test(ci): record keyboard scaling validation'
-          else
-            {
-              echo '# Keyboard scaling final diagnostics'
-              echo
-              echo "Source commit: \`$validated_sha\`"
-              echo
-              echo "- install exit: **$install_status**"
-              echo "- typecheck exit: **$typecheck_status**"
-              echo "- lint exit: **$lint_status**"
-              echo "- test exit: **$test_status**"
-              echo "- build exit: **$build_status**"
-              echo "- browser exit: **$browser_status**"
-              for item in install typecheck lint test build; do
-                echo
-                echo "## $item"
-                echo
-                echo '```text'
-                tail -n 100 "/tmp/$item.log" 2>/dev/null || true
-                echo '```'
-              done
-              echo
-              echo '## browser'
-              echo
-              echo '```text'
-              cat /tmp/browser-error.log 2>/dev/null || echo 'Browser verification did not run.'
-              echo '```'
-            } > docs/validation/keyboard-scaling-final-diagnostics.md
-            commit_message='chore(ci): record keyboard scaling final diagnostics'
-          fi
+          rm -f docs/validation/keyboard-scaling-final-diagnostics.md
 
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          if [ -f docs/validation/keyboard-scaling-editor.md ]; then git add docs/validation/keyboard-scaling-editor.md; fi
-          if [ -f docs/validation/keyboard-scaling-final-diagnostics.md ]; then git add docs/validation/keyboard-scaling-final-diagnostics.md; else git add -u docs/validation/keyboard-scaling-final-diagnostics.md 2>/dev/null || true; fi
-          git commit -m "$commit_message"
+          git add docs/validation/keyboard-scaling-editor.md
+          git add -u docs/validation/keyboard-scaling-final-diagnostics.md 2>/dev/null || true
+          git commit -m 'test(ci): record keyboard scaling validation'
           git push origin HEAD:main
-
-          if [ "$browser_status" != 0 ] || [ "$install_status" != 0 ] || [ "$typecheck_status" != 0 ] || [ "$lint_status" != 0 ] || [ "$test_status" != 0 ] || [ "$build_status" != 0 ]; then
-            exit 1
-          fi
