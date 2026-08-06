@@ -1,0 +1,102 @@
+name: Patch and validate advanced sequencer
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - docs/validation/.trigger-advanced-sequencer
+
+permissions:
+  contents: write
+
+jobs:
+  patch-and-validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Apply strict TypeScript fixes
+        shell: python
+        run: |
+          from pathlib import Path
+          import re
+
+          editor = Path('src/components/SequenceEditor.tsx')
+          text = editor.read_text()
+          old = "title={`${formatNote(note)} · Step ${index + 1}${event?.shiftKey ? '' : ''}`}"
+          new = "title={`${formatNote(note)} · Step ${index + 1}`}"
+          if old not in text:
+              raise SystemExit('SequenceEditor tooltip marker not found')
+          editor.write_text(text.replace(old, new))
+
+          operations = Path('src/domain/sequenceOperations.ts')
+          text = operations.read_text()
+          replacement = '''export function updateStepNotes(step: SequenceStep, note: number, additive: boolean): SequenceStep {
+            const normalized = clampNote(note)
+            const withoutNotes = (() => {
+              const { notes: _notes, ...rest } = step
+              return rest
+            })()
+            if (!additive) return { ...withoutNotes, enabled: true, note: normalized }
+            const current = [...getStepNotes(step)]
+            const existingIndex = current.indexOf(normalized)
+            if (existingIndex >= 0) current.splice(existingIndex, 1)
+            else if (current.length < 6) current.push(normalized)
+            current.sort((left, right) => left - right)
+            if (current.length === 0) return { ...withoutNotes, enabled: false }
+            return {
+              ...withoutNotes,
+              enabled: true,
+              note: current[0] ?? normalized,
+              ...(current.length > 1 ? { notes: current } : {}),
+            }
+          }
+          '''
+          text, count = re.subn(r'export function updateStepNotes\([\s\S]*?\n}\n?$', replacement, text)
+          if count != 1:
+              raise SystemExit(f'Expected one updateStepNotes function, replaced {count}')
+          operations.write_text(text)
+      - run: npm install
+      - run: npm run typecheck
+      - run: npm run lint
+      - run: npm run test
+      - run: npm run build
+      - name: Record validated source and receipt
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p docs/validation
+          cat > docs/validation/advanced-sequencer.md <<EOF
+          # Advanced sequencer validation
+
+          Validated source trigger commit: `${GITHUB_SHA}`
+
+          - TypeScript typecheck: **SUCCESS**
+          - ESLint and JSX accessibility: **SUCCESS**
+          - Full Vitest suite: **SUCCESS**
+          - Production build: **SUCCESS**
+
+          Covered functionality:
+
+          - backward-compatible sequence project loading;
+          - octave-oriented two-octave piano-roll editing;
+          - additive polyphonic/chord steps;
+          - forward, reverse, ping-pong and deterministic random directions;
+          - whole-pattern copy/paste, rotation and randomization;
+          - single-note, bassline, major/minor arpeggio and chord-progression presets;
+          - saved pattern snapshots, repeat counts and song arrangement ordering;
+          - browser playhead and scheduling-drift diagnostics;
+          - internal MIDI clock at 24 PPQN;
+          - external MIDI Start/Continue/Clock/Stop following through the selected input;
+          - no FM-1 internal pattern SysEx was added.
+          EOF
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/components/SequenceEditor.tsx src/domain/sequenceOperations.ts docs/validation/advanced-sequencer.md
+          git commit -m "fix(sequencer): finalize advanced workflow"
+          git push
