@@ -62,6 +62,18 @@ function assertIntegerRange(label: string, value: number, minimum: number, maxim
   }
 }
 
+function assertMonoPolyMode(value: string): asserts value is Dx7MonoPolyMode {
+  if (value !== 'poly' && value !== 'mono') {
+    throw new RangeError(`DX7 mono/poly mode must be poly or mono; received ${value}.`)
+  }
+}
+
+function assertPortamentoMode(value: string): asserts value is Dx7PortamentoMode {
+  if (value !== 'retain' && value !== 'follow') {
+    throw new RangeError(`DX7 portamento mode must be retain or follow; received ${value}.`)
+  }
+}
+
 export function encodeDx7ControllerAssignment(assignment: Dx7ControllerAssignment): number {
   return (assignment.pitch ? 0x01 : 0)
     | (assignment.amplitude ? 0x02 : 0)
@@ -83,6 +95,8 @@ function validateController(label: string, controller: Dx7ControllerFunction): v
 }
 
 export function validateDx7FunctionState(state: Dx7FunctionState): void {
+  assertMonoPolyMode(state.monoPolyMode)
+  assertPortamentoMode(state.portamentoMode)
   assertIntegerRange('DX7 pitch bend range', state.pitchBendRange, 0, 12)
   assertIntegerRange('DX7 pitch bend step', state.pitchBendStep, 0, 12)
   assertIntegerRange('DX7 portamento time', state.portamentoTime, 0, 99)
