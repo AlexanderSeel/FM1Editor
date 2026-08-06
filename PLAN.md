@@ -50,3 +50,31 @@ Known limitations, current evidence and conservative recovery procedures are mai
 - [ ] Execute typecheck, lint, the full test suite, production build and the permanent Chrome/Edge FM-1 + DX7 responsive matrices. The scripts now cover compact layout, the 340–410 px vertical-only sidebar with long labels, FM-1 bank/piano controls and guarded DX7 voice/function panels, but current push-run scheduling produced no receipt.
 - [ ] Test Chrome and Edge on Windows with a physical FM-1 over USB MIDI and USB audio, including merged bank import, destination selection, preset recall, recording, note-off recovery and channel selection; test BLE MIDI where browser/platform support permits.
 - [ ] Add GitHub Pages deployment after secure-context routing and Web MIDI/Web Audio behavior are verified.
+
+## 9. Audio-to-FM sound reconstruction
+
+The staged technical decision and reviewed libraries/research are documented in [`docs/research/audio-to-fm-and-virtual-synth.md`](./docs/research/audio-to-fm-and-virtual-synth.md).
+
+- [ ] Add local WAV/MP3 upload with region selection, duration/size limits, silence trimming, mono analysis, pitch detection with manual override, normalization controls, content hashes and explicit privacy status.
+- [ ] Implement reproducible audio descriptors for both references and virtual renders: amplitude envelope, multi-resolution STFT/mel spectrum, MFCCs, spectral centroid, rolloff and flatness.
+- [ ] Implement nearest-preset retrieval by rendering and indexing eligible voices from the existing DX7 catalog at standardized notes/velocities, then return several ranked candidates with dry A/B playback and explicit load actions.
+- [ ] Add a deterministic offline virtual-render API and descriptor cache so matching does not depend on physical FM-1 hardware or real-time playback timing.
+- [ ] Implement cancellable, repeatable evolutionary/CMA-ES refinement starting from the best catalog candidates and operating only on legal semantic `Dx7Voice` fields; begin with constrained parameter groups before attempting the full search space.
+- [ ] Compare retrieval-only, evolutionary and learned-initialization approaches using synthetic ground-truth patches and real isolated sounds; report similarity metrics, runtime and failure cases rather than promising exact reconstruction.
+- [ ] Reproduce and license-audit Sound2Synth, SpiegeLib/Dexed sound matching, DDX7 and related DDSP approaches before using code, weights, datasets or preprocessing in production.
+- [ ] Add optional server/Python acceleration only behind explicit upload consent, documented retention/deletion, model/version metadata and a fully local fallback for normal editing and audition.
+- [ ] Return multiple editable candidates with semantic parameter diffs, source initialization, metric breakdown, `.syx` export and optional FM-1-inspired FX state; never auto-send a generated patch to hardware.
+
+## 10. Virtual DX7 / FM-1-inspired synthesizer
+
+The virtual engine must be described as DX7-compatible and FM-1-inspired until physical comparison proves stronger equivalence.
+
+- [ ] Audit the Apache-2.0 MSFA sound-engine boundary used by Dexed, preserve required notices and create a feasibility spike that compiles only the compatible engine core to WebAssembly; do not import the complete GPL-3.0 Dexed wrapper into the MIT application without an explicit licensing decision.
+- [ ] Implement a deterministic offline PCM renderer and a low-latency AudioWorklet renderer with polyphony, note on/off, velocity, pitch bend, modulation, sustain, aftertouch, all-notes-off and lifecycle cleanup.
+- [ ] Load the current semantic voice directly into the virtual engine and route the virtual piano, preset audition and browser sequencer to local audio without requiring Web MIDI hardware.
+- [ ] Evaluate Synth_Dexed and `dx7-synth-js` as implementation references or fallbacks only after branch-level license, compatibility, missing-parameter and maintenance audits.
+- [ ] Implement a separate FM-1-inspired effect graph for documented CC `0–23`: filter, reverb, delay, distortion, chorus and phaser, using native Web Audio and/or audited MIT-licensed Tone.js components.
+- [ ] Reuse `Fm1FxState` and the documented value ranges, but keep dry bypass and clearly state that effect algorithms, internal scaling, routing order, stereo behavior and headroom are not known to match physical FM-1 firmware.
+- [ ] Add a Virtual FM-1 preview target with local-audio enable, dry/FX toggle, master gain, limiter, polyphony/CPU diagnostics, current voice/effect synchronization, note/chord WAV rendering and uploaded-reference A/B comparison.
+- [ ] Add deterministic render regression tests, tolerant spectral comparisons against trusted MSFA/Dexed output, effect-isolation tests, AudioWorklet underrun checks and Chrome/Edge performance limits.
+- [ ] After physical USB audio is verified, record controlled dry/effected FM-1 samples by firmware and document measured differences without silently changing Yamaha-compatible file semantics.
