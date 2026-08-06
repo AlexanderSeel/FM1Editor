@@ -76,9 +76,13 @@ jobs:
         run: node scripts/browser-layout-smoke.mjs
 
   finalize:
+    if: always()
     needs: [software, browsers]
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    env:
+      SOFTWARE_RESULT: ${{ needs.software.result }}
+      BROWSER_RESULT: ${{ needs.browsers.result }}
     steps:
       - name: Checkout latest main
         uses: actions/checkout@v4
@@ -86,7 +90,7 @@ jobs:
           ref: main
           fetch-depth: 0
 
-      - name: Record validated result
+      - name: Record result
         shell: bash
         run: |
           git pull --rebase origin main
@@ -95,24 +99,28 @@ jobs:
           from pathlib import Path
 
           validated = os.environ['GITHUB_SHA']
+          software = os.environ['SOFTWARE_RESULT']
+          browsers = os.environ['BROWSER_RESULT']
+          success = software == 'success' and browsers == 'success'
+
           plan_path = Path('PLAN.md')
           plan = plan_path.read_text(encoding='utf-8')
           item = "- [ ] Re-run typecheck, lint, the full test suite, production build and the Chrome/Edge responsive matrix for the compact layout, 340–410 px vertical-only sidebar with long labels, and guarded DX7 voice/function parameter controls when GitHub Actions scheduling is available.\n"
-          if item not in plan:
-              raise SystemExit('Expected validation PLAN.md item was not found.')
-          plan_path.write_text(plan.replace(item, '', 1), encoding='utf-8')
+          if success:
+              if item not in plan:
+                  raise SystemExit('Expected validation PLAN.md item was not found.')
+              plan_path.write_text(plan.replace(item, '', 1), encoding='utf-8')
 
+          status = 'SUCCESS' if success else 'FAILED'
           receipt = f'''# Current software and browser validation
 
           Validated source commit: `{validated}`
 
-          - npm install: **SUCCESS**
-          - TypeScript typecheck: **SUCCESS**
-          - ESLint and JSX accessibility: **SUCCESS**
-          - Full Vitest suite: **SUCCESS**
-          - Production build: **SUCCESS**
-          - Installed Google Chrome responsive matrix: **SUCCESS**
-          - Installed Microsoft Edge responsive matrix: **SUCCESS**
+          - Ubuntu software job: **{software.upper()}**
+          - Windows Chrome/Edge job: **{browsers.upper()}**
+          - Overall gate: **{status}**
+
+          The software job runs dependency installation, TypeScript typecheck, ESLint and JSX accessibility, the full Vitest suite, and the production build.
 
           Browser coverage includes:
 
