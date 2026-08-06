@@ -24,7 +24,7 @@ Execute sections A and B of [`docs/validation/fm1-hardware-test-protocol.md`](./
 
 ## 4. Voice library and SysEx explorer
 
-- [ ] Add adapters for additional providers only when they publish stable, permission-compatible machine-readable catalogs.
+- [ ] Add adapters for additional providers only when they publish stable, permission-compatible machine-readable catalogs. The 2026-08-06 review found no eligible provider; apply the admission criteria in [`docs/research/additional-patch-providers.md`](./docs/research/additional-patch-providers.md) before implementing one.
 
 ## 5. Graphical voice editor
 
