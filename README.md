@@ -14,6 +14,7 @@ A TypeScript web editor and librarian with separate, persistent target modes for
 - guarded stock-DX7 transmission of standard 163-byte single-voice and 4,104-byte 32-voice bank messages with matching-channel, System Info, Memory Protect and destructive-bank confirmations;
 - Yamaha checksum validation and multi-message `.syx` file classification;
 - strict DX7 semantic ranges for edited voices, with legacy reserved values normalized only at import;
+- parameter `155` modeled separately as six-bit edit-session operator state, never embedded in voice payloads;
 - structured compatibility-normalization records and visible per-parameter import warnings;
 - byte-for-byte preservation and unchanged download of each imported SysEx file before normalization;
 - structured per-message diagnostics with byte offsets, message indexes, lengths, manufacturer/format bytes and checksum errors;
@@ -41,7 +42,7 @@ A TypeScript web editor and librarian with separate, persistent target modes for
 - Vitest coverage for codecs, imports, catalog, library migration/backup, bank merging, audition, audio recording, effects, sequencing and MIDI monitoring;
 - GitHub Actions workflow for typecheck, ESLint/JSX accessibility, tests and production build.
 
-See [`PLAN.md`](./PLAN.md) for unresolved work, [`docs/validation/ci-receipt.md`](./docs/validation/ci-receipt.md) for the general validation receipt, [`docs/validation/audio-recorder.md`](./docs/validation/audio-recorder.md) for mocked-media recorder validation, [`docs/validation/target-capability-routing.md`](./docs/validation/target-capability-routing.md) for target routing, and [`docs/validation/dx7-bulk-transfer.md`](./docs/validation/dx7-bulk-transfer.md) for the guarded DX7 bulk-transfer gate. DX7 compatibility handling is validated in [`docs/validation/dx7-semantic-ranges.md`](./docs/validation/dx7-semantic-ranges.md) and [`docs/validation/dx7-original-import.md`](./docs/validation/dx7-original-import.md).
+See [`PLAN.md`](./PLAN.md) for unresolved work, [`docs/validation/ci-receipt.md`](./docs/validation/ci-receipt.md) for the general validation receipt, [`docs/validation/audio-recorder.md`](./docs/validation/audio-recorder.md) for mocked-media recorder validation, [`docs/validation/target-capability-routing.md`](./docs/validation/target-capability-routing.md) for target routing, and [`docs/validation/dx7-bulk-transfer.md`](./docs/validation/dx7-bulk-transfer.md) for the guarded DX7 bulk-transfer gate. DX7 compatibility handling is validated in [`docs/validation/dx7-semantic-ranges.md`](./docs/validation/dx7-semantic-ranges.md) and [`docs/validation/dx7-original-import.md`](./docs/validation/dx7-original-import.md). Parameter `155` isolation is validated in [`docs/validation/dx7-edit-session.md`](./docs/validation/dx7-edit-session.md).
 
 ## Merged patch catalog
 
@@ -85,7 +86,7 @@ The DX7 audition panel supports two separately confirmed standard Yamaha receive
 
 Both controls require Web MIDI SysEx permission, a manually verified output, a matching DX7 MIDI channel, confirmation that System Info is available and confirmation that Memory Protect is off. The application sends all-notes-off before the bulk message and records the transfer in the MIDI monitor.
 
-Voice-parameter changes, function/performance data and programmatic dump requests remain disabled. No dump-request frame will be added unless an original Yamaha data-format source proves that the stock DX7 supports it; initiate outgoing dumps from the DX7 front panel meanwhile. Physical stock-DX7 reception remains unverified and must not be reported as passed until tested.
+Parameter `155` operator enable state is modeled as an independent edit session: OP1 uses bit 5 through OP6 using bit 0, all 64 masks round-trip, and the state is excluded from 155-byte single-voice and 128-byte packed voice data. Voice-parameter changes, function/performance data and programmatic dump requests remain disabled. No dump-request frame will be added unless an original Yamaha data-format source proves that the stock DX7 supports it; initiate outgoing dumps from the DX7 front panel meanwhile. Physical stock-DX7 reception remains unverified and must not be reported as passed until tested.
 
 ## Bank merge and virtual piano
 
