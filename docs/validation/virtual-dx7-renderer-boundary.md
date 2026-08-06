@@ -8,7 +8,9 @@ Implementation commits:
 
 - `716b0029acb3a45dd5484d545406cab8b03d5c98` — semantic render boundary;
 - `369c6b7f0bf14268a0a801d89642d2e000195e47` — boundary tests;
-- `bbec46a8c6cf8132a976daa4a8e263ee434007bb` — feasibility and license-boundary record.
+- `bbec46a8c6cf8132a976daa4a8e263ee434007bb` — feasibility and license-boundary record;
+- `799b359ff5a8180915435a511a482ac64fb10285` — initial validation receipt;
+- `44d73406ce475b6a6c5770d3ed9b627c7e313234` — unresolved-only plan refinement.
 
 ## Scope
 
@@ -42,6 +44,7 @@ Source review confirms that the new public render boundary:
 | --- | --- | --- |
 | Standalone TypeScript 5.8.3 compile of `virtualDx7Engine.ts` against the current `Dx7Voice` type shape with `strict`, `noUncheckedIndexedAccess` and `exactOptionalPropertyTypes` | PASS | Local isolated compiler execution on 2026-08-06; this is not a full repository typecheck |
 | Standalone TypeScript syntax/type compile of the test file with a minimal Vitest declaration | PASS | Local isolated compiler execution on 2026-08-06; tests were not executed by this check |
+| Isolated runtime smoke of the compiled boundary | PASS | Deterministic plan, metadata exclusion, semantic-change identity, illegal-range rejection and invalid-PCM rejection passed; fixed request produced `dx7-render-v1-37f5d4e6` and 72,000 frames |
 | File-content SHA-256 calculation | PASS | Hashes recorded above |
 | `npm run typecheck` in the complete repository | NOT RUN | No repository checkout was available in the execution container |
 | `npm run lint` | NOT RUN | No repository checkout/dependency installation was available |
@@ -50,11 +53,11 @@ Source review confirms that the new public render boundary:
 | Chrome/Edge renderer check | NOT RUN | No renderer, WebAssembly or AudioWorklet exists yet |
 | Physical FM-1 / Yamaha DX7 check | NOT APPLICABLE | This boundary has no hardware path and provides no physical validation |
 
-The isolated TypeScript check must not be substituted for the required full repository checks. A later commit may update this receipt only when GitHub Actions or a complete local checkout provides the command output and commit identity.
+The isolated TypeScript and runtime checks must not be substituted for the required full repository checks. The normal read-only `CI` workflow remains configured to run on pushes to `main`, but no run/status evidence was available through the connected execution interface for the final commit at the time of this receipt. A later commit may update this receipt only when GitHub Actions or a complete local checkout provides command output and commit identity.
 
-## Expected tests after repository execution
+## Test source coverage
 
-`src/audio/virtualDx7Engine.test.ts` is expected to verify:
+`src/audio/virtualDx7Engine.test.ts` covers:
 
 1. identical semantic requests create identical plans and render keys;
 2. voice name and imported raw source bytes do not affect render identity;
