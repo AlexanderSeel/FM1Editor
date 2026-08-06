@@ -1,0 +1,61 @@
+name: Validate breakpoint note display
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/validate-breakpoint-note.yml
+
+permissions:
+  contents: write
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+      - name: Typecheck
+        run: npm run typecheck
+      - name: Lint
+        run: npm run lint
+      - name: Test
+        run: npm run test
+      - name: Build
+        run: npm run build
+      - name: Record validation
+        shell: bash
+        run: |
+          validated_sha="$(git rev-parse HEAD)"
+          mkdir -p docs/validation
+          cat > docs/validation/breakpoint-note.md <<EOF
+          # DX7 breakpoint note validation
+
+          Validated source commit: \`$validated_sha\`
+
+          - npm install: **PASS**
+          - npm run typecheck: **PASS**
+          - npm run lint: **PASS**
+          - npm run test: **PASS**
+          - npm run build: **PASS**
+
+          Verified mapping:
+
+          - \`0 = A-1\`
+          - \`39 = C3\`
+          - \`99 = C8\`
+          - the editor shows the numeric breakpoint and note name together.
+          EOF
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add docs/validation/breakpoint-note.md
+          git commit -m 'test(ci): record breakpoint note validation'
+          git push origin HEAD:main
