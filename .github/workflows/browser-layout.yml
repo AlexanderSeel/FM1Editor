@@ -1,4 +1,5 @@
 name: Browser layout
+# Uses the Chrome and Microsoft Edge channels preinstalled on windows-latest.
 
 on:
   push:
