@@ -146,7 +146,7 @@ export default function App() {
   const workspaceSummary = workspace === 'voice'
     ? fm1Mode
       ? `Six operators · algorithm ${voice.algorithm} · guarded bank merge, audio capture and virtual piano audition`
-      : `Six operators · algorithm ${voice.algorithm} · file editing, local recording and MIDI note audition; DX7 SysEx writes disabled`
+      : `Six operators · algorithm ${voice.algorithm} · file editing, local recording, MIDI audition and guarded Yamaha voice/bank bulk transfer`
     : workspace === 'library'
       ? `${patchLibrary.records.length} local voices · schema v3 · backup/restore · merged ZIP and website catalog`
       : workspace === 'effects'
@@ -337,9 +337,9 @@ export default function App() {
                     </CollapsibleSection>
                   )}
                   <CollapsibleSection
-                    description={fm1Mode ? 'Whole-bank transfer, preset recall and virtual piano' : 'Standard MIDI note audition; DX7 SysEx operations remain disabled'}
+                    description={fm1Mode ? 'Whole-bank transfer, preset recall and virtual piano' : 'Yamaha single-voice and 32-voice bulk transfer, plus virtual piano'}
                     storageKey="voice-bank-audition"
-                    title={fm1Mode ? 'FM-1 bank audition' : 'DX7 note audition'}
+                    title={fm1Mode ? 'FM-1 bank audition' : 'DX7 audition and bulk transfer'}
                   >
                     <TargetVoiceAuditionPanel
                       baseBank={bank}
@@ -444,7 +444,7 @@ export default function App() {
 
           <footer className="flex flex-wrap items-center justify-between gap-2 px-3 text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-500">
             <span>{targetDefinition.shortLabel} editor · target-routed safety · local audio recorder · virtual piano</span>
-            <span>{fm1Mode ? 'Physical bank import, USB audio and device readback remain pending' : 'DX7 SysEx transmission and hardware validation remain pending'}</span>
+            <span>{fm1Mode ? 'Physical bank import, USB audio and device readback remain pending' : 'DX7 parameter/function/dump operations and hardware validation remain pending'}</span>
           </footer>
         </main>
       </div>
