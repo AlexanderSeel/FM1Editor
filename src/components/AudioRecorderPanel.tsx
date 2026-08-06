@@ -124,7 +124,7 @@ export function AudioRecorderPanel({
 
         <button
           className="self-end rounded-xl border border-white/10 bg-white/5 px-4 py-2.5 text-sm font-bold text-slate-200 hover:bg-white/10 disabled:opacity-40"
-          disabled={!connected || recording}
+          disabled={!connected || busy}
           onClick={recorder.disconnect}
           type="button"
         >
@@ -155,7 +155,7 @@ export function AudioRecorderPanel({
             <strong className="font-mono text-xl text-white">{formatElapsed(recorder.elapsedMs)}</strong>
             <button
               className={`rounded-xl border px-3 py-2 text-xs font-bold ${recorder.monitoring ? 'border-amber-300/30 bg-amber-300/10 text-amber-100' : 'border-white/10 bg-white/5 text-slate-300'}`}
-              disabled={!connected || recording}
+              disabled={!connected || (recording && !recorder.monitoring)}
               onClick={() => void toggleMonitoring()}
               type="button"
             >
