@@ -11,8 +11,8 @@ import { RangeControl } from './RangeControl'
 interface Dx7FunctionControlsProps {
   output: MidiOutputTarget | null
   midiChannel: number
-  sysexEnabled: boolean
-  hardwareReady: boolean
+  sysexEnabled?: boolean
+  hardwareReady?: boolean
   disabled?: boolean
 }
 
@@ -48,7 +48,8 @@ export function Dx7FunctionControls({
   const definition = useMemo(() => getDx7FunctionParameterDefinition(parameter), [parameter])
   const valueOptions = parameterValueOptions(parameter)
   const assignmentParameter = parameter === 71 || parameter === 73 || parameter === 75 || parameter === 77
-  const unavailable = disabled || !output || !sysexEnabled || !hardwareReady
+  const gateProvided = sysexEnabled !== undefined && hardwareReady !== undefined
+  const unavailable = disabled || !output || sysexEnabled !== true || hardwareReady !== true
 
   useEffect(() => {
     if (!unavailable) return
@@ -83,7 +84,7 @@ export function Dx7FunctionControls({
       setStatus(null)
       return
     }
-    if (!sysexEnabled || !hardwareReady) {
+    if (sysexEnabled !== true || hardwareReady !== true) {
       setError('Confirm SysEx permission, System Info, and Memory Protect before sending a function parameter.')
       setStatus(null)
       return
@@ -109,6 +110,8 @@ export function Dx7FunctionControls({
       setStatus(null)
     }
   }
+
+  if (!gateProvided) return null
 
   return (
     <details className="rounded-xl border border-violet-300/15 bg-black/15 p-3">
