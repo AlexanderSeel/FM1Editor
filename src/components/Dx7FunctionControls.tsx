@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import type { Dx7FunctionParameterId } from '../domain/dx7FunctionState'
 import type { MidiOutputTarget } from '../midi/output'
 import {
@@ -11,6 +11,8 @@ import { RangeControl } from './RangeControl'
 interface Dx7FunctionControlsProps {
   output: MidiOutputTarget | null
   midiChannel: number
+  sysexEnabled: boolean
+  hardwareReady: boolean
   disabled?: boolean
 }
 
@@ -34,6 +36,8 @@ function parameterValueOptions(parameter: Dx7FunctionParameterId): readonly stri
 export function Dx7FunctionControls({
   output,
   midiChannel,
+  sysexEnabled,
+  hardwareReady,
   disabled = false,
 }: Dx7FunctionControlsProps) {
   const [parameter, setParameter] = useState<Dx7FunctionParameterId>(64)
@@ -44,7 +48,12 @@ export function Dx7FunctionControls({
   const definition = useMemo(() => getDx7FunctionParameterDefinition(parameter), [parameter])
   const valueOptions = parameterValueOptions(parameter)
   const assignmentParameter = parameter === 71 || parameter === 73 || parameter === 75 || parameter === 77
-  const unavailable = disabled || !output
+  const unavailable = disabled || !output || !sysexEnabled || !hardwareReady
+
+  useEffect(() => {
+    if (!unavailable) return
+    setWritesEnabled(false)
+  }, [unavailable])
 
   const selectParameter = (nextParameter: Dx7FunctionParameterId) => {
     const nextDefinition = getDx7FunctionParameterDefinition(nextParameter)
@@ -55,6 +64,10 @@ export function Dx7FunctionControls({
   }
 
   const enableWrites = () => {
+    if (unavailable) {
+      setError('Select a SysEx-enabled DX7 output and confirm System Info and Memory Protect first.')
+      return
+    }
     const confirmed = window.confirm(
       'Enable documented Yamaha DX7 function-parameter writes for this session? Confirm the selected target is a stock DX7, the MIDI channel matches, System Info is available, and Memory Protect is off. These messages change performance/function settings, not the 155-byte voice payload.',
     )
@@ -67,6 +80,11 @@ export function Dx7FunctionControls({
   const sendParameter = async () => {
     if (!output) {
       setError('Connect Web MIDI and manually select the DX7 output first.')
+      setStatus(null)
+      return
+    }
+    if (!sysexEnabled || !hardwareReady) {
+      setError('Confirm SysEx permission, System Info, and Memory Protect before sending a function parameter.')
       setStatus(null)
       return
     }
