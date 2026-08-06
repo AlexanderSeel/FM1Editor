@@ -1,0 +1,5 @@
+Error: spawn EINVAL
+    at ChildProcess.spawn (node:internal/child_process:420:11)
+    at spawn (node:child_process:787:9)
+    at startPreviewServer (file:///D:/a/FM1Editor/FM1Editor/scripts/browser-layout-smoke.mjs:24:10)
+    at main (file:///D:/a/FM1Editor/FM1Editor/scripts/browser-layout-smoke.mjs:165:18)
