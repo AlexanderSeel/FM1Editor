@@ -1,12 +1,12 @@
 # Plan sections 3–7 validation
 
-Validated source commit: `e2066c749bb948ab34bd1d19b69c8583fb78c2ed`
+Validated source commit: `cb7dda0e9636cfb17d6b16a63dee8cb17050d4a9`
 
 - npm install: **SUCCESS**
-- TypeScript typecheck: **FAILURE**
+- TypeScript typecheck: **SUCCESS**
 - ESLint and JSX accessibility: **SUCCESS**
 - Full Vitest suite: **SUCCESS**
-- Production build: **FAILURE**
+- Production build: **SUCCESS**
 
 - Algorithm selection is displayed directly with the operator routing area.
 - Target-aware Live MIDI controls appear directly above the virtual piano.
