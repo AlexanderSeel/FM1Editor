@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { AudioRecorderPanel } from './components/AudioRecorderPanel'
 import { BankBrowser } from './components/BankBrowser'
 import { CollapsibleSection } from './components/CollapsibleSection'
 import { ConnectionPanel } from './components/ConnectionPanel'
@@ -97,6 +98,20 @@ export default function App() {
     setSelectedBankSlot(bankSlot)
   }
 
+  const stopMidiAudition = () => {
+    const output = midi.output
+    if (!output) return
+    try {
+      output.clear?.()
+      for (let channel = 0; channel < 16; channel += 1) {
+        output.send([0xb0 | channel, 120, 0])
+        output.send([0xb0 | channel, 123, 0])
+      }
+    } catch {
+      // Audio capture remains independent when no writable MIDI output is available.
+    }
+  }
+
   const workspaceTitle = workspace === 'voice'
     ? (voice.name || 'UNTITLED')
     : workspace === 'library'
@@ -106,7 +121,7 @@ export default function App() {
         : (sequence.name || 'UNTITLED')
 
   const workspaceSummary = workspace === 'voice'
-    ? `Six operators · algorithm ${voice.algorithm} · guarded bank merge and virtual piano audition`
+    ? `Six operators · algorithm ${voice.algorithm} · guarded bank merge, audio capture and virtual piano audition`
     : workspace === 'library'
       ? `${patchLibrary.records.length} local voices · schema v3 · backup/restore · merged ZIP and website catalog`
       : workspace === 'effects'
@@ -195,7 +210,7 @@ export default function App() {
 
           <section className="p-4 text-sm text-slate-400">
             <p className="fm1-hardware-label text-[10px] text-amber-200">Safety boundary</p>
-            <p className="mt-2 leading-6">File operations, documented FX CCs and MIDI note playback are active. Immediate single-voice transfer is disabled; device writes use an explicitly confirmed complete 32-voice bank.</p>
+            <p className="mt-2 leading-6">File operations, documented FX CCs, MIDI note playback and browser-local audio recording are active. Immediate single-voice transfer is disabled; device writes use an explicitly confirmed complete 32-voice bank.</p>
           </section>
         </aside>
 
@@ -306,6 +321,20 @@ export default function App() {
                     />
                   </CollapsibleSection>
                   <CollapsibleSection
+                    defaultOpen={false}
+                    description="Input selection, live meter, diagnostics and browser-local recording"
+                    storageKey="voice-audio-recorder"
+                    title="FM-1 USB audio"
+                  >
+                    <AudioRecorderPanel
+                      bankLabel={bank.length === 32 ? 'loaded' : null}
+                      onSafetyStop={stopMidiAudition}
+                      patchName={voice.name}
+                      selectedBankSlot={selectedBankSlot}
+                      targetMode="FM-1"
+                    />
+                  </CollapsibleSection>
+                  <CollapsibleSection
                     description={`Algorithm ${voice.algorithm} · six operators · envelopes and LFO`}
                     storageKey="voice-editor"
                     title="Voice editor"
@@ -371,8 +400,8 @@ export default function App() {
           </section>
 
           <footer className="flex flex-wrap items-center justify-between gap-2 px-3 text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-500">
-            <span>FM-1 editor · guarded bank merge · virtual piano</span>
-            <span>Physical bank import and device readback remain pending</span>
+            <span>FM-1 editor · guarded bank merge · local audio recorder · virtual piano</span>
+            <span>Physical bank import, USB audio and device readback remain pending</span>
           </footer>
         </main>
       </div>
