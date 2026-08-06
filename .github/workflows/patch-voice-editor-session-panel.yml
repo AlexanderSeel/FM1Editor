@@ -24,35 +24,26 @@ jobs:
           path = Path('src/components/VoiceEditor.tsx')
           content = path.read_text(encoding='utf-8')
 
-          old_import = "import { EnvelopeGraph } from './EnvelopeGraph'"
-          new_import = "import { Dx7OperatorSessionPanel } from './Dx7OperatorSessionPanel'\nimport { EnvelopeGraph } from './EnvelopeGraph'"
-          if old_import not in content:
-              raise SystemExit('Missing VoiceEditor import anchor')
-          content = content.replace(old_import, new_import, 1)
+          session_import = "import { Dx7OperatorSessionPanel } from './Dx7OperatorSessionPanel'"
+          if session_import not in content:
+              import_anchor = "import { EnvelopeGraph } from './EnvelopeGraph'"
+              if import_anchor not in content:
+                  raise SystemExit('Missing VoiceEditor import anchor')
+              content = content.replace(import_anchor, f"{session_import}\n{import_anchor}", 1)
 
-          old_panel = '''      <OperatorRoutingEditor
+          session_panel = '      <Dx7OperatorSessionPanel documentKey={documentKey} />'
+          if session_panel not in content:
+              panel_anchor = '''      <OperatorRoutingEditor
         key={documentKey}
         onChange={onChange}
         onSelect={setSelectedOperator}
         selectedOperator={selectedOperator}
         voice={voice}
-      />
+      />'''
+              if panel_anchor not in content:
+                  raise SystemExit('Missing VoiceEditor panel anchor')
+              content = content.replace(panel_anchor, f"{panel_anchor}\n\n{session_panel}", 1)
 
-      <section className="rounded-2xl border border-white/10 bg-white/[0.025] p-4">'''
-          new_panel = '''      <OperatorRoutingEditor
-        key={documentKey}
-        onChange={onChange}
-        onSelect={setSelectedOperator}
-        selectedOperator={selectedOperator}
-        voice={voice}
-      />
-
-      <Dx7OperatorSessionPanel documentKey={documentKey} />
-
-      <section className="rounded-2xl border border-white/10 bg-white/[0.025] p-4">'''
-          if old_panel not in content:
-              raise SystemExit('Missing VoiceEditor panel anchor')
-          content = content.replace(old_panel, new_panel, 1)
           path.write_text(content, encoding='utf-8')
 
       - name: Commit VoiceEditor integration
@@ -62,5 +53,8 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add src/components/VoiceEditor.tsx
+          if git diff --cached --quiet; then
+            exit 0
+          fi
           git commit -m "feat(dx7): integrate operator session panel"
           git push
