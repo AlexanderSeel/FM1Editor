@@ -8,6 +8,7 @@ import {
   type Fm1FxParameterDefinition,
   type Fm1FxState,
 } from '../domain/fx'
+import type { Dx7Voice } from '../domain/voice'
 import { encodeFm1FxParameter, encodeFm1FxState } from '../midi/fxProtocol'
 import {
   encodeAllNotesOff,
@@ -17,6 +18,7 @@ import {
 } from '../midi/fm1Protocol'
 import type { MidiOutputTarget } from '../midi/output'
 import { Dx7FunctionControls } from './Dx7FunctionControls'
+import { Dx7VoiceParameterControls } from './Dx7VoiceParameterControls'
 import { RangeControl } from './RangeControl'
 
 interface LiveMidiControlsProps {
@@ -26,6 +28,9 @@ interface LiveMidiControlsProps {
   disabled?: boolean
   fxState?: Fm1FxState
   onFxChange?: (state: Fm1FxState) => void
+  voice?: Dx7Voice
+  sysexEnabled?: boolean
+  dx7HardwareReady?: boolean
 }
 
 const blockLabels: Record<Fm1FxBlockId, string> = {
@@ -97,6 +102,9 @@ export function LiveMidiControls({
   disabled = false,
   fxState,
   onFxChange,
+  voice,
+  sysexEnabled = false,
+  dx7HardwareReady = false,
 }: LiveMidiControlsProps) {
   const [program, setProgram] = useState(1)
   const [localFxState, setLocalFxState] = useState<Fm1FxState>(() => createInitializedFxState())
@@ -190,7 +198,7 @@ export function LiveMidiControls({
           <p className="text-xs font-semibold uppercase tracking-[0.18em] text-violet-300">Live MIDI controls</p>
           <h4 className="mt-1 text-lg font-bold text-white">Direct device messages</h4>
           <p className="mt-1 max-w-3xl text-xs leading-5 text-slate-400">
-            Only documented Program Change, real-time transport, All Notes Off and {fm1Mode ? 'FM-1 CC 0–23 effects' : 'Yamaha DX7 function parameters 64–77'} are exposed here. DX7 voice-parameter writes remain disabled.
+            Only documented Program Change, real-time transport, All Notes Off and {fm1Mode ? 'FM-1 CC 0–23 effects' : 'Yamaha DX7 voice parameters 0–155 and function parameters 64–77'} are exposed here.
           </p>
         </div>
         <span className={`rounded-full border px-3 py-1 text-[10px] font-bold uppercase tracking-[0.12em] ${output ? 'border-emerald-300/25 bg-emerald-300/10 text-emerald-200' : 'border-amber-300/25 bg-amber-300/10 text-amber-200'}`}>
@@ -273,7 +281,19 @@ export function LiveMidiControls({
             </div>
           </details>
         ) : (
-          <Dx7FunctionControls disabled={disabled} midiChannel={midiChannel} output={output} />
+          <div className="grid gap-3">
+            {voice && (
+              <Dx7VoiceParameterControls
+                disabled={disabled}
+                hardwareReady={dx7HardwareReady}
+                midiChannel={midiChannel}
+                output={output}
+                sysexEnabled={sysexEnabled}
+                voice={voice}
+              />
+            )}
+            <Dx7FunctionControls disabled={disabled} midiChannel={midiChannel} output={output} />
+          </div>
         )}
       </div>
 
