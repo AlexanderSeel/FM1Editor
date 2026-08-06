@@ -1,3 +1,7 @@
+.fm1-app {
+  overflow-x: clip;
+}
+
 @media (min-width: 1024px) {
   .fm1-sidebar {
     position: sticky;
