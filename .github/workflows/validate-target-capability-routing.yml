@@ -19,10 +19,11 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Set up Node.js
+        id: setup
+        continue-on-error: true
         uses: actions/setup-node@v4
         with:
-          node-version: '22.12.0'
-          cache: npm
+          node-version: '22'
 
       - name: Install dependencies
         id: install
@@ -30,6 +31,8 @@ jobs:
         shell: bash
         run: |
           set -o pipefail
+          node --version
+          npm --version
           npm install 2>&1 | tee /tmp/npm-install.log
 
       - name: Typecheck
@@ -79,6 +82,7 @@ jobs:
         if: always()
         shell: bash
         env:
+          SETUP_OUTCOME: ${{ steps.setup.outcome }}
           INSTALL_OUTCOME: ${{ steps.install.outcome }}
           TYPECHECK_OUTCOME: ${{ steps.typecheck.outcome }}
           LINT_OUTCOME: ${{ steps.lint.outcome }}
@@ -96,6 +100,7 @@ jobs:
             echo
             echo "Validated source commit: \`${GITHUB_SHA}\`"
             echo
+            echo "- Node setup: **${SETUP_OUTCOME^^}**"
             echo "- npm install: **${INSTALL_OUTCOME^^}**"
             echo "- npm run typecheck: **${TYPECHECK_OUTCOME^^}**"
             echo "- npm run lint: **${LINT_OUTCOME^^}**"
@@ -137,6 +142,7 @@ jobs:
         if: always()
         shell: bash
         env:
+          SETUP_OUTCOME: ${{ steps.setup.outcome }}
           INSTALL_OUTCOME: ${{ steps.install.outcome }}
           TYPECHECK_OUTCOME: ${{ steps.typecheck.outcome }}
           LINT_OUTCOME: ${{ steps.lint.outcome }}
@@ -145,6 +151,6 @@ jobs:
           MARKERS_OUTCOME: ${{ steps.markers.outcome }}
         run: |
           set -euo pipefail
-          for outcome in "$INSTALL_OUTCOME" "$TYPECHECK_OUTCOME" "$LINT_OUTCOME" "$TEST_OUTCOME" "$BUILD_OUTCOME" "$MARKERS_OUTCOME"; do
+          for outcome in "$SETUP_OUTCOME" "$INSTALL_OUTCOME" "$TYPECHECK_OUTCOME" "$LINT_OUTCOME" "$TEST_OUTCOME" "$BUILD_OUTCOME" "$MARKERS_OUTCOME"; do
             [[ "$outcome" == 'success' ]] || exit 1
           done
