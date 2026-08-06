@@ -23,11 +23,6 @@
 ## 3. FM-1 USB audio capture and recording
 
 - [ ] Physically verify that the Windows input endpoint shown as `Microphone (FM-1)` carries the FM-1 synthesizer output over USB, and record firmware, driver, Windows version, sample rate, bit depth, channel count, latency and whether the MASTER control affects the USB stream.
-- [ ] Add an audio-input selector based on `navigator.mediaDevices.enumerateDevices()` with an FM-1 name suggestion and explicit manual override; request microphone permission only after a user action.
-- [ ] Capture the selected FM-1 input with processing disabled where supported (`echoCancellation`, `noiseSuppression` and `autoGainControl` off), and show input level, clipping, channel and sample-rate diagnostics.
-- [ ] Add start/stop recording with elapsed time, waveform or level preview, safe cancellation and downloads using a lossless WAV path plus a browser-supported compressed fallback.
-- [ ] Add optional monitoring with a clear feedback warning and monitoring off by default; keep MIDI audition, audio capture and note-off recovery independent so a failed recording cannot leave notes sounding.
-- [ ] Link recordings to patch name, target mode, bank/slot and timestamp without storing audio automatically; provide an explicit save/download action and document browser microphone permissions.
 - [ ] Test USB audio capture in Chrome and Edge on Windows with the physical FM-1, including reconnects, device removal, denied permission, silent streams, stereo/dual-mono behavior and concurrent MIDI use.
 
 ## 4. Voice library and SysEx explorer
