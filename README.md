@@ -13,6 +13,9 @@ A TypeScript web editor and librarian with separate, persistent target modes for
 - Yamaha DX7-compatible 155-byte single-voice and 4,096-byte 32-voice bank codecs;
 - guarded stock-DX7 transmission of standard 163-byte single-voice and 4,104-byte 32-voice bank messages with matching-channel, System Info, Memory Protect and destructive-bank confirmations;
 - Yamaha checksum validation and multi-message `.syx` file classification;
+- strict DX7 semantic ranges for edited voices, with legacy reserved values normalized only at import;
+- structured compatibility-normalization records and visible per-parameter import warnings;
+- byte-for-byte preservation and unchanged download of each imported SysEx file before normalization;
 - structured per-message diagnostics with byte offsets, message indexes, lengths, manufacturer/format bytes and checksum errors;
 - salvage of complete supported messages from mixed files that also contain padding, unsupported messages or incomplete trailing data;
 - drag-and-drop, multi-file and folder ingestion for `.syx` and `.sysex` files;
@@ -38,7 +41,7 @@ A TypeScript web editor and librarian with separate, persistent target modes for
 - Vitest coverage for codecs, imports, catalog, library migration/backup, bank merging, audition, audio recording, effects, sequencing and MIDI monitoring;
 - GitHub Actions workflow for typecheck, ESLint/JSX accessibility, tests and production build.
 
-See [`PLAN.md`](./PLAN.md) for unresolved work, [`docs/validation/ci-receipt.md`](./docs/validation/ci-receipt.md) for the general validation receipt, [`docs/validation/audio-recorder.md`](./docs/validation/audio-recorder.md) for mocked-media recorder validation, [`docs/validation/target-capability-routing.md`](./docs/validation/target-capability-routing.md) for target routing, and [`docs/validation/dx7-bulk-transfer.md`](./docs/validation/dx7-bulk-transfer.md) for the guarded DX7 bulk-transfer gate.
+See [`PLAN.md`](./PLAN.md) for unresolved work, [`docs/validation/ci-receipt.md`](./docs/validation/ci-receipt.md) for the general validation receipt, [`docs/validation/audio-recorder.md`](./docs/validation/audio-recorder.md) for mocked-media recorder validation, [`docs/validation/target-capability-routing.md`](./docs/validation/target-capability-routing.md) for target routing, and [`docs/validation/dx7-bulk-transfer.md`](./docs/validation/dx7-bulk-transfer.md) for the guarded DX7 bulk-transfer gate. DX7 compatibility handling is validated in [`docs/validation/dx7-semantic-ranges.md`](./docs/validation/dx7-semantic-ranges.md) and [`docs/validation/dx7-original-import.md`](./docs/validation/dx7-original-import.md).
 
 ## Merged patch catalog
 
@@ -136,9 +139,14 @@ The import analyzer scans every complete `F0 … F7` message and reports:
 - stray `F7` bytes and nested `F0` starts;
 - trailing incomplete messages;
 - unsupported message lengths, manufacturer IDs and format bytes;
-- DX7 decoding and checksum failures with exact offsets.
+- DX7 decoding and checksum failures with exact offsets;
+- every compatibility normalization with voice/operator path, original value and normalized value.
 
 The UI displays these diagnostics per file while still importing valid complete voices from a mixed file. The strict `importSysexFile` API remains available for callers that must reject structurally incomplete input.
+
+Imported files are copied byte-for-byte before decoding. The **Exact original imports** section keeps those copies in browser memory and offers **Download unchanged** with the original filename. They remain available until the next import or page reload and are not automatically persisted to the patch library. Edited or hardware-bound exports use the normalized semantic model, standards-valid ranges and a recalculated Yamaha checksum.
+
+Legacy raw values such as keyboard-scaling breakpoint `127` and detune `15` are accepted only at the import boundary and recorded as compatibility normalizations (`127 → 99`, `15 → 14`). The editable voice model rejects breakpoint values above `99` and detune values above `14` instead of silently repairing user edits during export.
 
 ## Hardware verification boundary
 
