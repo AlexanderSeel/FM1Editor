@@ -3,6 +3,10 @@ import type { Dx7Voice } from '../domain/voice'
 import { downloadBytes } from '../files/download'
 import { encodeSingleVoiceMessage } from '../sysex/dx7'
 import { analyzeSysexFile, type SysexDiagnostic } from '../sysex/importSysex'
+import {
+  preserveOriginalSysexFile,
+  type PreservedSysexFile,
+} from '../sysex/originalImport'
 
 interface SysexToolbarProps {
   voice: Dx7Voice
@@ -17,6 +21,11 @@ interface FileSysexDiagnostic extends SysexDiagnostic {
   filename: string
 }
 
+interface OriginalSysexFile extends PreservedSysexFile {
+  supportedMessageCount: number
+  normalizationCount: number
+}
+
 function diagnosticClass(severity: SysexDiagnostic['severity']): string {
   if (severity === 'error') return 'border-rose-300/20 bg-rose-300/10 text-rose-200'
   if (severity === 'warning') return 'border-amber-300/20 bg-amber-300/10 text-amber-200'
@@ -29,6 +38,7 @@ export function SysexToolbar({ voice, onImportVoice, onImportBank, onImportToLib
   const [status, setStatus] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [diagnostics, setDiagnostics] = useState<readonly FileSysexDiagnostic[]>([])
+  const [originalFiles, setOriginalFiles] = useState<readonly OriginalSysexFile[]>([])
   const [dragging, setDragging] = useState(false)
 
   useEffect(() => {
@@ -39,6 +49,7 @@ export function SysexToolbar({ voice, onImportVoice, onImportBank, onImportToLib
     setError(null)
     setStatus(null)
     setDiagnostics([])
+    setOriginalFiles([])
     let importedFiles = 0
     let added = 0
     let duplicates = 0
@@ -46,10 +57,23 @@ export function SysexToolbar({ voice, onImportVoice, onImportBank, onImportToLib
     let latestBank: readonly Dx7Voice[] | null = null
     const failures: string[] = []
     const nextDiagnostics: FileSysexDiagnostic[] = []
+    const nextOriginalFiles: OriginalSysexFile[] = []
 
     for (const file of files) {
       try {
-        const report = analyzeSysexFile(new Uint8Array(await file.arrayBuffer()))
+        const bytes = new Uint8Array(await file.arrayBuffer())
+        const report = analyzeSysexFile(bytes)
+        const preserved = preserveOriginalSysexFile(file.name, bytes)
+        const normalizationCount = report.entries.reduce((count, entry) =>
+          entry.kind === 'single-voice' || entry.kind === 'voice-bank'
+            ? count + entry.normalizations.length
+            : count,
+        0)
+        nextOriginalFiles.push({
+          ...preserved,
+          supportedMessageCount: report.supportedMessageCount,
+          normalizationCount,
+        })
         nextDiagnostics.push(...report.diagnostics.map((diagnostic) => ({ ...diagnostic, filename: file.name })))
         const voices = report.entries.flatMap((entry) => entry.kind === 'voice-bank'
           ? [...entry.voices]
@@ -79,10 +103,11 @@ export function SysexToolbar({ voice, onImportVoice, onImportBank, onImportToLib
     else if (latestVoice) onImportVoice(latestVoice)
     if (importedFiles > 0) {
       const diagnosticSummary = nextDiagnostics.length > 0 ? ` ${nextDiagnostics.length} diagnostics are available below.` : ''
-      setStatus(`Processed ${importedFiles} file${importedFiles === 1 ? '' : 's'}: ${added} new voices, ${duplicates} duplicates.${diagnosticSummary}`)
+      setStatus(`Processed ${importedFiles} file${importedFiles === 1 ? '' : 's'}: ${added} new voices, ${duplicates} duplicates. Exact original files remain available below.${diagnosticSummary}`)
     }
     if (failures.length > 0) setError(failures.join(' '))
     setDiagnostics(nextDiagnostics.slice(0, 200))
+    setOriginalFiles(nextOriginalFiles)
     if (inputRef.current) inputRef.current.value = ''
     if (folderInputRef.current) folderInputRef.current.value = ''
   }
@@ -122,6 +147,35 @@ export function SysexToolbar({ voice, onImportVoice, onImportBank, onImportToLib
       </div>
       <p className="text-[11px] text-slate-500">Drop multiple SysEx files here. Complete supported messages are imported even when a mixed file also contains diagnostic data.</p>
       {(status || error) && <p className={`text-xs ${error ? 'text-rose-300' : 'text-emerald-300'}`}>{error ?? status}</p>}
+      {originalFiles.length > 0 && (
+        <details className="rounded-xl border border-emerald-300/20 bg-emerald-300/[0.05] p-3">
+          <summary className="cursor-pointer text-xs font-semibold uppercase tracking-[0.14em] text-emerald-200">
+            Exact original imports · {originalFiles.length}
+          </summary>
+          <p className="mt-2 text-[11px] leading-5 text-slate-400">
+            These byte-for-byte copies are kept only in memory until the next import or page reload. They are not normalized, rewritten or added automatically to the patch library.
+          </p>
+          <div className="mt-3 grid gap-2">
+            {originalFiles.map((file, index) => (
+              <article className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-white/10 bg-black/20 p-3" key={`${file.filename}-${index}`}>
+                <div className="min-w-0">
+                  <strong className="block truncate text-xs text-white">{file.filename}</strong>
+                  <span className="mt-1 block font-mono text-[10px] text-slate-500">
+                    {file.bytes.byteLength} bytes · {file.supportedMessageCount} supported message{file.supportedMessageCount === 1 ? '' : 's'} · {file.normalizationCount} normalization{file.normalizationCount === 1 ? '' : 's'}
+                  </span>
+                </div>
+                <button
+                  className="rounded-lg border border-emerald-300/20 bg-emerald-300/10 px-3 py-2 text-xs font-bold text-emerald-200 hover:bg-emerald-300/15"
+                  onClick={() => downloadBytes(file.bytes, file.filename)}
+                  type="button"
+                >
+                  Download unchanged
+                </button>
+              </article>
+            ))}
+          </div>
+        </details>
+      )}
       {diagnostics.length > 0 && (
         <details className="rounded-xl border border-white/10 bg-black/20 p-3">
           <summary className="cursor-pointer text-xs font-semibold uppercase tracking-[0.14em] text-slate-300">
