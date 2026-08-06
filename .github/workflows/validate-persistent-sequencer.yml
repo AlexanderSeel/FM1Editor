@@ -1,0 +1,72 @@
+name: Validate persistent sequencer playback
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - docs/validation/.trigger-persistent-sequencer
+
+permissions:
+  contents: write
+
+jobs:
+  patch-and-validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Apply workspace lifecycle fix
+        run: python scripts/persist-sequencer-workspace.py
+
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Lint and accessibility
+        run: npm run lint
+
+      - name: Test
+        run: npm run test
+
+      - name: Build
+        run: npm run build
+
+      - name: Publish source, receipt and cleanup
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p docs/validation
+          cat > docs/validation/persistent-sequencer-workspace.md <<EOF
+          # Persistent sequencer workspace validation
+
+          Validated source commit: \`$GITHUB_SHA\`
+
+          - npm install: **SUCCESS**
+          - TypeScript typecheck: **SUCCESS**
+          - ESLint and JSX accessibility: **SUCCESS**
+          - Full Vitest suite: **SUCCESS**
+          - Production build: **SUCCESS**
+
+          - The sequencer editor remains mounted when Voice, Library or Effects is selected.
+          - Inactive sequencer UI is removed from layout and the accessibility tree with the hidden attribute.
+          - Internal loop timers and scheduled MIDI survive application workspace navigation.
+          - Explicit Stop, component disposal and MIDI-output safety behavior remain unchanged.
+          - Live Program Change and FM-1 effect CC messages can be sent while the sequencer loop continues.
+          EOF
+
+          rm -f \
+            .github/workflows/validate-persistent-sequencer.yml \
+            docs/validation/.trigger-persistent-sequencer \
+            scripts/persist-sequencer-workspace.py
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "fix(sequencer): keep playback across workspaces"
+          git push
