@@ -1,0 +1,48 @@
+name: Document DX7 edit-session boundary
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - docs/validation/.trigger-readme-dx7-edit-session
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Update README
+        shell: python
+        run: |
+          from pathlib import Path
+
+          path = Path('README.md')
+          content = path.read_text(encoding='utf-8')
+          replacements = {
+              '- strict DX7 semantic ranges for edited voices, with legacy reserved values normalized only at import;':
+                  '- strict DX7 semantic ranges for edited voices, with legacy reserved values normalized only at import;\n- parameter `155` modeled separately as six-bit edit-session operator state, never embedded in voice payloads;',
+              'and [`docs/validation/dx7-original-import.md`](./docs/validation/dx7-original-import.md).':
+                  'and [`docs/validation/dx7-original-import.md`](./docs/validation/dx7-original-import.md). Parameter `155` isolation is validated in [`docs/validation/dx7-edit-session.md`](./docs/validation/dx7-edit-session.md).',
+              'Voice-parameter changes, function/performance data and programmatic dump requests remain disabled.':
+                  'Parameter `155` operator enable state is modeled as an independent edit session: OP1 uses bit 5 through OP6 using bit 0, all 64 masks round-trip, and the state is excluded from 155-byte single-voice and 128-byte packed voice data. Voice-parameter changes, function/performance data and programmatic dump requests remain disabled.',
+          }
+          for old, new in replacements.items():
+              if old not in content:
+                  raise SystemExit(f'Missing README anchor: {old}')
+              content = content.replace(old, new, 1)
+          path.write_text(content, encoding='utf-8')
+
+      - name: Commit README
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add README.md
+          git commit -m "docs(dx7): document edit-session operator mask"
+          git push
