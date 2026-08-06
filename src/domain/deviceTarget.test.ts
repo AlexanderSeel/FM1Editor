@@ -49,6 +49,20 @@ describe('device target capabilities', () => {
       midiNotes: true,
     })
   })
+
+  it('provides target-specific labels and explicit safety boundaries', () => {
+    const fm1 = getDeviceTargetDefinition('fm1')
+    const dx7 = getDeviceTargetDefinition('dx7')
+
+    expect(fm1.manufacturerLabel).toBe('M-VAVE')
+    expect(fm1.safetyBoundary).toContain('complete 32-voice bank')
+    expect(fm1.unavailableEffectsReason).toBeNull()
+
+    expect(dx7.manufacturerLabel).toBe('YAMAHA')
+    expect(dx7.safetyBoundary).toContain('FM-1 bank and effects writes are disabled')
+    expect(dx7.safetyBoundary).toContain('DX7 SysEx transmission remains disabled')
+    expect(dx7.unavailableEffectsReason).toContain('not sent')
+  })
 })
 
 describe('target-specific MIDI port suggestions', () => {
