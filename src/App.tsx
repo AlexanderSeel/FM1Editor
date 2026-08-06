@@ -10,9 +10,10 @@ import { PatchCatalogBrowser } from './components/PatchCatalogBrowser'
 import { PatchLibrary } from './components/PatchLibrary'
 import { SequenceEditor } from './components/SequenceEditor'
 import { SysexToolbar } from './components/SysexToolbar'
-import { VoiceAuditionPanel } from './components/VoiceAuditionPanel'
+import { TargetVoiceAuditionPanel } from './components/TargetVoiceAuditionPanel'
 import { VoiceEditor } from './components/VoiceEditor'
 import {
+  getDeviceTargetDefinition,
   readStoredDeviceTarget,
   writeStoredDeviceTarget,
   type DeviceTarget,
@@ -64,6 +65,8 @@ export default function App() {
   const voice = voiceHistory.value
   const effects = effectsHistory.value
   const sequence = sequenceHistory.value
+  const targetDefinition = getDeviceTargetDefinition(target)
+  const fm1Mode = targetDefinition.id === 'fm1'
   const activeHistory = workspace === 'voice'
     ? voiceHistory
     : workspace === 'effects'
@@ -137,15 +140,19 @@ export default function App() {
     : workspace === 'library'
       ? 'Patch Library'
       : workspace === 'effects'
-        ? 'FM-1 Effects'
+        ? (targetDefinition.capabilities.fm1Effects ? 'FM-1 Effects' : 'Effects unavailable')
         : (sequence.name || 'UNTITLED')
 
   const workspaceSummary = workspace === 'voice'
-    ? `Six operators · algorithm ${voice.algorithm} · guarded bank merge, audio capture and virtual piano audition`
+    ? fm1Mode
+      ? `Six operators · algorithm ${voice.algorithm} · guarded bank merge, audio capture and virtual piano audition`
+      : `Six operators · algorithm ${voice.algorithm} · file editing, local recording and MIDI note audition; DX7 SysEx writes disabled`
     : workspace === 'library'
       ? `${patchLibrary.records.length} local voices · schema v3 · backup/restore · merged ZIP and website catalog`
       : workspace === 'effects'
-        ? `Documented CC 0–23 · FX MIDI channel ${effects.midiChannel}`
+        ? targetDefinition.capabilities.fm1Effects
+          ? `Documented CC 0–23 · FX MIDI channel ${effects.midiChannel}`
+          : 'FM-1-specific effects transmission is disabled for the Yamaha DX7 target'
         : `${sequence.length} steps · ${sequence.bpm} BPM · MIDI channel ${sequence.midiChannel}`
 
   const loadCatalogBank = (voices: readonly Dx7Voice[]) => {
@@ -172,8 +179,8 @@ export default function App() {
           <header className="fm1-brandplate p-5">
             <div className="flex items-start justify-between gap-4">
               <div>
-                <p className="fm1-brand-kicker text-[11px]">M-VAVE</p>
-                <h1 className="fm1-brand-title mt-2">FM-1</h1>
+                <p className="fm1-brand-kicker text-[11px]">{targetDefinition.manufacturerLabel}</p>
+                <h1 className="fm1-brand-title mt-2">{targetDefinition.shortLabel}</h1>
                 <p className="fm1-hardware-label mt-3 text-[10px]">Editor / Control Surface</p>
               </div>
               <div className="fm1-knob-unit" aria-hidden="true">
@@ -231,8 +238,8 @@ export default function App() {
           </CollapsibleSection>
 
           <section className="p-4 text-sm text-slate-400">
-            <p className="fm1-hardware-label text-[10px] text-amber-200">Safety boundary</p>
-            <p className="mt-2 leading-6">File operations, documented FX CCs, MIDI note playback and browser-local audio recording are active. Immediate single-voice transfer is disabled; device writes use an explicitly confirmed complete 32-voice bank.</p>
+            <p className="fm1-hardware-label text-[10px] text-amber-200">Safety boundary · {targetDefinition.shortLabel}</p>
+            <p className="mt-2 leading-6">{targetDefinition.safetyBoundary}</p>
           </section>
         </aside>
 
@@ -252,7 +259,7 @@ export default function App() {
                 </div>
               </div>
 
-              <div className="fm1-knob-bank" aria-label="FM-1 parameter knob styling">
+              <div className="fm1-knob-bank" aria-label={`${targetDefinition.shortLabel} parameter knob styling`}>
                 {['SELECT', 'ALGORITHM', 'KNOB 3', 'KNOB 4'].map((label) => (
                   <div className="fm1-knob-unit" key={label}>
                     <span className="fm1-knob-label">{label}</span>
@@ -330,15 +337,16 @@ export default function App() {
                     </CollapsibleSection>
                   )}
                   <CollapsibleSection
-                    description="Whole-bank transfer, preset recall and virtual piano"
+                    description={fm1Mode ? 'Whole-bank transfer, preset recall and virtual piano' : 'Standard MIDI note audition; DX7 SysEx operations remain disabled'}
                     storageKey="voice-bank-audition"
-                    title="FM-1 bank audition"
+                    title={fm1Mode ? 'FM-1 bank audition' : 'DX7 note audition'}
                   >
-                    <VoiceAuditionPanel
+                    <TargetVoiceAuditionPanel
                       baseBank={bank}
                       output={midi.output}
                       selectedBankSlot={selectedBankSlot}
                       sysexEnabled={midi.state.sysexEnabled}
+                      target={target}
                       voice={voice}
                     />
                   </CollapsibleSection>
@@ -346,14 +354,14 @@ export default function App() {
                     defaultOpen={false}
                     description="Input selection, live meter, diagnostics and browser-local recording"
                     storageKey="voice-audio-recorder"
-                    title="FM-1 USB audio"
+                    title={`${targetDefinition.shortLabel} audio recorder`}
                   >
                     <AudioRecorderPanel
                       bankLabel={bank.length === 32 ? 'loaded' : null}
                       onSafetyStop={stopMidiAudition}
                       patchName={voice.name}
                       selectedBankSlot={selectedBankSlot}
-                      targetMode={target === 'fm1' ? 'FM-1' : 'DX7'}
+                      targetMode={targetDefinition.shortLabel}
                     />
                   </CollapsibleSection>
                   <CollapsibleSection
@@ -402,13 +410,26 @@ export default function App() {
                   </CollapsibleSection>
                 </>
               ) : workspace === 'effects' ? (
-                <CollapsibleSection
-                  description={`CC 0–23 · MIDI channel ${effects.midiChannel}`}
-                  storageKey="effects-controls"
-                  title="Effects controls"
-                >
-                  <EffectsEditor onChange={effectsHistory.setValue} output={midi.output} state={effects} />
-                </CollapsibleSection>
+                targetDefinition.capabilities.fm1Effects ? (
+                  <CollapsibleSection
+                    description={`CC 0–23 · MIDI channel ${effects.midiChannel}`}
+                    storageKey="effects-controls"
+                    title="Effects controls"
+                  >
+                    <EffectsEditor onChange={effectsHistory.setValue} output={midi.output} state={effects} />
+                  </CollapsibleSection>
+                ) : (
+                  <section className="rounded-2xl border border-amber-300/20 bg-amber-300/[0.06] p-5">
+                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-amber-200">Target capability locked</p>
+                    <h3 className="mt-2 text-xl font-bold text-white">FM-1 effects are disabled for Yamaha DX7</h3>
+                    <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-300">
+                      {targetDefinition.unavailableEffectsReason ?? 'This target does not expose the FM-1 effects protocol.'}
+                    </p>
+                    <p className="mt-3 text-xs leading-5 text-slate-400">
+                      Change the device target to FM-1 to use the documented CC 0–23 controls. No effect message is sent while DX7 is selected.
+                    </p>
+                  </section>
+                )
               ) : (
                 <CollapsibleSection
                   description={`${sequence.length} steps · ${sequence.bpm} BPM`}
@@ -422,8 +443,8 @@ export default function App() {
           </section>
 
           <footer className="flex flex-wrap items-center justify-between gap-2 px-3 text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-500">
-            <span>FM-1 editor · guarded bank merge · local audio recorder · virtual piano</span>
-            <span>Physical bank import, USB audio and device readback remain pending</span>
+            <span>{targetDefinition.shortLabel} editor · target-routed safety · local audio recorder · virtual piano</span>
+            <span>{fm1Mode ? 'Physical bank import, USB audio and device readback remain pending' : 'DX7 SysEx transmission and hardware validation remain pending'}</span>
           </footer>
         </main>
       </div>
