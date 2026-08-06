@@ -5,6 +5,11 @@ on:
     branches: [main]
     paths:
       - .github/workflows/validate-breakpoint-note.yml
+      - src/domain/dx7Note.ts
+      - src/domain/dx7Note.test.ts
+      - src/components/VoiceEditor.tsx
+      - src/domain/deviceTarget.ts
+      - src/App.tsx
 
 permissions:
   contents: write
@@ -24,23 +29,38 @@ jobs:
       - name: Install dependencies
         id: install
         continue-on-error: true
-        run: npm install --no-audit --no-fund 2>&1 | tee /tmp/install.log
+        shell: bash
+        run: |
+          set -o pipefail
+          npm install --no-audit --no-fund 2>&1 | tee /tmp/install.log
       - name: Typecheck
         id: typecheck
         continue-on-error: true
-        run: npm run typecheck 2>&1 | tee /tmp/typecheck.log
+        shell: bash
+        run: |
+          set -o pipefail
+          npm run typecheck 2>&1 | tee /tmp/typecheck.log
       - name: Lint
         id: lint
         continue-on-error: true
-        run: npm run lint 2>&1 | tee /tmp/lint.log
+        shell: bash
+        run: |
+          set -o pipefail
+          npm run lint 2>&1 | tee /tmp/lint.log
       - name: Test
         id: test
         continue-on-error: true
-        run: npm run test 2>&1 | tee /tmp/test.log
+        shell: bash
+        run: |
+          set -o pipefail
+          npm run test 2>&1 | tee /tmp/test.log
       - name: Build
         id: build
         continue-on-error: true
-        run: npm run build 2>&1 | tee /tmp/build.log
+        shell: bash
+        run: |
+          set -o pipefail
+          npm run build 2>&1 | tee /tmp/build.log
       - name: Record validation
         if: always()
         shell: bash
