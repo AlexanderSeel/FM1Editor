@@ -1,0 +1,153 @@
+name: Diagnose keyboard scaling browser
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/diagnose-keyboard-scaling-browser.yml
+
+permissions:
+  contents: write
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install and build
+        run: |
+          npm install --no-audit --no-fund
+          npm run build
+          npm install --no-save --package-lock=false --no-audit --no-fund playwright@1.54.2
+          npx playwright install --with-deps chromium
+      - name: Run browser diagnostics
+        shell: bash
+        run: |
+          mkdir -p artifacts docs/validation
+          npm run preview -- --host 127.0.0.1 > /tmp/fm1-preview.log 2>&1 &
+          for attempt in {1..30}; do
+            if curl --fail --silent http://127.0.0.1:4173/ > /dev/null; then break; fi
+            sleep 1
+          done
+          curl --fail http://127.0.0.1:4173/ > /dev/null
+          cat > artifacts/diagnose-keyboard-scaling.mjs <<'JS'
+          import { chromium } from 'playwright'
+          import { appendFile, writeFile } from 'node:fs/promises'
+
+          const logPath = 'docs/validation/keyboard-scaling-browser-diagnostics.md'
+          await writeFile(logPath, '# Keyboard scaling browser diagnostics\n\n')
+
+          async function log(message) {
+            await appendFile(logPath, `${message}\n`)
+          }
+
+          async function step(name, action) {
+            try {
+              const result = await action()
+              await log(`- ${name}: **PASS**${result === undefined ? '' : ` — ${result}`}`)
+              return true
+            } catch (error) {
+              await log(`- ${name}: **FAIL** — ${error instanceof Error ? error.stack ?? error.message : String(error)}`)
+              return false
+            }
+          }
+
+          async function drag(locator, deltaX, deltaY) {
+            await locator.scrollIntoViewIfNeeded()
+            const box = await locator.boundingBox()
+            if (!box) throw new Error('Control has no bounding box.')
+            const x = box.x + box.width / 2
+            const y = box.y + box.height / 2
+            await locator.hover()
+            await page.mouse.move(x, y)
+            await page.mouse.down()
+            await page.mouse.move(x + deltaX, y + deltaY, { steps: 8 })
+            await page.mouse.up()
+          }
+
+          const browser = await chromium.launch({ headless: true })
+          const page = await browser.newPage({ viewport: { width: 1440, height: 1200 } })
+          page.on('console', (message) => void log(`  - browser console ${message.type()}: ${message.text()}`))
+          page.on('pageerror', (error) => void log(`  - browser page error: ${error.stack ?? error.message}`))
+
+          await step('open production preview', async () => {
+            await page.goto('http://127.0.0.1:4173/', { waitUntil: 'networkidle' })
+            return page.url()
+          })
+
+          const graph = page.getByRole('group', { name: 'Operator 1 keyboard scaling draggable controls' })
+          await step('locate scaling graph', async () => {
+            await graph.scrollIntoViewIfNeeded()
+            await graph.waitFor({ timeout: 10_000 })
+            return `slider count ${await graph.getByRole('slider').count()}`
+          })
+
+          const breakpoint = page.getByRole('slider', { name: 'Operator 1 keyboard scaling breakpoint' })
+          const breakpointNumeric = page.getByRole('slider', { name: 'Break point' })
+          await step('read initial breakpoint', async () => `graph ${await breakpoint.getAttribute('aria-valuenow')}, numeric ${await breakpointNumeric.inputValue()}`)
+          await step('drag breakpoint right', async () => {
+            await drag(breakpoint, 58, 0)
+            return `graph ${await breakpoint.getAttribute('aria-valuenow')}, numeric ${await breakpointNumeric.inputValue()}`
+          })
+          await step('undo breakpoint drag', async () => {
+            await page.getByRole('button', { name: 'Undo last editor change' }).click()
+            await page.waitForTimeout(100)
+            return `graph ${await breakpoint.getAttribute('aria-valuenow')}, numeric ${await breakpointNumeric.inputValue()}`
+          })
+
+          const leftDepth = page.getByRole('slider', { name: 'Operator 1 keyboard scaling left depth' })
+          const leftDepthNumeric = page.getByRole('slider', { name: 'Left depth' })
+          await step('drag negative left depth down', async () => {
+            await drag(leftDepth, 0, 42)
+            return `graph ${await leftDepth.getAttribute('aria-valuenow')}, numeric ${await leftDepthNumeric.inputValue()}`
+          })
+
+          const rightCurve = page.getByLabel('Right curve')
+          await step('select positive right curve', async () => {
+            await rightCurve.selectOption('positive-linear')
+            return rightCurve.inputValue()
+          })
+
+          const rightDepth = page.getByRole('slider', { name: 'Operator 1 keyboard scaling right depth' })
+          const rightDepthNumeric = page.getByRole('slider', { name: 'Right depth' })
+          await step('drag positive right depth up', async () => {
+            await drag(rightDepth, 0, -42)
+            return `graph ${await rightDepth.getAttribute('aria-valuenow')}, numeric ${await rightDepthNumeric.inputValue()}`
+          })
+
+          await step('keyboard breakpoint Home and End', async () => {
+            await breakpoint.focus()
+            await page.keyboard.press('Home')
+            const home = `${await breakpoint.getAttribute('aria-valuenow')}/${await breakpointNumeric.inputValue()}`
+            await page.keyboard.press('End')
+            const end = `${await breakpoint.getAttribute('aria-valuenow')}/${await breakpointNumeric.inputValue()}`
+            return `Home ${home}, End ${end}`
+          })
+
+          await step('capture browser screenshot', async () => {
+            await page.screenshot({ path: 'artifacts/keyboard-scaling-browser-diagnostics.png', fullPage: true })
+          })
+
+          await browser.close()
+          JS
+          node artifacts/diagnose-keyboard-scaling.mjs
+          rm artifacts/diagnose-keyboard-scaling.mjs
+      - uses: actions/upload-artifact@v4
+        with:
+          name: keyboard-scaling-browser-diagnostics
+          path: artifacts/keyboard-scaling-browser-diagnostics.png
+          if-no-files-found: warn
+      - name: Commit diagnostics
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add docs/validation/keyboard-scaling-browser-diagnostics.md
+          git commit -m 'chore(ci): record keyboard scaling browser diagnostics'
+          git push origin HEAD:main
