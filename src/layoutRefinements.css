@@ -1,0 +1,111 @@
+:root {
+  --fm1-screen: #4d9fbe;
+  --fm1-screen-bright: #83c7df;
+  --fm1-screen-dark: #052737;
+  --fm1-blue-led: #52afd0;
+  --fm1-type-meta: 0.6875rem;
+  --fm1-type-control: 0.8125rem;
+  --fm1-type-title: 1rem;
+}
+
+.fm1-brandplate {
+  padding: 1rem !important;
+}
+
+.fm1-brand-title {
+  margin-top: 0.35rem !important;
+  font-size: clamp(1.8rem, 4vw, 2.5rem);
+}
+
+.fm1-mini-display {
+  margin-top: 0.75rem !important;
+  padding-block: 0.5rem !important;
+}
+
+.fm1-mini-display,
+.fm1-lcd {
+  background:
+    linear-gradient(180deg, rgb(255 255 255 / 0.11), transparent 20%),
+    linear-gradient(180deg, #83c7df 0%, #559fbc 56%, #377f9d 100%) !important;
+  box-shadow:
+    0 0 0 2px #252c28,
+    0 0 0 4px #070907,
+    inset 0 0 18px rgb(2 55 78 / 0.32),
+    0 0 14px rgb(65 145 176 / 0.1) !important;
+}
+
+.fm1-control-deck {
+  display: block;
+  padding: 0.875rem;
+}
+
+.fm1-lcd {
+  min-height: 108px;
+  padding: 0.875rem !important;
+}
+
+.fm1-lcd-title {
+  margin-top: 0.5rem;
+  font-size: 1.25rem;
+}
+
+.fm1-lcd-summary {
+  margin-top: 0.4rem;
+  font-size: var(--fm1-type-meta);
+  line-height: 1.35;
+}
+
+.fm1-lcd-footer {
+  margin-top: 0.5rem;
+  padding-top: 0.35rem;
+}
+
+.fm1-app button[data-active="true"],
+.fm1-app button[class*="bg-cyan-300"],
+.fm1-app button[class*="bg-amber-300"] {
+  border-color: #73b9d2 !important;
+  background:
+    linear-gradient(180deg, #86c9e0 0%, #4d9dbc 56%, #2f708c 100%) !important;
+  color: #041f2c !important;
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.46),
+    inset 0 -2px 0 rgb(3 60 82 / 0.45),
+    0 0 10px rgb(65 145 176 / 0.14),
+    0 3px 5px rgb(0 0 0 / 0.5) !important;
+}
+
+.fm1-app :where(
+  [class*="text-[9px]"],
+  [class*="text-[10px]"],
+  [class*="text-[11px]"],
+  .text-xs,
+  .fm1-hardware-label,
+  .fm1-brand-kicker,
+  .fm1-section-title,
+  .fm1-section-description,
+  .fm1-lcd-topline,
+  .fm1-lcd-footer
+) {
+  font-size: var(--fm1-type-meta) !important;
+}
+
+.fm1-app :where(
+  .text-sm,
+  button,
+  input,
+  select,
+  textarea
+) {
+  font-size: var(--fm1-type-control) !important;
+}
+
+.fm1-app :where(
+  .text-base,
+  .text-lg,
+  .text-xl,
+  .text-2xl,
+  h2,
+  h3
+) {
+  font-size: var(--fm1-type-title) !important;
+}
