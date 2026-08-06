@@ -67,9 +67,10 @@ The staged technical decision and reviewed libraries/research are documented in 
 
 ## 10. Virtual DX7 / FM-1-inspired synthesizer
 
-The virtual engine must be described as DX7-compatible and FM-1-inspired until physical comparison proves stronger equivalence.
+The virtual engine must be described as DX7-compatible and FM-1-inspired until physical comparison proves stronger equivalence. The implemented dependency-free boundary, preliminary audit, blockers and measurable spike gates are recorded in [`docs/research/virtual-dx7-renderer-feasibility-spike.md`](./docs/research/virtual-dx7-renderer-feasibility-spike.md) and [`docs/validation/virtual-dx7-renderer-boundary.md`](./docs/validation/virtual-dx7-renderer-boundary.md).
 
-- [ ] Audit the Apache-2.0 MSFA sound-engine boundary used by Dexed, preserve required notices and create a feasibility spike that compiles only the compatible engine core to WebAssembly; do not import the complete GPL-3.0 Dexed wrapper into the MIT application without an explicit licensing decision.
+- [ ] Complete a file-by-file and transitive license audit for the pinned Dexed/MSFA source, resolve the tuning/MTS-ESP boundary, record exact revisions and hashes in a machine-readable manifest, and add required Apache-2.0/third-party license and NOTICE material before copying or distributing engine code.
+- [ ] Compile only the approved MSFA-compatible core and an FM1 Editor-owned bridge to reproducible WebAssembly; render the fixed synthetic known-voice request, meet the documented deterministic PCM, reference-comparison, performance and bundle-size gates, and do not import the complete GPL-3.0 Dexed wrapper.
 - [ ] Implement a deterministic offline PCM renderer and a low-latency AudioWorklet renderer with polyphony, note on/off, velocity, pitch bend, modulation, sustain, aftertouch, all-notes-off and lifecycle cleanup.
 - [ ] Load the current semantic voice directly into the virtual engine and route the virtual piano, preset audition and browser sequencer to local audio without requiring Web MIDI hardware.
 - [ ] Evaluate Synth_Dexed and `dx7-synth-js` as implementation references or fallbacks only after branch-level license, compatibility, missing-parameter and maintenance audits.
