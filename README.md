@@ -28,14 +28,15 @@ A TypeScript web editor and librarian for the **M-VAVE FM-1** pocket FM synthesi
 - export of both unchanged recovery bank and merged bank before device transfer;
 - explicitly confirmed 4,104-byte whole-bank SysEx transfer with A/B/C/D destination and preset mapping;
 - two-octave virtual piano for mouse, touch and focused computer-key input, with channel, velocity, octave and all-notes-off controls;
+- browser-local audio-input recording with explicit permission, FM-1-labelled device suggestion, manual selection, live level/clipping diagnostics, lossless WAV output and optional browser-compressed fallback;
 - documented FM-1 CC, note, program and real-time message encoders;
 - documented FM-1 effects workspace for filter, reverb, delay, distortion, chorus and phaser CC 0–23;
 - local 16-step sequence editor with note/rest/tie, velocity, gate, tempo, swing, length and MIDI channel;
 - versioned sequence JSON load/save and scheduled Web MIDI playback through the monitored output adapter;
-- 46 passing Vitest tests across 16 files covering codecs, imports, catalog, library migration/backup, bank merging, audition, effects, sequencing and MIDI monitoring;
+- Vitest coverage for codecs, imports, catalog, library migration/backup, bank merging, audition, audio recording, effects, sequencing and MIDI monitoring;
 - GitHub Actions workflow for typecheck, ESLint/JSX accessibility, tests and production build.
 
-See [`PLAN.md`](./PLAN.md) for unresolved work and [`docs/validation/ci-receipt.md`](./docs/validation/ci-receipt.md) for the latest executed validation.
+See [`PLAN.md`](./PLAN.md) for unresolved work, [`docs/validation/ci-receipt.md`](./docs/validation/ci-receipt.md) for the general validation receipt and [`docs/validation/audio-recorder.md`](./docs/validation/audio-recorder.md) for the mocked-media recorder validation.
 
 ## Merged patch catalog
 
@@ -93,6 +94,25 @@ Both attempted isolated-voice methods are disabled after physical tests left the
 
 Neither method will be re-enabled without a verified semantic FM-1 parameter map or documented edit-buffer protocol.
 
+## FM-1 USB audio recording
+
+The Voice workspace contains a collapsed **FM-1 USB audio** recorder that is independent from MIDI connection state.
+
+- Microphone/audio-input permission is requested only after **Allow and connect input** is pressed.
+- The browser enumerates `audioinput` devices after permission, suggests an endpoint whose label contains `FM-1`, and keeps the selector available for manual override.
+- Capture requests disable echo cancellation, noise suppression and automatic gain control where the browser/device supports those constraints.
+- The panel reports the actual track label, sample rate, channel count and processing settings returned by the browser.
+- A live RMS level meter and clipping indicator remain active while connected.
+- Lossless PCM is encoded locally as a 16-bit WAV. WebM/Opus or Ogg/Opus is offered only when `MediaRecorder` reports a supported fallback.
+- Recordings remain in memory until **Save recording** is pressed. They are not uploaded, added to IndexedDB or persisted automatically.
+- Filenames include the patch name, target mode, available bank/slot metadata and a UTC timestamp.
+- Monitoring is disabled by default, requires a separate confirmation and remains switchable off during recording because speaker monitoring can create loud feedback.
+- Disconnect, device removal, capture failure and component disposal release the media tracks and perform a best-effort MIDI all-sound-off/all-notes-off safety action when a MIDI output exists.
+
+The Windows endpoint name `Microphone (FM-1)` is only a device-label finding. The application does **not** claim that it carries synthesizer audio until playing the physical FM-1 moves the Windows/browser input meter and produces an audible recording. Firmware, driver, sample format, channel layout, latency and MASTER-knob behavior remain hardware-verification tasks.
+
+Microphone permission can be revoked from the browser's site permissions. The application must then be reconnected explicitly; it does not retry permission in the background.
+
 ## SysEx diagnostics
 
 The import analyzer scans every complete `F0 … F7` message and reports:
@@ -112,6 +132,7 @@ The official FM-1 MIDI document defines a single-parameter write frame and param
 - `.syx` parsing, editing, local storage and export are normal supported workflows;
 - MIDI note/transport playback and preset recall use documented messages;
 - the effects workspace uses the documented FX-channel CC 0–23 map, but physical-device behavior is not yet fully recorded;
+- browser-local audio capture is software-validated with mocked media, but the physical `Microphone (FM-1)` endpoint is not yet verified to carry audible synthesizer output;
 - isolated single-voice and guessed byte-index parameter transfers are disabled;
 - the guarded standard 32-voice bank merge/send workflow is implemented but still requires physical verification on the user's FM-1 and firmware;
 - device-originated bank readback/backup is unavailable until a supported dump request is identified;
@@ -128,6 +149,7 @@ Detailed protocol findings are recorded in [`docs/research/fm1-midi-protocol.md`
 - import, browse, inspect, edit and export DX7-compatible `.syx` patches and banks;
 - organize, back up and restore a searchable local patch library;
 - merge one edited voice into an exact 32-voice base bank and transfer it to FM-1 destination A/B/C/D;
+- record the selected browser audio input locally and save WAV files explicitly;
 - control documented FM-1 filter and effects CCs;
 - create, save and play sequences from the browser;
 - add device-originated backup and pattern transfer only if stable protocols are documented or hardware-verified.
@@ -150,16 +172,17 @@ Catalog provenance:
 - React + TypeScript + Vite
 - Tailwind CSS
 - Web MIDI API with `sysex: true`
+- MediaDevices, Web Audio and MediaRecorder for browser-local audio capture
 - `fflate` for browser-side ZIP indexing and selective bank extraction
 - framework-independent DX7/FM-1 protocol and file-format modules
 - IndexedDB-backed local patch library
-- Vitest for protocol, codec, scheduling, library and catalog tests
+- Vitest for protocol, codec, scheduling, library, audio and catalog tests
 
 A desktop wrapper such as Tauri remains possible because device protocol, storage and UI state are kept behind adapters.
 
 ## Browser requirements
 
-Web MIDI and SysEx require a compatible Chromium-based browser, a secure context (`https://` or `localhost`) and explicit user permission. Browser support and device behavior will be documented from real hardware tests.
+Web MIDI, SysEx and audio-input capture require a compatible Chromium-based browser, a secure context (`https://` or `localhost`) and explicit user permission. MIDI and microphone permissions are separate. Browser support and physical device behavior will be documented from real hardware tests.
 
 ## Development
 
