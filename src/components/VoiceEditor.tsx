@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import type { Dx7Curve, Dx7LfoWaveform, Dx7Operator, Dx7Voice, FourValues } from '../domain/voice'
 import { EnvelopeGraph } from './EnvelopeGraph'
+import { KeyboardScalingGraph } from './KeyboardScalingGraph'
 import { OperatorRoutingEditor } from './OperatorRoutingEditor'
 import { RangeControl } from './RangeControl'
 
@@ -179,10 +180,8 @@ export function VoiceEditor({ documentKey, voice, onChange }: VoiceEditorProps) 
                 <RangeControl label="Coarse" max={31} onChange={(frequencyCoarse) => updateOperator((current) => ({ ...current, frequencyCoarse }))} value={operator.frequencyCoarse} />
                 <RangeControl label="Fine" onChange={(frequencyFine) => updateOperator((current) => ({ ...current, frequencyFine }))} value={operator.frequencyFine} />
                 <RangeControl label="Detune" max={14} onChange={(detune) => updateOperator((current) => ({ ...current, detune }))} value={operator.detune} />
-                <RangeControl label="Rate scaling" max={7} onChange={(rateScaling) => updateOperator((current) => ({ ...current, keyboardScaling: { ...current.keyboardScaling, rateScaling } }))} value={operator.keyboardScaling.rateScaling} />
                 <RangeControl label="Velocity" max={7} onChange={(keyVelocitySensitivity) => updateOperator((current) => ({ ...current, keyVelocitySensitivity }))} value={operator.keyVelocitySensitivity} />
                 <RangeControl label="Amp mod" max={3} onChange={(amplitudeModulationSensitivity) => updateOperator((current) => ({ ...current, amplitudeModulationSensitivity }))} value={operator.amplitudeModulationSensitivity} />
-                <RangeControl label="Break point" onChange={(breakPoint) => updateOperator((current) => ({ ...current, keyboardScaling: { ...current.keyboardScaling, breakPoint } }))} value={operator.keyboardScaling.breakPoint} />
 
                 <label className="grid gap-2 rounded-xl border border-white/8 bg-black/15 p-3 text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">
                   Oscillator mode
@@ -195,6 +194,38 @@ export function VoiceEditor({ documentKey, voice, onChange }: VoiceEditorProps) 
                     <option value="fixed">Fixed</option>
                   </select>
                 </label>
+              </div>
+            </div>
+
+            <div className="mt-4 grid gap-4 border-t border-white/8 pt-4 xl:grid-cols-[1.35fr_1fr]">
+              <KeyboardScalingGraph
+                label={`Operator ${selectedOperator + 1} keyboard scaling`}
+                onChange={(keyboardScaling) => updateOperator((current) => ({ ...current, keyboardScaling }))}
+                scaling={operator.keyboardScaling}
+              />
+
+              <div className="grid content-start gap-3 sm:grid-cols-2">
+                <RangeControl
+                  label="Break point"
+                  onChange={(breakPoint) => updateOperator((current) => ({ ...current, keyboardScaling: { ...current.keyboardScaling, breakPoint } }))}
+                  value={operator.keyboardScaling.breakPoint}
+                />
+                <RangeControl
+                  label="Rate scaling"
+                  max={7}
+                  onChange={(rateScaling) => updateOperator((current) => ({ ...current, keyboardScaling: { ...current.keyboardScaling, rateScaling } }))}
+                  value={operator.keyboardScaling.rateScaling}
+                />
+                <RangeControl
+                  label="Left depth"
+                  onChange={(leftDepth) => updateOperator((current) => ({ ...current, keyboardScaling: { ...current.keyboardScaling, leftDepth } }))}
+                  value={operator.keyboardScaling.leftDepth}
+                />
+                <RangeControl
+                  label="Right depth"
+                  onChange={(rightDepth) => updateOperator((current) => ({ ...current, keyboardScaling: { ...current.keyboardScaling, rightDepth } }))}
+                  value={operator.keyboardScaling.rightDepth}
+                />
 
                 {(['leftCurve', 'rightCurve'] as const).map((side) => (
                   <label className="grid gap-2 rounded-xl border border-white/8 bg-black/15 p-3 text-xs font-semibold uppercase tracking-[0.14em] text-slate-400" key={side}>
