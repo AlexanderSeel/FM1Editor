@@ -9,8 +9,6 @@ on:
       - docs/validation/.trigger-dx7-semantic-ranges
       - src/sysex/dx7.ts
       - src/sysex/dx7.test.ts
-    paths-ignore:
-      - docs/validation/dx7-semantic-ranges.md
 
 permissions:
   contents: write
