@@ -45,7 +45,7 @@ Execute sections C and D of [`docs/validation/fm1-hardware-test-protocol.md`](./
 
 ## 8. Validation and delivery
 
-- [ ] Re-run typecheck, lint, the full test suite, production build and the Chrome/Edge responsive matrix for the compact layout, 340–410 px vertical-only sidebar with long labels, and guarded DX7 voice/function parameter controls when GitHub Actions scheduling is available.
+- [ ] Execute typecheck, lint, the full test suite, production build and the permanent Chrome/Edge FM-1 + DX7 responsive matrices. The scripts now cover compact layout, the 340–410 px vertical-only sidebar with long labels, FM-1 bank/piano controls and guarded DX7 voice/function panels, but current push-run scheduling produced no receipt.
 - [ ] Test Chrome and Edge on Windows with a physical FM-1 over USB MIDI and USB audio, including merged bank import, destination selection, preset recall, recording, note-off recovery and channel selection; test BLE MIDI where browser/platform support permits.
 - [ ] Add GitHub Pages deployment after secure-context routing and Web MIDI/Web Audio behavior are verified.
 - [ ] Document firmware-specific limitations, recovery steps and tested hardware/browser combinations.
