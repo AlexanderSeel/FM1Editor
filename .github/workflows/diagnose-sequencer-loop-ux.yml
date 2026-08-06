@@ -1,0 +1,55 @@
+name: Diagnose sequencer loop UX patch
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - docs/validation/.trigger-sequencer-loop-ux-diagnostic
+
+permissions:
+  contents: write
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Inspect patch markers
+        shell: python
+        run: |
+          from pathlib import Path
+          import re
+
+          text = Path('src/components/SequenceEditor.tsx').read_text()
+          readme = Path('README.md').read_text()
+          markers = {
+            'sequence import': "} from '../domain/sequenceOperations'\n",
+            'timer refs': "  const uiTimers = useRef<number[]>([])\n  const externalPlayer = useRef<ExternalSequencePlayer | null>(null)\n",
+            'base octave state': "  const [baseOctave, setBaseOctave] = useState(3)\n",
+            'note row block': "  const baseNote = (baseOctave + 1) * 12\n  const noteRows = useMemo(\n    () => Array.from({ length: 24 }, (_, index) => Math.min(127, baseNote + 23 - index)),\n    [baseNote],\n  )\n",
+            'cleanup effect': "  useEffect(() => () => {\n    clearUiTimers()\n    externalPlayer.current?.stop()\n  }, [clearUiTimers])\n",
+            'stop marker': "  const stop = () => {\n    clearUiTimers()\n",
+            'load marker': "      setSelectedStep(0)\n      setStatus(`Loaded ${loaded.name || file.name}.`)\n",
+            'step header': "onClick={() => setSelectedStep(index)} type=\"button\">{String(index + 1).padStart(2, '0')}</button>",
+            'primary note': "<RangeControl label=\"Primary note\" max={127} onChange={(note) => onChange(updateStep(sequence, selectedStep, (step) => updateStepNotes(step, note, false)))} suffix={` · ${formatNote(selected.note)}`} value={selected.note} />",
+          }
+          cell_pattern = re.compile(r"\s+return <button aria-label=\{`Step \$\{index \+ 1\} \$\{formatNote\(note\)\}\$\{active \? ' active' : ''\}`\} className=\{`min-h-8[\s\S]*?type=\"button\" />")
+          lines = ['# Sequencer loop UX patch diagnostics', '']
+          for label, marker in markers.items():
+            lines.append(f'- {label}: **{text.count(marker)}**')
+          lines.extend([
+            f'- play start: **{text.count("  const play = async () => {")}**',
+            f'- stop boundary: **{text.count(chr(10) + "  const stop = () => {")}**',
+            f'- piano-roll cell regex: **{len(cell_pattern.findall(text))}**',
+            f'- README marker: **{readme.count("- local 16-step sequence editor with note/rest/tie, velocity, gate, tempo, swing, length and MIDI channel;" + chr(10) + "- versioned sequence JSON load/save and scheduled Web MIDI playback through the monitored output adapter;")}**',
+          ])
+          Path('docs/validation/sequencer-loop-patch-diagnostics.md').write_text('\n'.join(lines) + '\n')
+      - name: Publish diagnostics and cleanup
+        shell: bash
+        run: |
+          rm -f .github/workflows/diagnose-sequencer-loop-ux.yml docs/validation/.trigger-sequencer-loop-ux-diagnostic
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "test(ci): record sequencer loop patch diagnostics"
+          git push
