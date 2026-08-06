@@ -1,0 +1,79 @@
+name: Revalidate plan sections 3-7
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - docs/validation/.trigger-plan-3-7-final
+
+permissions:
+  contents: write
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - id: checks
+        continue-on-error: true
+        shell: bash
+        run: |
+          set +e
+          npm install --no-audit --no-fund; install=$?
+          npm run typecheck; typecheck=$?
+          npm run lint; lint=$?
+          npm run test; test=$?
+          npm run build; build=$?
+          set -e
+          {
+            echo "install=$install"
+            echo "typecheck=$typecheck"
+            echo "lint=$lint"
+            echo "test=$test"
+            echo "build=$build"
+          } >> "$GITHUB_OUTPUT"
+      - name: Record final receipt and clean validator
+        env:
+          INSTALL: ${{ steps.checks.outputs.install }}
+          TYPECHECK: ${{ steps.checks.outputs.typecheck }}
+          LINT: ${{ steps.checks.outputs.lint }}
+          TEST: ${{ steps.checks.outputs.test }}
+          BUILD: ${{ steps.checks.outputs.build }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          result() { if [ "$1" = 0 ]; then echo SUCCESS; else echo FAILURE; fi; }
+          mkdir -p docs/validation
+          {
+            echo '# Plan sections 3–7 validation'
+            echo
+            echo "Validated source commit: \`$GITHUB_SHA\`"
+            echo
+            echo "- npm install: **$(result "$INSTALL")**"
+            echo "- TypeScript typecheck: **$(result "$TYPECHECK")**"
+            echo "- ESLint and JSX accessibility: **$(result "$LINT")**"
+            echo "- Full Vitest suite: **$(result "$TEST")**"
+            echo "- Production build: **$(result "$BUILD")**"
+            echo
+            echo '- Algorithm selection is displayed directly with the operator routing area.'
+            echo '- Target-aware Live MIDI controls appear directly above the virtual piano.'
+            echo '- Direct controls are limited to Program Change, transport, Clock, All Notes Off and documented FM-1 CC 0–23 effects.'
+            echo '- The sequencer includes piano-roll mono/poly entry, transforms, presets, pattern chaining, arrangement, playhead diagnostics and internal/external 24-PPQN clock.'
+            echo '- Physical FM-1 audio, bank mapping, acknowledgements, readback, performance semantics and internal pattern transfer remain unverified.'
+          } > docs/validation/plan-3-7.md
+
+          rm -f \
+            .github/workflows/validate-plan-3-7-final.yml \
+            docs/validation/.trigger-plan-3-7-final \
+            docs/validation/plan-3-7-typecheck.md
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "test(ci): record final plan sections 3-7 validation"
+          git push
+
+          [ "$INSTALL" = 0 ] && [ "$TYPECHECK" = 0 ] && [ "$LINT" = 0 ] && [ "$TEST" = 0 ] && [ "$BUILD" = 0 ]
