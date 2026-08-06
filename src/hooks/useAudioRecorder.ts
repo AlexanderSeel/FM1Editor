@@ -6,6 +6,7 @@ import {
   createRecordingFilename,
   encodePcm16Wav,
   INITIAL_AUDIO_RECORDER_STATE,
+  isFm1AudioDeviceLabel,
   mergePcmChunks,
   reduceAudioRecorderState,
   toAudioInputDevices,
@@ -72,6 +73,10 @@ function readDiagnostics(track: MediaStreamTrack, context: AudioContext): AudioT
   }
 }
 
+function labelsAreVisible(devices: readonly AudioInputDevice[]): boolean {
+  return devices.some((device) => device.label !== 'Audio input')
+}
+
 export function useAudioRecorder({ filenameMetadata, onSafetyStop }: UseAudioRecorderOptions) {
   const supported = useMemo(
     () => typeof navigator !== 'undefined'
@@ -81,7 +86,7 @@ export function useAudioRecorder({ filenameMetadata, onSafetyStop }: UseAudioRec
   )
   const [state, dispatch] = useReducer(reduceAudioRecorderState, INITIAL_AUDIO_RECORDER_STATE)
   const [devices, setDevices] = useState<readonly AudioInputDevice[]>([])
-  const [selectedDeviceId, setSelectedDeviceId] = useState<string | null>(null)
+  const [selectedDeviceId, setSelectedDeviceIdState] = useState<string | null>(null)
   const [diagnostics, setDiagnostics] = useState<AudioTrackDiagnostics | null>(null)
   const [level, setLevel] = useState(0)
   const [clipping, setClipping] = useState(false)
@@ -102,12 +107,12 @@ export function useAudioRecorder({ filenameMetadata, onSafetyStop }: UseAudioRec
   const recorderRef = useRef<MediaRecorder | null>(null)
   const recorderChunksRef = useRef<Blob[]>([])
   const compressedMimeTypeRef = useRef<string | null>(null)
-  const cancelCompressedRef = useRef(false)
   const recordingFormatRef = useRef<AudioRecordingFormat | null>(null)
   const startedAtRef = useRef<number | null>(null)
   const elapsedTimerRef = useRef<number | null>(null)
   const filenameMetadataRef = useRef(filenameMetadata)
   const safetyStopRef = useRef(onSafetyStop)
+  const manualDeviceSelectionRef = useRef(false)
 
   filenameMetadataRef.current = filenameMetadata
   safetyStopRef.current = onSafetyStop
@@ -121,6 +126,11 @@ export function useAudioRecorder({ filenameMetadata, onSafetyStop }: UseAudioRec
     const processor = processorRef.current
     if (processor) {
       processor.onaudioprocess = null
+      try {
+        sourceRef.current?.disconnect(processor)
+      } catch {
+        // The source may already have been disconnected during device teardown.
+      }
       processor.disconnect()
     }
     processorSinkRef.current?.disconnect()
@@ -140,10 +150,7 @@ export function useAudioRecorder({ filenameMetadata, onSafetyStop }: UseAudioRec
     stopRecordingNodes()
     stopMeter()
     const recorder = recorderRef.current
-    if (recorder && recorder.state !== 'inactive') {
-      cancelCompressedRef.current = true
-      recorder.stop()
-    }
+    if (recorder && recorder.state !== 'inactive') recorder.stop()
     recorderRef.current = null
     recorderChunksRef.current = []
     recordingFormatRef.current = null
@@ -153,11 +160,13 @@ export function useAudioRecorder({ filenameMetadata, onSafetyStop }: UseAudioRec
     sourceRef.current = null
     analyserRef.current = null
     monitorGainRef.current = null
-    for (const track of streamRef.current?.getTracks() ?? []) track.stop()
+    const stream = streamRef.current
     streamRef.current = null
+    for (const track of stream?.getTracks() ?? []) track.stop()
     const context = contextRef.current
     contextRef.current = null
     if (context && context.state !== 'closed') void context.close()
+    pcmChunksRef.current = []
     setDiagnostics(null)
     setMonitoringState(false)
     setElapsedMs(0)
@@ -170,11 +179,21 @@ export function useAudioRecorder({ filenameMetadata, onSafetyStop }: UseAudioRec
     setStatus(null)
   }, [releaseStream])
 
+  const setSelectedDeviceId = useCallback((deviceId: string | null) => {
+    manualDeviceSelectionRef.current = true
+    setSelectedDeviceIdState(deviceId)
+  }, [])
+
   const refreshDevices = useCallback(async (): Promise<readonly AudioInputDevice[]> => {
     if (!navigator.mediaDevices?.enumerateDevices) return []
     const nextDevices = toAudioInputDevices(await navigator.mediaDevices.enumerateDevices())
     setDevices(nextDevices)
-    setSelectedDeviceId((current) => chooseAudioInputDevice(nextDevices, current))
+    setSelectedDeviceIdState((current) => {
+      if (current && nextDevices.some((device) => device.deviceId === current)) return current
+      if (manualDeviceSelectionRef.current) return null
+      if (!labelsAreVisible(nextDevices)) return null
+      return chooseAudioInputDevice(nextDevices, null)
+    })
     return nextDevices
   }, [])
 
@@ -236,10 +255,12 @@ export function useAudioRecorder({ filenameMetadata, onSafetyStop }: UseAudioRec
     try {
       stream = await navigator.mediaDevices.getUserMedia(createAudioInputConstraints(selectedDeviceId))
       const availableDevices = await refreshDevices()
-      const suggestedDeviceId = chooseAudioInputDevice(availableDevices, selectedDeviceId)
+      const suggestedDeviceId = manualDeviceSelectionRef.current
+        ? selectedDeviceId
+        : chooseAudioInputDevice(availableDevices, null)
       const openedDeviceId = stream.getAudioTracks()[0]?.getSettings().deviceId ?? null
 
-      if (!selectedDeviceId && suggestedDeviceId && openedDeviceId !== suggestedDeviceId) {
+      if (suggestedDeviceId && openedDeviceId !== suggestedDeviceId) {
         for (const track of stream.getTracks()) track.stop()
         stream = await navigator.mediaDevices.getUserMedia(createAudioInputConstraints(suggestedDeviceId))
       }
@@ -249,9 +270,9 @@ export function useAudioRecorder({ filenameMetadata, onSafetyStop }: UseAudioRec
         ?? suggestedDeviceId
         ?? selectedDeviceId
         ?? 'default'
-      setSelectedDeviceId(connectedDeviceId)
+      setSelectedDeviceIdState(connectedDeviceId)
       dispatch({ type: 'permission-granted', deviceId: connectedDeviceId })
-      setStatus(isFm1Label(stream.getAudioTracks()[0]?.label ?? '')
+      setStatus(isFm1AudioDeviceLabel(stream.getAudioTracks()[0]?.label ?? '')
         ? 'FM-1-labelled audio input connected. Physical synth-audio verification is still required.'
         : 'Audio input connected. Select the FM-1-labelled input manually when available.')
     } catch (cause) {
@@ -292,8 +313,11 @@ export function useAudioRecorder({ filenameMetadata, onSafetyStop }: UseAudioRec
     const processor = context.createScriptProcessor(RECORDING_BUFFER_SIZE, requestedChannels, requestedChannels)
     const sink = context.createGain()
     sink.gain.value = 0
-    pcmChunksRef.current = Array.from({ length: requestedChannels }, () => [])
+    pcmChunksRef.current = []
     processor.onaudioprocess = (event) => {
+      if (pcmChunksRef.current.length === 0) {
+        pcmChunksRef.current = Array.from({ length: event.inputBuffer.numberOfChannels }, () => [])
+      }
       const availableChannels = Math.min(event.inputBuffer.numberOfChannels, pcmChunksRef.current.length)
       for (let channel = 0; channel < availableChannels; channel += 1) {
         pcmChunksRef.current[channel]?.push(Float32Array.from(event.inputBuffer.getChannelData(channel)))
@@ -317,7 +341,6 @@ export function useAudioRecorder({ filenameMetadata, onSafetyStop }: UseAudioRec
     const recorder = new MediaRecorder(stream, { mimeType })
     recorderChunksRef.current = []
     compressedMimeTypeRef.current = mimeType
-    cancelCompressedRef.current = false
     recorder.addEventListener('dataavailable', (event) => {
       if (event.data.size > 0) recorderChunksRef.current.push(event.data)
     })
@@ -372,10 +395,14 @@ export function useAudioRecorder({ filenameMetadata, onSafetyStop }: UseAudioRec
         stopRecordingNodes()
         const context = contextRef.current
         if (!context) throw new Error('The audio context closed before the WAV could be created.')
-        const channels = pcmChunksRef.current.map(mergePcmChunks)
+        const channels = pcmChunksRef.current
+          .filter((chunks) => chunks.length > 0)
+          .map(mergePcmChunks)
+        if (channels.length === 0) throw new Error('No PCM audio frames were captured.')
         const bytes = encodePcm16Wav(channels, context.sampleRate)
+        const wavBytes = Uint8Array.from(bytes)
         setResult({
-          blob: new Blob([bytes.buffer], { type: 'audio/wav' }),
+          blob: new Blob([wavBytes.buffer], { type: 'audio/wav' }),
           durationMs,
           filename: createRecordingFilename(filenameMetadataRef.current, 'wav'),
           mimeType: 'audio/wav',
@@ -397,10 +424,7 @@ export function useAudioRecorder({ filenameMetadata, onSafetyStop }: UseAudioRec
     setElapsedMs(0)
     stopRecordingNodes()
     const recorder = recorderRef.current
-    if (recorder && recorder.state !== 'inactive') {
-      cancelCompressedRef.current = true
-      recorder.stop()
-    }
+    if (recorder && recorder.state !== 'inactive') recorder.stop()
     recorderRef.current = null
     recorderChunksRef.current = []
     pcmChunksRef.current = []
@@ -416,6 +440,7 @@ export function useAudioRecorder({ filenameMetadata, onSafetyStop }: UseAudioRec
     if (!context || !source) return
     try {
       if (enabled) {
+        if (monitorGainRef.current) return
         if (context.state === 'suspended') await context.resume()
         const gain = context.createGain()
         gain.gain.value = 1
@@ -494,8 +519,4 @@ export function useAudioRecorder({ filenameMetadata, onSafetyStop }: UseAudioRec
     setMonitoring,
     clearResult,
   }
-}
-
-function isFm1Label(label: string): boolean {
-  return /(^|[^a-z0-9])fm[\s_-]?1([^a-z0-9]|$)/i.test(label)
 }
