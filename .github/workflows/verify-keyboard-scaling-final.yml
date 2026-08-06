@@ -220,7 +220,8 @@ jobs:
 
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add docs/validation/keyboard-scaling-editor.md docs/validation/keyboard-scaling-final-diagnostics.md 2>/dev/null || true
+          if [ -f docs/validation/keyboard-scaling-editor.md ]; then git add docs/validation/keyboard-scaling-editor.md; fi
+          if [ -f docs/validation/keyboard-scaling-final-diagnostics.md ]; then git add docs/validation/keyboard-scaling-final-diagnostics.md; else git add -u docs/validation/keyboard-scaling-final-diagnostics.md 2>/dev/null || true; fi
           git commit -m "$commit_message"
           git push origin HEAD:main
 
