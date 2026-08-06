@@ -29,14 +29,14 @@ describe('DX7 function parameter changes', () => {
 
   it('rejects values outside each documented semantic range', () => {
     for (const definition of DX7_FUNCTION_PARAMETERS) {
-      expect(() => encodeDx7FunctionParameterChange(definition.id, definition.minimum - 1)).toThrow(RangeError)
-      expect(() => encodeDx7FunctionParameterChange(definition.id, definition.maximum + 1)).toThrow(RangeError)
+      expect(() => encodeDx7FunctionParameterChange(definition.id, definition.minimum - 1)).toThrow(/must be an integer/)
+      expect(() => encodeDx7FunctionParameterChange(definition.id, definition.maximum + 1)).toThrow(/must be an integer/)
     }
   })
 
   it('rejects invalid MIDI channels and unsupported parameter identifiers', () => {
-    expect(() => encodeDx7FunctionParameterChange(64, 0, 0)).toThrow(RangeError)
-    expect(() => encodeDx7FunctionParameterChange(64, 0, 17)).toThrow(RangeError)
+    expect(() => encodeDx7FunctionParameterChange(64, 0, 0)).toThrow(/MIDI channel/)
+    expect(() => encodeDx7FunctionParameterChange(64, 0, 17)).toThrow(/MIDI channel/)
     expect(() => encodeDx7FunctionParameterChange(63 as Dx7FunctionParameterId, 0)).toThrow(/Unsupported/)
     expect(() => encodeDx7FunctionParameterChange(78 as Dx7FunctionParameterId, 0)).toThrow(/Unsupported/)
   })
