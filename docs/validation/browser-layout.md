@@ -1,6 +1,6 @@
 # Chrome and Edge responsive layout validation
 
-Validated source commit: `f045bc692d3846a43b08b566101fe84eac5947cd`
+Validated source commit: `08adce19fa97deb02eebd4365507dc9d17a43999`
 
 - npm install: **SUCCESS**
 - TypeScript typecheck: **SUCCESS**

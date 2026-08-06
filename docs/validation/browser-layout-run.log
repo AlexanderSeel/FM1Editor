@@ -1,5 +1,4 @@
-Error: spawn EINVAL
-    at ChildProcess.spawn (node:internal/child_process:420:11)
-    at spawn (node:child_process:787:9)
-    at startPreviewServer (file:///D:/a/FM1Editor/FM1Editor/scripts/browser-layout-smoke.mjs:24:10)
-    at main (file:///D:/a/FM1Editor/FM1Editor/scripts/browser-layout-smoke.mjs:165:18)
+Error: chrome/desktop sticky sidebar moved above the viewport.
+    at assert (file:///D:/a/FM1Editor/FM1Editor/scripts/browser-layout-smoke.mjs:19:25)
+    at checkLayout (file:///D:/a/FM1Editor/FM1Editor/scripts/browser-layout-smoke.mjs:117:5)
+    at async main (file:///D:/a/FM1Editor/FM1Editor/scripts/browser-layout-smoke.mjs:183:13)
