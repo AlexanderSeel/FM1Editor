@@ -27,10 +27,33 @@ export const DX7_FUNCTION_PARAMETERS: readonly Dx7FunctionParameterDefinition[] 
 
 const FUNCTION_GROUP = 2
 
-function assertIntegerRange(label: string, value: number, minimum: number, maximum: number): void {
+export function assertDx7IntegerRange(label: string, value: number, minimum: number, maximum: number): void {
   if (!Number.isInteger(value) || value < minimum || value > maximum) {
     throw new Dx7SysexError(`${label} must be an integer from ${minimum} to ${maximum}; received ${value}.`)
   }
+}
+
+export function encodeDx7ParameterChangeFrame(
+  group: number,
+  parameter: number,
+  value: number,
+  midiChannel = 1,
+): Uint8Array {
+  assertDx7IntegerRange('DX7 parameter group', group, 0, 31)
+  assertDx7IntegerRange('DX7 parameter number', parameter, 0, 511)
+  assertDx7IntegerRange('DX7 parameter data', value, 0, 127)
+  assertDx7IntegerRange('DX7 MIDI channel', midiChannel, 1, 16)
+
+  const parameterGroupAndHighBits = (group << 2) | ((parameter >> 7) & 0x03)
+  return Uint8Array.of(
+    0xf0,
+    DX7_MANUFACTURER_ID,
+    0x10 | (midiChannel - 1),
+    parameterGroupAndHighBits,
+    parameter & 0x7f,
+    value,
+    0xf7,
+  )
 }
 
 export function getDx7FunctionParameterDefinition(
@@ -44,27 +67,13 @@ export function getDx7FunctionParameterDefinition(
 /**
  * Encodes Yamaha DX7 parameter-change format 1-2-4:
  * F0 43 1n 0gggggpp 0ppppppp 0ddddddd F7.
- *
- * Function parameters use group 2 and documented parameters 64 through 77.
- * The public API intentionally does not expose unchecked voice-parameter writes.
  */
 export function encodeDx7FunctionParameterChange(
   parameter: Dx7FunctionParameterId,
   value: number,
   midiChannel = 1,
 ): Uint8Array {
-  assertIntegerRange('DX7 MIDI channel', midiChannel, 1, 16)
   const definition = getDx7FunctionParameterDefinition(parameter)
-  assertIntegerRange(`DX7 ${definition.label}`, value, definition.minimum, definition.maximum)
-
-  const parameterGroupAndHighBits = (FUNCTION_GROUP << 2) | ((parameter >> 7) & 0x03)
-  return Uint8Array.of(
-    0xf0,
-    DX7_MANUFACTURER_ID,
-    0x10 | (midiChannel - 1),
-    parameterGroupAndHighBits,
-    parameter & 0x7f,
-    value,
-    0xf7,
-  )
+  assertDx7IntegerRange(`DX7 ${definition.label}`, value, definition.minimum, definition.maximum)
+  return encodeDx7ParameterChangeFrame(FUNCTION_GROUP, parameter, value, midiChannel)
 }
