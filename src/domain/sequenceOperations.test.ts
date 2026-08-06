@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest'
-import { CURRENT_PATTERN_ID, createInitializedSequence, getStepNotes, parseSequenceProject, validateSequence } from './sequence'
+import {
+  CURRENT_PATTERN_ID,
+  createInitializedSequence,
+  getStepNotes,
+  parseSequenceProject,
+  validateSequence,
+  type Fm1Sequence,
+} from './sequence'
 import {
   applySequencePreset,
   buildPlaybackSteps,
@@ -95,7 +102,7 @@ describe('direction and arrangement playback', () => {
   })
 
   it('flattens current and saved patterns with repeat counts', () => {
-    let sequence = { ...createInitializedSequence(), length: 4, direction: 'reverse' as const }
+    let sequence: Fm1Sequence = { ...createInitializedSequence(), length: 4, direction: 'reverse' }
     const saved = { ...createSavedPattern(sequence, 'chorus', 'CHORUS'), direction: 'ping-pong' as const }
     sequence = saveCurrentPattern(sequence, saved)
     sequence = {
