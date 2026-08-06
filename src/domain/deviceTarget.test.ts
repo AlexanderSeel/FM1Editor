@@ -37,15 +37,19 @@ describe('device target persistence', () => {
 })
 
 describe('device target capabilities', () => {
-  it('keeps FM-1-only transmissions disabled for the stock DX7 foundation', () => {
+  it('routes FM-1 and stock DX7 transmissions independently', () => {
     expect(getDeviceTargetDefinition('fm1').capabilities).toMatchObject({
       fm1BankTransfer: true,
       fm1Effects: true,
+      dx7SingleVoiceTransfer: false,
+      dx7BankTransfer: false,
       midiNotes: true,
     })
     expect(getDeviceTargetDefinition('dx7').capabilities).toMatchObject({
       fm1BankTransfer: false,
       fm1Effects: false,
+      dx7SingleVoiceTransfer: true,
+      dx7BankTransfer: true,
       midiNotes: true,
     })
   })
@@ -59,8 +63,9 @@ describe('device target capabilities', () => {
     expect(fm1.unavailableEffectsReason).toBeNull()
 
     expect(dx7.manufacturerLabel).toBe('YAMAHA')
-    expect(dx7.safetyBoundary).toContain('FM-1 bank and effects writes are disabled')
-    expect(dx7.safetyBoundary).toContain('DX7 SysEx transmission remains disabled')
+    expect(dx7.safetyBoundary).toContain('FM-1 bank/effects writes are disabled')
+    expect(dx7.safetyBoundary).toContain('single-voice or 32-voice bulk transfers are active')
+    expect(dx7.safetyBoundary).toContain('dump requests remain disabled')
     expect(dx7.unavailableEffectsReason).toContain('not sent')
   })
 })
