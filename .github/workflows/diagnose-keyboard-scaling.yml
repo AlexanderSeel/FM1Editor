@@ -1,0 +1,65 @@
+name: Diagnose keyboard scaling editor
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/diagnose-keyboard-scaling.yml
+
+permissions:
+  contents: write
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Capture diagnostics
+        shell: bash
+        run: |
+          set +e
+          npm install --no-audit --no-fund > /tmp/install.log 2>&1
+          install_status=$?
+          npm run typecheck > /tmp/typecheck.log 2>&1
+          typecheck_status=$?
+          npm run lint > /tmp/lint.log 2>&1
+          lint_status=$?
+          npm run test > /tmp/test.log 2>&1
+          test_status=$?
+          npm run build > /tmp/build.log 2>&1
+          build_status=$?
+          set -e
+
+          mkdir -p docs/validation
+          {
+            echo '# Keyboard scaling diagnostics'
+            echo
+            echo "Source commit: \`$(git rev-parse HEAD)\`"
+            echo
+            echo "- install exit: **$install_status**"
+            echo "- typecheck exit: **$typecheck_status**"
+            echo "- lint exit: **$lint_status**"
+            echo "- test exit: **$test_status**"
+            echo "- build exit: **$build_status**"
+            for item in install typecheck lint test build; do
+              echo
+              echo "## $item"
+              echo
+              echo '```text'
+              tail -n 180 "/tmp/$item.log"
+              echo '```'
+            done
+          } > docs/validation/keyboard-scaling-diagnostics.md
+
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add docs/validation/keyboard-scaling-diagnostics.md
+          git commit -m 'chore(ci): record keyboard scaling diagnostics'
+          git push origin HEAD:main
