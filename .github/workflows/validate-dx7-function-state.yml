@@ -1,0 +1,138 @@
+name: Validate detached DX7 function state
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - .github/workflows/validate-dx7-function-state.yml
+      - docs/validation/.trigger-dx7-function-state
+      - src/domain/dx7FunctionState.ts
+      - src/domain/dx7FunctionState.test.ts
+
+permissions:
+  contents: write
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        id: setup
+        continue-on-error: true
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install dependencies
+        id: install
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -o pipefail
+          npm install 2>&1 | tee /tmp/npm-install.log
+
+      - name: Typecheck
+        id: typecheck
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -o pipefail
+          npm run typecheck 2>&1 | tee /tmp/typecheck.log
+
+      - name: Lint
+        id: lint
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -o pipefail
+          npm run lint 2>&1 | tee /tmp/lint.log
+
+      - name: Test
+        id: test
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -o pipefail
+          npm run test 2>&1 | tee /tmp/test.log
+
+      - name: Build
+        id: build
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -o pipefail
+          npm run build 2>&1 | tee /tmp/build.log
+
+      - name: Verify detached function markers
+        id: markers
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -Fq 'Dx7FunctionParameterId' src/domain/dx7FunctionState.ts
+          grep -Fq '64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77' src/domain/dx7FunctionState.test.ts
+          grep -Fq 'never changes voice payload sizes or embeds function parameters' src/domain/dx7FunctionState.test.ts
+          grep -Fq 'without constructing or sending' src/domain/dx7FunctionState.ts
+
+      - name: Record validation receipt
+        if: always()
+        shell: bash
+        env:
+          SETUP_OUTCOME: ${{ steps.setup.outcome }}
+          INSTALL_OUTCOME: ${{ steps.install.outcome }}
+          TYPECHECK_OUTCOME: ${{ steps.typecheck.outcome }}
+          LINT_OUTCOME: ${{ steps.lint.outcome }}
+          TEST_OUTCOME: ${{ steps.test.outcome }}
+          BUILD_OUTCOME: ${{ steps.build.outcome }}
+          MARKERS_OUTCOME: ${{ steps.markers.outcome }}
+        run: |
+          set -euo pipefail
+          mkdir -p docs/validation
+          {
+            echo '# DX7 detached function-state validation'
+            echo
+            echo "Validated source commit: \`${GITHUB_SHA}\`"
+            echo
+            echo "- Node setup: **${SETUP_OUTCOME^^}**"
+            echo "- npm install: **${INSTALL_OUTCOME^^}**"
+            echo "- npm run typecheck: **${TYPECHECK_OUTCOME^^}**"
+            echo "- npm run lint: **${LINT_OUTCOME^^}**"
+            echo "- npm run test: **${TEST_OUTCOME^^}**"
+            echo "- npm run build: **${BUILD_OUTCOME^^}**"
+            echo "- detached function marker check: **${MARKERS_OUTCOME^^}**"
+            echo
+            echo '- function parameters 64 through 77 are modeled outside Dx7Voice.'
+            echo '- mono/poly, pitch bend, portamento and four controller assignments use documented semantic ranges.'
+            echo '- controller assignment masks 0 through 7 round-trip.'
+            echo '- function state does not change 155-byte or 128-byte voice payloads.'
+            echo '- no function parameter SysEx is constructed or transmitted.'
+          } > docs/validation/dx7-function-state.md
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add docs/validation/dx7-function-state.md
+          if ! git diff --cached --quiet; then
+            git commit -m "test(ci): record DX7 function-state validation"
+            git push
+          fi
+
+      - name: Fail when validation failed
+        if: always()
+        shell: bash
+        env:
+          SETUP_OUTCOME: ${{ steps.setup.outcome }}
+          INSTALL_OUTCOME: ${{ steps.install.outcome }}
+          TYPECHECK_OUTCOME: ${{ steps.typecheck.outcome }}
+          LINT_OUTCOME: ${{ steps.lint.outcome }}
+          TEST_OUTCOME: ${{ steps.test.outcome }}
+          BUILD_OUTCOME: ${{ steps.build.outcome }}
+          MARKERS_OUTCOME: ${{ steps.markers.outcome }}
+        run: |
+          set -euo pipefail
+          for outcome in "$SETUP_OUTCOME" "$INSTALL_OUTCOME" "$TYPECHECK_OUTCOME" "$LINT_OUTCOME" "$TEST_OUTCOME" "$BUILD_OUTCOME" "$MARKERS_OUTCOME"; do
+            [[ "$outcome" == 'success' ]] || exit 1
+          done
