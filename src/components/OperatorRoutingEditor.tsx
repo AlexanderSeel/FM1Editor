@@ -8,6 +8,7 @@ import {
 } from '../domain/operatorLevels'
 import type { Dx7Operator, Dx7Voice } from '../domain/voice'
 import { AlgorithmGraph } from './AlgorithmGraph'
+import { RangeControl } from './RangeControl'
 import { VoiceVariationPanel } from './VoiceVariationPanel'
 
 interface OperatorRoutingEditorProps {
@@ -100,6 +101,18 @@ export function OperatorRoutingEditor({
   return (
     <div className="grid gap-4">
       <VoiceVariationPanel onChange={onChange} voice={voice} />
+      <section className="grid gap-3 rounded-2xl border border-violet-300/15 bg-violet-300/[0.035] p-3 sm:grid-cols-[minmax(220px,300px)_1fr] sm:items-end">
+        <RangeControl
+          label="Algorithm selection"
+          max={32}
+          min={1}
+          onChange={(algorithm) => onChange({ ...voice, algorithm })}
+          value={voice.algorithm}
+        />
+        <p className="text-xs leading-5 text-slate-400">
+          The selector now sits directly with the routing diagram so changes can be compared immediately against carrier, modulator and feedback paths.
+        </p>
+      </section>
       <AlgorithmGraph
         algorithm={voice.algorithm}
         onSelect={onSelect}
