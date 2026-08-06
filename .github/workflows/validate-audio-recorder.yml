@@ -31,40 +31,59 @@ jobs:
       - name: Install dependencies
         id: install
         continue-on-error: true
-        run: npm install --no-audit --no-fund
+        shell: bash
+        run: |
+          set -o pipefail
+          npm install --no-audit --no-fund 2>&1 | tee /tmp/install.log
 
       - name: Typecheck
         id: typecheck
         continue-on-error: true
-        run: npm run typecheck
+        shell: bash
+        run: |
+          set -o pipefail
+          npm run typecheck 2>&1 | tee /tmp/typecheck.log
 
       - name: Lint and accessibility
         id: lint
         continue-on-error: true
-        run: npm run lint
+        shell: bash
+        run: |
+          set -o pipefail
+          npm run lint 2>&1 | tee /tmp/lint.log
 
       - name: Unit tests
         id: test
         continue-on-error: true
-        run: npm run test
+        shell: bash
+        run: |
+          set -o pipefail
+          npm run test 2>&1 | tee /tmp/test.log
 
       - name: Production build
         id: build
         continue-on-error: true
-        run: npm run build
+        shell: bash
+        run: |
+          set -o pipefail
+          npm run build 2>&1 | tee /tmp/build.log
 
       - name: Install Playwright and Chromium
         id: playwright
         continue-on-error: true
+        shell: bash
         run: |
-          npm install --no-save --package-lock=false --no-audit --no-fund playwright@1.54.2
-          npx playwright install --with-deps chromium
+          set -o pipefail
+          npm install --no-save --package-lock=false --no-audit --no-fund playwright@1.54.2 2>&1 | tee /tmp/playwright.log
+          npx playwright install --with-deps chromium 2>&1 | tee -a /tmp/playwright.log
 
       - name: Validate mocked audio recording in Chromium
         id: chromium
         continue-on-error: true
         shell: bash
         run: |
+          set -o pipefail
+          exec > >(tee /tmp/chromium.log) 2>&1
           mkdir -p artifacts
           python3 - <<'PY'
           import math
@@ -189,6 +208,12 @@ jobs:
           - explicit monitoring warning and toggle;
           - no physical FM-1 USB audio claim.
           EOF
+
+          for log in typecheck build chromium; do
+            printf '\n## %s output\n\n```text\n' "$log" >> docs/validation/audio-recorder.md
+            if [ -f "/tmp/$log.log" ]; then tail -n 100 "/tmp/$log.log" >> docs/validation/audio-recorder.md; else printf 'No log captured.\n' >> docs/validation/audio-recorder.md; fi
+            printf '\n```\n' >> docs/validation/audio-recorder.md
+          done
 
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
