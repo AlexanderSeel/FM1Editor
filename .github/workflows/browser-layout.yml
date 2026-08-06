@@ -1,0 +1,55 @@
+name: Browser layout
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'src/**'
+      - 'scripts/browser-layout-smoke.mjs'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'vite.config.ts'
+      - '.github/workflows/browser-layout.yml'
+  pull_request:
+    paths:
+      - 'src/**'
+      - 'scripts/browser-layout-smoke.mjs'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'vite.config.ts'
+      - '.github/workflows/browser-layout.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: browser-layout-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  chrome-edge-layout:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    env:
+      PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'
+      BROWSER_CHANNELS: chrome,msedge
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install project dependencies
+        run: npm install --no-audit --no-fund
+
+      - name: Build production application
+        run: npm run build
+
+      - name: Install transient Playwright runner
+        run: npm install --no-save --package-lock=false playwright@1.55.0
+
+      - name: Test desktop, tablet and mobile layouts
+        run: node scripts/browser-layout-smoke.mjs
