@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto'
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
-import { basename, dirname } from 'node:path'
+import { basename } from 'node:path'
+import { resolveCatalogOutputFile } from './catalog-output-path.mjs'
 
 const ARCHIVE_EXPECTED_SHA256 = 'fde5aad29b215aa3ea67e9f57bf55d4443cc6efe7562d6cb6dc375b3c780b263'
 const WEBSITE_PAGE_URL = 'https://yamahablackboxes.com/collection/yamaha-dx7-synthesizer/patches/'
@@ -62,10 +63,10 @@ async function fetchBytes(url) {
 }
 
 async function writeBytes(relativePath, bytes) {
-  const path = new URL(relativePath, OUTPUT_ROOT)
-  await mkdir(dirname(path.pathname), { recursive: true })
-  await writeFile(path, bytes)
-  return path
+  const output = resolveCatalogOutputFile(OUTPUT_ROOT, relativePath)
+  await mkdir(output.directory, { recursive: true })
+  await writeFile(output.url, bytes)
+  return output.url
 }
 
 function assertZipArchive(bytes) {
