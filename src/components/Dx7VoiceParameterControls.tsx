@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { Dx7Voice } from '../domain/voice'
 import type { MidiOutputTarget } from '../midi/output'
 import {
@@ -39,13 +39,16 @@ export function Dx7VoiceParameterControls({
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const unavailable = disabled || !output || !sysexEnabled || !hardwareReady
 
-  const clearPending = () => {
+  const clearPending = useCallback(() => {
     if (timerRef.current !== null) clearTimeout(timerRef.current)
     timerRef.current = null
     pendingRef.current.clear()
-  }
+  }, [])
 
-  const transmit = async (changes: readonly Dx7VoiceParameterValue[], description: string) => {
+  const transmit = useCallback(async (
+    changes: readonly Dx7VoiceParameterValue[],
+    description: string,
+  ) => {
     if (!output) {
       setError('Connect Web MIDI and manually select the DX7 output first.')
       setStatus(null)
@@ -77,7 +80,7 @@ export function Dx7VoiceParameterControls({
       setError(cause instanceof Error ? cause.message : 'The DX7 voice parameters could not be sent.')
       setStatus(null)
     }
-  }
+  }, [hardwareReady, midiChannel, output, sysexEnabled])
 
   useEffect(() => {
     const changes = diffDx7VoiceParameterValues(observedRef.current, values)
@@ -92,15 +95,15 @@ export function Dx7VoiceParameterControls({
       pendingRef.current.clear()
       if (pending.length > 0) void transmit(pending, 'Live update')
     }, LIVE_THROTTLE_MS)
-  }, [liveEnabled, values])
+  }, [liveEnabled, transmit, values])
 
   useEffect(() => {
     if (writesEnabled && !unavailable) return
     setLiveEnabled(false)
     clearPending()
-  }, [unavailable, writesEnabled])
+  }, [clearPending, unavailable, writesEnabled])
 
-  useEffect(() => () => clearPending(), [])
+  useEffect(() => () => clearPending(), [clearPending])
 
   const enableWrites = () => {
     if (unavailable) {
