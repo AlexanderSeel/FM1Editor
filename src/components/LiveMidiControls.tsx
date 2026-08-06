@@ -16,6 +16,7 @@ import {
   type Fm1RealtimeMessage,
 } from '../midi/fm1Protocol'
 import type { MidiOutputTarget } from '../midi/output'
+import { Dx7FunctionControls } from './Dx7FunctionControls'
 import { RangeControl } from './RangeControl'
 
 interface LiveMidiControlsProps {
@@ -189,7 +190,7 @@ export function LiveMidiControls({
           <p className="text-xs font-semibold uppercase tracking-[0.18em] text-violet-300">Live MIDI controls</p>
           <h4 className="mt-1 text-lg font-bold text-white">Direct device messages</h4>
           <p className="mt-1 max-w-3xl text-xs leading-5 text-slate-400">
-            Only documented Program Change, real-time transport, All Notes Off and {fm1Mode ? 'FM-1 CC 0–23 effects' : 'standard DX7 program selection'} are exposed here. Voice parameter SysEx remains disabled.
+            Only documented Program Change, real-time transport, All Notes Off and {fm1Mode ? 'FM-1 CC 0–23 effects' : 'Yamaha DX7 function parameters 64–77'} are exposed here. DX7 voice-parameter writes remain disabled.
           </p>
         </div>
         <span className={`rounded-full border px-3 py-1 text-[10px] font-bold uppercase tracking-[0.12em] ${output ? 'border-emerald-300/25 bg-emerald-300/10 text-emerald-200' : 'border-amber-300/25 bg-amber-300/10 text-amber-200'}`}>
@@ -272,9 +273,7 @@ export function LiveMidiControls({
             </div>
           </details>
         ) : (
-          <div className="rounded-xl border border-white/10 bg-black/15 p-4 text-xs leading-5 text-slate-400">
-            The stock DX7 section intentionally exposes no guessed voice/function parameter writes. Use Program Change and piano note audition here; bulk voice/bank operations remain in the guarded transfer section above.
-          </div>
+          <Dx7FunctionControls disabled={disabled} midiChannel={midiChannel} output={output} />
         )}
       </div>
 
