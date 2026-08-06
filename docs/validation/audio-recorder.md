@@ -1,14 +1,14 @@
 # FM-1 USB audio recorder validation
 
-Validated source commit: `ef255649bd260cd750f6c54b6152ad47935b7682`
+Validated source commit: `2bb3b49b830b174f389ab7732de085d36e5ad01e`
 
 - npm install: **PASS**
-- npm run typecheck: **FAIL**
+- npm run typecheck: **PASS**
 - npm run lint: **PASS**
 - npm run test: **PASS**
-- npm run build: **FAIL**
+- npm run build: **PASS**
 - Playwright and Chromium installation: **PASS**
-- Chromium mocked-media recording check: **FAIL**
+- Chromium mocked-media recording check: **PASS**
 
 Validation scope:
 
@@ -27,11 +27,6 @@ Validation scope:
 > fm1-editor@0.1.0 typecheck
 > tsc -b --pretty false
 
-src/hooks/useAudioRecorder.ts(378,27): error TS2322: Type 'ArrayBufferLike' is not assignable to type 'BlobPart'.
-  Type 'SharedArrayBuffer' is not assignable to type 'BlobPart'.
-    Type 'SharedArrayBuffer' is not assignable to type 'ArrayBuffer'.
-      Types of property '[Symbol.toStringTag]' are incompatible.
-        Type '"SharedArrayBuffer"' is not assignable to type '"ArrayBuffer"'.
 
 ```
 
@@ -47,11 +42,16 @@ Patch catalog synchronized: 35 validated website banks merged with the tracked s
 > fm1-editor@0.1.0 build
 > tsc -b && vite build && node scripts/inject-service-worker-assets.mjs
 
-src/hooks/useAudioRecorder.ts(378,27): error TS2322: Type 'ArrayBufferLike' is not assignable to type 'BlobPart'.
-  Type 'SharedArrayBuffer' is not assignable to type 'BlobPart'.
-    Type 'SharedArrayBuffer' is not assignable to type 'ArrayBuffer'.
-      Types of property '[Symbol.toStringTag]' are incompatible.
-        Type '"SharedArrayBuffer"' is not assignable to type '"ArrayBuffer"'.
+[36mvite v8.2.0 [32mbuilding client environment for production...[36m[39m
+[2Ktransforming...✓ 78 modules transformed.
+rendering chunks...
+computing gzip size...
+dist/index.html                   0.96 kB │ gzip:   0.47 kB
+dist/assets/index-CvKRiAsU.css   59.64 kB │ gzip:  11.80 kB
+dist/assets/index-DJ4gdELS.js   377.48 kB │ gzip: 112.70 kB
+
+[32m✓ built in 257ms[39m
+Service worker generated with 7 precached URLs (2ef65b1d21311245).
 
 ```
 
@@ -60,7 +60,6 @@ src/hooks/useAudioRecorder.ts(378,27): error TS2322: Type 'ArrayBufferLike' is n
 ```text
   % Total    % Received % Xferd  Average Speed   Time    Time     Time  Current
                                  Dload  Upload   Total   Spent    Left  Speed
-  0     0    0     0    0     0      0      0 --:--:-- --:--:-- --:--:--     0  0     0    0     0    0     0      0      0 --:--:-- --:--:-- --:--:--     0
-curl: (22) The requested URL returned error: 404
+  0     0    0     0    0     0      0      0 --:--:-- --:--:-- --:--:--     0100   967  100   967    0     0   747k      0 --:--:-- --:--:-- --:--:--  944k
 
 ```
