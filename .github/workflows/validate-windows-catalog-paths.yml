@@ -1,0 +1,95 @@
+name: Validate Windows catalog paths
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - .github/workflows/validate-windows-catalog-paths.yml
+      - docs/validation/.trigger-windows-catalog-paths
+      - scripts/catalog-output-path.mjs
+      - scripts/catalog-output-path.test.mjs
+      - scripts/sync-patch-catalog.mjs
+
+permissions:
+  contents: write
+
+jobs:
+  path-test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-latest
+          - windows-latest
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm install
+      - run: npx vitest run scripts/catalog-output-path.test.mjs
+
+  quality:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm install
+      - run: npm run typecheck
+      - run: npm run lint
+      - run: npm run test
+      - run: npm run build
+
+  receipt:
+    if: always()
+    needs:
+      - path-test
+      - quality
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Record validation receipt
+        env:
+          PATH_TEST_RESULT: ${{ needs.path-test.result }}
+          QUALITY_RESULT: ${{ needs.quality.result }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p docs/validation
+          {
+            echo '# Windows catalog path validation'
+            echo
+            echo "Validated source commit: \`${GITHUB_SHA}\`"
+            echo
+            echo "- native path regression tests on Ubuntu and Windows: **${PATH_TEST_RESULT^^}**"
+            echo "- typecheck, lint, full tests and production build: **${QUALITY_RESULT^^}**"
+            echo
+            echo '- file URLs are converted with fileURLToPath before native path operations.'
+            echo '- nested Yamaha mirror directories resolve under public/catalog on Windows.'
+            echo '- catalog-relative paths that escape the output root are rejected.'
+            echo '- the former C:\\C:\\... path duplication is covered by the Windows runner.'
+          } > docs/validation/windows-catalog-paths.md
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add docs/validation/windows-catalog-paths.md
+          if ! git diff --cached --quiet; then
+            git commit -m "test(ci): record Windows catalog path validation"
+            git push
+          fi
+
+      - name: Fail when validation failed
+        env:
+          PATH_TEST_RESULT: ${{ needs.path-test.result }}
+          QUALITY_RESULT: ${{ needs.quality.result }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$PATH_TEST_RESULT" == 'success' ]]
+          [[ "$QUALITY_RESULT" == 'success' ]]
