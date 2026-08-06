@@ -165,7 +165,7 @@ function decodePackedOperator(data: Uint8Array, offset: number): Dx7Operator {
 function validateOperator(operator: Dx7Operator, label: string): void {
   operator.envelope.rates.forEach((value, index) => assertRange(`${label} envelope rate ${index + 1}`, value, 0, 99))
   operator.envelope.levels.forEach((value, index) => assertRange(`${label} envelope level ${index + 1}`, value, 0, 99))
-  assertRange(`${label} breakpoint`, operator.keyboardScaling.breakPoint, 0, 127)
+  assertRange(`${label} breakpoint`, operator.keyboardScaling.breakPoint, 0, 99)
   assertRange(`${label} left depth`, operator.keyboardScaling.leftDepth, 0, 99)
   assertRange(`${label} right depth`, operator.keyboardScaling.rightDepth, 0, 99)
   assertRange(`${label} rate scaling`, operator.keyboardScaling.rateScaling, 0, 7)
@@ -174,7 +174,7 @@ function validateOperator(operator: Dx7Operator, label: string): void {
   assertRange(`${label} output level`, operator.outputLevel, 0, 99)
   assertRange(`${label} frequency coarse`, operator.frequencyCoarse, 0, 31)
   assertRange(`${label} frequency fine`, operator.frequencyFine, 0, 99)
-  assertRange(`${label} detune`, operator.detune, 0, 15)
+  assertRange(`${label} detune`, operator.detune, 0, 14)
 }
 
 export function validateVoice(voice: Dx7Voice): void {
