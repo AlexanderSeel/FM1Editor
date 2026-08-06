@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { dx7BreakpointNoteName } from '../domain/dx7Note'
 import type { Dx7Curve, Dx7LfoWaveform, Dx7Operator, Dx7Voice, FourValues } from '../domain/voice'
 import { EnvelopeGraph } from './EnvelopeGraph'
 import { KeyboardScalingGraph } from './KeyboardScalingGraph'
@@ -208,6 +209,7 @@ export function VoiceEditor({ documentKey, voice, onChange }: VoiceEditorProps) 
                 <RangeControl
                   label="Break point"
                   onChange={(breakPoint) => updateOperator((current) => ({ ...current, keyboardScaling: { ...current.keyboardScaling, breakPoint } }))}
+                  suffix={` · ${dx7BreakpointNoteName(operator.keyboardScaling.breakPoint)}`}
                   value={operator.keyboardScaling.breakPoint}
                 />
                 <RangeControl
