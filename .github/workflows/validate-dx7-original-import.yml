@@ -1,0 +1,144 @@
+name: Validate exact SysEx preservation
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - .github/workflows/validate-dx7-original-import.yml
+      - docs/validation/.trigger-dx7-original-import
+      - src/components/SysexToolbar.tsx
+      - src/sysex/importSysex.ts
+      - src/sysex/normalizeLegacyVoice.ts
+      - src/sysex/normalizeLegacyVoice.test.ts
+      - src/sysex/originalImport.ts
+      - src/sysex/originalImport.test.ts
+
+permissions:
+  contents: write
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        id: setup
+        continue-on-error: true
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install dependencies
+        id: install
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -o pipefail
+          npm install 2>&1 | tee /tmp/npm-install.log
+
+      - name: Typecheck
+        id: typecheck
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -o pipefail
+          npm run typecheck 2>&1 | tee /tmp/typecheck.log
+
+      - name: Lint
+        id: lint
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -o pipefail
+          npm run lint 2>&1 | tee /tmp/lint.log
+
+      - name: Test
+        id: test
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -o pipefail
+          npm run test 2>&1 | tee /tmp/test.log
+
+      - name: Build
+        id: build
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -o pipefail
+          npm run build 2>&1 | tee /tmp/build.log
+
+      - name: Verify exact-import markers
+        id: markers
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -Fq 'Uint8Array.from(bytes)' src/sysex/originalImport.ts
+          grep -Fq 'Download unchanged' src/components/SysexToolbar.tsx
+          grep -Fq 'Exact original imports' src/components/SysexToolbar.tsx
+          grep -Fq "code: 'compatibility-normalization'" src/sysex/importSysex.ts
+          grep -Fq 'keeps an independent byte-for-byte copy' src/sysex/originalImport.test.ts
+          grep -Fq 'records bank import normalizations and emits visible diagnostics' src/sysex/normalizeLegacyVoice.test.ts
+
+      - name: Record validation receipt
+        if: always()
+        shell: bash
+        env:
+          SETUP_OUTCOME: ${{ steps.setup.outcome }}
+          INSTALL_OUTCOME: ${{ steps.install.outcome }}
+          TYPECHECK_OUTCOME: ${{ steps.typecheck.outcome }}
+          LINT_OUTCOME: ${{ steps.lint.outcome }}
+          TEST_OUTCOME: ${{ steps.test.outcome }}
+          BUILD_OUTCOME: ${{ steps.build.outcome }}
+          MARKERS_OUTCOME: ${{ steps.markers.outcome }}
+        run: |
+          set -euo pipefail
+          mkdir -p docs/validation
+          {
+            echo '# Exact SysEx import preservation validation'
+            echo
+            echo "Validated source commit: \`${GITHUB_SHA}\`"
+            echo
+            echo "- Node setup: **${SETUP_OUTCOME^^}**"
+            echo "- npm install: **${INSTALL_OUTCOME^^}**"
+            echo "- npm run typecheck: **${TYPECHECK_OUTCOME^^}**"
+            echo "- npm run lint: **${LINT_OUTCOME^^}**"
+            echo "- npm run test: **${TEST_OUTCOME^^}**"
+            echo "- npm run build: **${BUILD_OUTCOME^^}**"
+            echo "- exact-import marker check: **${MARKERS_OUTCOME^^}**"
+            echo
+            echo '- imported files are copied byte-for-byte before semantic normalization.'
+            echo '- exact originals can be downloaded unchanged from the import toolbar.'
+            echo '- original copies remain browser-memory-only until the next import or reload.'
+            echo '- normalized exports still use standards-valid values and recalculated checksums.'
+            echo '- every compatibility normalization remains available as structured metadata and a warning diagnostic.'
+          } > docs/validation/dx7-original-import.md
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add docs/validation/dx7-original-import.md
+          if ! git diff --cached --quiet; then
+            git commit -m "test(ci): record exact SysEx preservation"
+            git push
+          fi
+
+      - name: Fail when validation failed
+        if: always()
+        shell: bash
+        env:
+          SETUP_OUTCOME: ${{ steps.setup.outcome }}
+          INSTALL_OUTCOME: ${{ steps.install.outcome }}
+          TYPECHECK_OUTCOME: ${{ steps.typecheck.outcome }}
+          LINT_OUTCOME: ${{ steps.lint.outcome }}
+          TEST_OUTCOME: ${{ steps.test.outcome }}
+          BUILD_OUTCOME: ${{ steps.build.outcome }}
+          MARKERS_OUTCOME: ${{ steps.markers.outcome }}
+        run: |
+          set -euo pipefail
+          for outcome in "$SETUP_OUTCOME" "$INSTALL_OUTCOME" "$TYPECHECK_OUTCOME" "$LINT_OUTCOME" "$TEST_OUTCOME" "$BUILD_OUTCOME" "$MARKERS_OUTCOME"; do
+            [[ "$outcome" == 'success' ]] || exit 1
+          done
