@@ -61,6 +61,7 @@ export function VoiceVariationPanel({ voice, onChange }: VoiceVariationPanelProp
             const stored = slot === 'A' ? slotA : slotB
             return (
               <button
+                aria-label={`Recall comparison ${slot}`}
                 aria-pressed={activeSlot === slot}
                 className="min-w-0 px-3 py-2 text-left"
                 data-active={activeSlot === slot}
