@@ -2,6 +2,20 @@
   overflow-x: clip;
 }
 
+.fm1-sidebar {
+  min-width: 0;
+  overflow-x: clip;
+}
+
+.fm1-sidebar :where(select, input, textarea, button) {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.fm1-sidebar :where(p, span, label, h1, h2, h3) {
+  overflow-wrap: anywhere;
+}
+
 @media (min-width: 1024px) {
   .fm1-chassis {
     grid-template-columns: minmax(340px, 380px) minmax(0, 1fr);
@@ -12,10 +26,8 @@
     top: 1rem;
     align-self: start;
     width: 100%;
-    min-width: 0;
     height: calc(100dvh - 2rem);
     max-height: calc(100dvh - 2rem);
-    overflow-x: clip;
     overflow-y: auto;
     overscroll-behavior-x: none;
     overscroll-behavior-y: contain;
