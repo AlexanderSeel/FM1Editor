@@ -10,10 +10,6 @@
 - [ ] Determine whether sequencer patterns expose a stable MIDI/SysEx dump and restore protocol.
 - [ ] Add bank-transfer timeout, retry and post-save recovery guidance after physical import behavior is verified.
 
-## 1.1 Layout
-- [ ] Remove the unusde knobs in the header section like Master, Select, etc
-- [ ] make the blue a little bit darker and try to waste less space
-- [ ] don't use 10 or more font-size, try to keep 1-3 and clean everything out which has no use
 ## 2. Device target modes
 
 - [ ] Implement only primary-source-verified Yamaha DX7 voice-parameter and function-parameter changes behind the selected DX7 target, with semantic ranges, operation-specific confirmation and tests.
@@ -51,7 +47,7 @@ Execute sections C and D of [`docs/validation/fm1-hardware-test-protocol.md`](./
 
 ## 8. Validation and delivery
 
+- [ ] Re-run typecheck, lint, the full test suite, production build and the Chrome/Edge responsive matrix for the compact layout cleanup when GitHub Actions scheduling is available.
 - [ ] Test Chrome and Edge on Windows with a physical FM-1 over USB MIDI and USB audio, including merged bank import, destination selection, preset recall, recording, note-off recovery and channel selection; test BLE MIDI where browser/platform support permits.
 - [ ] Add GitHub Pages deployment after secure-context routing and Web MIDI/Web Audio behavior are verified.
 - [ ] Document firmware-specific limitations, recovery steps and tested hardware/browser combinations.
-
