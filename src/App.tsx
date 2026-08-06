@@ -12,6 +12,11 @@ import { SequenceEditor } from './components/SequenceEditor'
 import { SysexToolbar } from './components/SysexToolbar'
 import { VoiceAuditionPanel } from './components/VoiceAuditionPanel'
 import { VoiceEditor } from './components/VoiceEditor'
+import {
+  readStoredDeviceTarget,
+  writeStoredDeviceTarget,
+  type DeviceTarget,
+} from './domain/deviceTarget'
 import { createInitializedFxState } from './domain/fx'
 import { createInitializedSequence } from './domain/sequence'
 import { createInitializedVoice, type Dx7Voice } from './domain/voice'
@@ -35,8 +40,18 @@ function isTextEditingTarget(target: EventTarget | null): boolean {
     || (target instanceof HTMLElement && target.isContentEditable)
 }
 
+function browserStorage(): Storage | null {
+  if (typeof window === 'undefined') return null
+  try {
+    return window.localStorage
+  } catch {
+    return null
+  }
+}
+
 export default function App() {
-  const midi = useMidi()
+  const [target, setTargetState] = useState<DeviceTarget>(() => readStoredDeviceTarget(browserStorage()))
+  const midi = useMidi(target)
   const patchLibrary = usePatchLibrary()
   const [workspace, setWorkspace] = useState<Workspace>('voice')
   const voiceHistory = useUndoableState(() => createInitializedVoice())
@@ -87,6 +102,11 @@ export default function App() {
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [activeHistory])
+
+  const selectTarget = (nextTarget: DeviceTarget) => {
+    setTargetState(nextTarget)
+    writeStoredDeviceTarget(browserStorage(), nextTarget)
+  }
 
   const confirmDiscardVoiceChanges = (action: string): boolean => !voiceHistory.dirty || window.confirm(
     `The current voice has unsaved changes. ${action} will discard those changes. Continue?`,
@@ -189,12 +209,14 @@ export default function App() {
             {...(!midi.state.support.supported ? { supportReason: midi.state.support.reason } : {})}
             permission={midi.state.permission}
             sysexEnabled={midi.state.sysexEnabled}
+            target={target}
             inputs={midi.state.inputs}
             outputs={midi.state.outputs}
             selectedInputId={midi.state.selectedInputId}
             selectedOutputId={midi.state.selectedOutputId}
             error={midi.state.error}
             onConnect={() => void midi.connect()}
+            onSelectTarget={selectTarget}
             onSelectInput={midi.setSelectedInputId}
             onSelectOutput={midi.setSelectedOutputId}
           />
@@ -331,7 +353,7 @@ export default function App() {
                       onSafetyStop={stopMidiAudition}
                       patchName={voice.name}
                       selectedBankSlot={selectedBankSlot}
-                      targetMode="FM-1"
+                      targetMode={target === 'fm1' ? 'FM-1' : 'DX7'}
                     />
                   </CollapsibleSection>
                   <CollapsibleSection
