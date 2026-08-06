@@ -6,8 +6,10 @@ import {
   type KeyboardEvent as ReactKeyboardEvent,
   type PointerEvent as ReactPointerEvent,
 } from 'react'
+import { readStoredDeviceTarget } from '../domain/deviceTarget'
 import { encodeAllNotesOff, encodeNoteOff, encodeNoteOn } from '../midi/fm1Protocol'
 import type { MidiOutputTarget } from '../midi/output'
+import { LiveMidiControls } from './LiveMidiControls'
 
 interface VirtualPianoProps {
   output: MidiOutputTarget | null
@@ -57,6 +59,15 @@ function midiNoteName(note: number): string {
   return `${name}${Math.floor(note / 12) - 1}`
 }
 
+function currentTarget() {
+  if (typeof window === 'undefined') return 'fm1' as const
+  try {
+    return readStoredDeviceTarget(window.localStorage)
+  } catch {
+    return 'fm1' as const
+  }
+}
+
 export function VirtualPiano({
   output,
   midiChannel,
@@ -70,6 +81,7 @@ export function VirtualPiano({
   const [error, setError] = useState<string | null>(null)
   const baseNote = (baseOctave + 1) * 12
   const unavailable = output === null || disabled
+  const target = currentTarget()
 
   const refreshActiveNotes = useCallback(() => {
     setActiveNotes(new Set(activeNotesRef.current))
@@ -168,83 +180,92 @@ export function VirtualPiano({
   })
 
   return (
-    <div className="rounded-2xl border border-white/10 bg-black/20 p-3 sm:p-4">
-      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-cyan-300">Virtual piano</p>
-          <p className="mt-1 text-[11px] text-slate-500">Mouse, touch or computer keys A–; · two octaves from C{baseOctave}</p>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <button
-            aria-label="Focus computer keyboard piano input. Use keys A through semicolon."
-            className="rounded-lg border border-cyan-300/20 bg-cyan-300/5 px-3 py-1.5 text-xs font-semibold text-cyan-200 hover:bg-cyan-300/10 focus:bg-cyan-300/15 disabled:opacity-40"
-            disabled={unavailable}
-            onBlur={releaseAll}
-            onKeyDown={handleKeyDown}
-            onKeyUp={handleKeyUp}
-            type="button"
-          >
-            Focus computer keys
-          </button>
-          <button
-            className="rounded-lg border border-white/10 px-3 py-1.5 text-xs font-semibold text-slate-300 hover:bg-white/5 disabled:opacity-40"
-            disabled={output === null}
-            onClick={releaseAll}
-            type="button"
-          >
-            All notes off
-          </button>
-        </div>
-      </div>
+    <div className="grid gap-4">
+      <LiveMidiControls
+        disabled={disabled}
+        midiChannel={midiChannel}
+        output={output}
+        target={target}
+      />
 
-      <div className={`relative h-36 select-none overflow-hidden rounded-xl border border-white/15 sm:h-44 ${unavailable ? 'opacity-45' : ''}`} onContextMenu={(event) => event.preventDefault()}>
-        <div className="flex h-full">
-          {WHITE_OFFSETS.map((offset) => {
+      <div className="rounded-2xl border border-white/10 bg-black/20 p-3 sm:p-4">
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-cyan-300">Virtual piano</p>
+            <p className="mt-1 text-[11px] text-slate-500">Mouse, touch or computer keys A–; · two octaves from C{baseOctave}</p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <button
+              aria-label="Focus computer keyboard piano input. Use keys A through semicolon."
+              className="rounded-lg border border-cyan-300/20 bg-cyan-300/5 px-3 py-1.5 text-xs font-semibold text-cyan-200 hover:bg-cyan-300/10 focus:bg-cyan-300/15 disabled:opacity-40"
+              disabled={unavailable}
+              onBlur={releaseAll}
+              onKeyDown={handleKeyDown}
+              onKeyUp={handleKeyUp}
+              type="button"
+            >
+              Focus computer keys
+            </button>
+            <button
+              className="rounded-lg border border-white/10 px-3 py-1.5 text-xs font-semibold text-slate-300 hover:bg-white/5 disabled:opacity-40"
+              disabled={output === null}
+              onClick={releaseAll}
+              type="button"
+            >
+              All notes off
+            </button>
+          </div>
+        </div>
+
+        <div className={`relative h-36 select-none overflow-hidden rounded-xl border border-white/15 sm:h-44 ${unavailable ? 'opacity-45' : ''}`} onContextMenu={(event) => event.preventDefault()}>
+          <div className="flex h-full">
+            {WHITE_OFFSETS.map((offset) => {
+              const note = baseNote + offset
+              const active = activeNotes.has(note)
+              return (
+                <button
+                  aria-label={`Play ${midiNoteName(note)}`}
+                  className={`relative min-w-0 flex-1 touch-none border-r border-slate-500/40 pb-3 text-center align-bottom text-[10px] font-bold transition last:border-r-0 ${active ? 'bg-cyan-200 text-slate-950' : 'bg-gradient-to-b from-slate-100 to-slate-300 text-slate-700 hover:from-white hover:to-cyan-100'}`}
+                  disabled={unavailable}
+                  key={offset}
+                  type="button"
+                  {...pointerHandlers(note)}
+                >
+                  <span className="absolute inset-x-0 bottom-2">{midiNoteName(note)}</span>
+                </button>
+              )
+            })}
+          </div>
+
+          {BLACK_KEYS.map(({ offset, afterWhite }) => {
             const note = baseNote + offset
             const active = activeNotes.has(note)
             return (
               <button
                 aria-label={`Play ${midiNoteName(note)}`}
-                className={`relative min-w-0 flex-1 touch-none border-r border-slate-500/40 pb-3 text-center align-bottom text-[10px] font-bold transition last:border-r-0 ${active ? 'bg-cyan-200 text-slate-950' : 'bg-gradient-to-b from-slate-100 to-slate-300 text-slate-700 hover:from-white hover:to-cyan-100'}`}
+                className={`absolute top-0 z-10 h-[62%] touch-none rounded-b-md border border-black/80 shadow-lg transition ${active ? 'bg-cyan-400 text-slate-950' : 'bg-gradient-to-b from-slate-700 to-slate-950 text-slate-300 hover:from-slate-600 hover:to-slate-900'}`}
                 disabled={unavailable}
                 key={offset}
+                style={{
+                  left: `${((afterWhite + 1) / WHITE_OFFSETS.length) * 100 - 2.25}%`,
+                  width: '4.5%',
+                }}
                 type="button"
                 {...pointerHandlers(note)}
               >
-                <span className="absolute inset-x-0 bottom-2">{midiNoteName(note)}</span>
+                <span className="sr-only">{midiNoteName(note)}</span>
               </button>
             )
           })}
         </div>
 
-        {BLACK_KEYS.map(({ offset, afterWhite }) => {
-          const note = baseNote + offset
-          const active = activeNotes.has(note)
-          return (
-            <button
-              aria-label={`Play ${midiNoteName(note)}`}
-              className={`absolute top-0 z-10 h-[62%] touch-none rounded-b-md border border-black/80 shadow-lg transition ${active ? 'bg-cyan-400 text-slate-950' : 'bg-gradient-to-b from-slate-700 to-slate-950 text-slate-300 hover:from-slate-600 hover:to-slate-900'}`}
-              disabled={unavailable}
-              key={offset}
-              style={{
-                left: `${((afterWhite + 1) / WHITE_OFFSETS.length) * 100 - 2.25}%`,
-                width: '4.5%',
-              }}
-              type="button"
-              {...pointerHandlers(note)}
-            >
-              <span className="sr-only">{midiNoteName(note)}</span>
-            </button>
-          )
-        })}
+        {unavailable && (
+          <p className="mt-2 text-xs text-amber-200">
+            {disabledReason ?? (output ? 'Piano input is temporarily disabled.' : 'Connect and select a MIDI output to play.')}
+          </p>
+        )}
+        {error && <p className="mt-2 text-xs text-rose-300">{error}</p>}
       </div>
-
-      {unavailable && (
-        <p className="mt-2 text-xs text-amber-200">
-          {disabledReason ?? (output ? 'Piano input is temporarily disabled.' : 'Connect and select a MIDI output to play.')}
-        </p>
-      )}
-      {error && <p className="mt-2 text-xs text-rose-300">{error}</p>}
     </div>
   )
 }
