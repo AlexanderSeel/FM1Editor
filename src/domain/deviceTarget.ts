@@ -3,6 +3,8 @@ export type DeviceTarget = 'fm1' | 'dx7'
 export interface DeviceTargetCapabilities {
   fm1BankTransfer: boolean
   fm1Effects: boolean
+  dx7SingleVoiceTransfer: boolean
+  dx7BankTransfer: boolean
   midiNotes: boolean
   fileEditing: boolean
 }
@@ -41,6 +43,8 @@ export const DEVICE_TARGETS = [
     capabilities: {
       fm1BankTransfer: true,
       fm1Effects: true,
+      dx7SingleVoiceTransfer: false,
+      dx7BankTransfer: false,
       midiNotes: true,
       fileEditing: true,
     },
@@ -50,13 +54,15 @@ export const DEVICE_TARGETS = [
     label: 'Yamaha DX7',
     shortLabel: 'DX7',
     manufacturerLabel: 'YAMAHA',
-    description: 'Stock DX7 target foundation. File editing and MIDI notes remain available while DX7-specific SysEx operations stay disabled until routed explicitly.',
+    description: 'Stock DX7 target with guarded standard single-voice and 32-voice bulk receive operations, file editing and MIDI note playback.',
     portHint: 'A MIDI port containing DX7 or DX-7 is suggested when available.',
-    safetyBoundary: 'File editing, MIDI note playback and browser-local audio recording are active. FM-1 bank and effects writes are disabled. DX7 SysEx transmission remains disabled until each documented operation is routed with target-specific confirmation and tests.',
+    safetyBoundary: 'File editing, MIDI note playback, browser-local audio recording and explicitly confirmed standard Yamaha single-voice or 32-voice bulk transfers are active. FM-1 bank/effects writes are disabled. DX7 parameter changes, function data and dump requests remain disabled until separately verified and routed.',
     unavailableEffectsReason: 'The documented CC 0–23 effects map belongs to the FM-1 and is not sent while Yamaha DX7 is selected.',
     capabilities: {
       fm1BankTransfer: false,
       fm1Effects: false,
+      dx7SingleVoiceTransfer: true,
+      dx7BankTransfer: true,
       midiNotes: true,
       fileEditing: true,
     },
