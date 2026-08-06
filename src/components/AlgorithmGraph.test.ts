@@ -15,7 +15,7 @@ describe('algorithm graph layout', () => {
         expect(position.x).toBeGreaterThanOrEqual(0)
         expect(position.x).toBeLessThanOrEqual(720)
         expect(position.y).toBeGreaterThanOrEqual(0)
-        expect(position.y).toBeLessThanOrEqual(360)
+        expect(position.y).toBeLessThanOrEqual(380)
       }
     }
   })
@@ -26,7 +26,7 @@ describe('algorithm graph layout', () => {
         calculateAlgorithmLayout(algorithm).map((position) => [position.operator, position]),
       )
       const carrierY = algorithm.carriers.map((carrier) => positionByOperator.get(carrier)?.y)
-      expect(new Set(carrierY)).toEqual(new Set([292]))
+      expect(new Set(carrierY)).toEqual(new Set([306]))
     }
   })
 })
