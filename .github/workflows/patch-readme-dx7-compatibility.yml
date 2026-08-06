@@ -1,0 +1,50 @@
+name: Document DX7 compatibility boundary
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - docs/validation/.trigger-readme-dx7-compatibility
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Update README compatibility documentation
+        shell: python
+        run: |
+          from pathlib import Path
+
+          path = Path('README.md')
+          content = path.read_text(encoding='utf-8')
+          replacements = {
+              '- Yamaha checksum validation and multi-message `.syx` file classification;':
+                  '- Yamaha checksum validation and multi-message `.syx` file classification;\n- strict DX7 semantic ranges for edited voices, with legacy reserved values normalized only at import;\n- structured compatibility-normalization records and visible per-parameter import warnings;\n- byte-for-byte preservation and unchanged download of each imported SysEx file before normalization;',
+              'and [`docs/validation/dx7-bulk-transfer.md`](./docs/validation/dx7-bulk-transfer.md) for the guarded DX7 bulk-transfer gate.':
+                  'and [`docs/validation/dx7-bulk-transfer.md`](./docs/validation/dx7-bulk-transfer.md) for the guarded DX7 bulk-transfer gate. DX7 compatibility handling is validated in [`docs/validation/dx7-semantic-ranges.md`](./docs/validation/dx7-semantic-ranges.md) and [`docs/validation/dx7-original-import.md`](./docs/validation/dx7-original-import.md).',
+              '- DX7 decoding and checksum failures with exact offsets.':
+                  '- DX7 decoding and checksum failures with exact offsets;\n- every compatibility normalization with voice/operator path, original value and normalized value.',
+              'The UI displays these diagnostics per file while still importing valid complete voices from a mixed file. The strict `importSysexFile` API remains available for callers that must reject structurally incomplete input.':
+                  '''The UI displays these diagnostics per file while still importing valid complete voices from a mixed file. The strict `importSysexFile` API remains available for callers that must reject structurally incomplete input.\n\nImported files are copied byte-for-byte before decoding. The **Exact original imports** section keeps those copies in browser memory and offers **Download unchanged** with the original filename. They remain available until the next import or page reload and are not automatically persisted to the patch library. Edited or hardware-bound exports use the normalized semantic model, standards-valid ranges and a recalculated Yamaha checksum.\n\nLegacy raw values such as keyboard-scaling breakpoint `127` and detune `15` are accepted only at the import boundary and recorded as compatibility normalizations (`127 → 99`, `15 → 14`). The editable voice model rejects breakpoint values above `99` and detune values above `14` instead of silently repairing user edits during export.''',
+          }
+          for old, new in replacements.items():
+              if old not in content:
+                  raise SystemExit(f'Missing expected README text: {old}')
+              content = content.replace(old, new, 1)
+          path.write_text(content, encoding='utf-8')
+
+      - name: Commit README
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add README.md
+          git commit -m "docs(dx7): document compatibility preservation"
+          git push
