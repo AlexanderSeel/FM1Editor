@@ -1,0 +1,140 @@
+name: Validate current plan
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/validate-current-plan.yml'
+      - 'docs/validation/.trigger-current-plan'
+      - 'src/**'
+      - 'scripts/browser-layout-smoke.mjs'
+      - 'scripts/browser-dx7-layout-smoke.mjs'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'vite.config.ts'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: validate-current-plan
+  cancel-in-progress: true
+
+jobs:
+  software:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Lint and accessibility
+        run: npm run lint
+
+      - name: Test
+        run: npm run test
+
+      - name: Build
+        run: npm run build
+
+  browsers:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    env:
+      PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'
+      BROWSER_CHANNELS: chrome,msedge
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+
+      - name: Build
+        run: npm run build
+
+      - name: Install transient Playwright runner
+        run: npm install --no-save --package-lock=false playwright@1.55.0
+
+      - name: Run FM-1 and guarded DX7 responsive matrices
+        run: node scripts/browser-layout-smoke.mjs
+
+  finalize:
+    needs: [software, browsers]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout latest main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Record validated result
+        shell: bash
+        run: |
+          git pull --rebase origin main
+          python - <<'PY'
+          import os
+          from pathlib import Path
+
+          validated = os.environ['GITHUB_SHA']
+          plan_path = Path('PLAN.md')
+          plan = plan_path.read_text(encoding='utf-8')
+          item = "- [ ] Re-run typecheck, lint, the full test suite, production build and the Chrome/Edge responsive matrix for the compact layout, 340–410 px vertical-only sidebar with long labels, and guarded DX7 voice/function parameter controls when GitHub Actions scheduling is available.\n"
+          if item not in plan:
+              raise SystemExit('Expected validation PLAN.md item was not found.')
+          plan_path.write_text(plan.replace(item, '', 1), encoding='utf-8')
+
+          receipt = f'''# Current software and browser validation
+
+          Validated source commit: `{validated}`
+
+          - npm install: **SUCCESS**
+          - TypeScript typecheck: **SUCCESS**
+          - ESLint and JSX accessibility: **SUCCESS**
+          - Full Vitest suite: **SUCCESS**
+          - Production build: **SUCCESS**
+          - Installed Google Chrome responsive matrix: **SUCCESS**
+          - Installed Microsoft Edge responsive matrix: **SUCCESS**
+
+          Browser coverage includes:
+
+          - FM-1 wide desktop, compact desktop, tablet and mobile layouts;
+          - 340–410 px desktop sidebar width, vertical-only scrolling and long-label containment;
+          - FM-1 bank controls and 25-key virtual piano bounds;
+          - Yamaha DX7 guarded voice parameters `0–155` and function parameters `64–77`;
+          - exactly one voice/function panel, locked without output, SysEx and hardware confirmations;
+          - DX7 operator-mask controls and 25-key virtual piano bounds.
+
+          No physical FM-1 or Yamaha DX7 hardware behavior was validated by this workflow.
+          '''
+          Path('docs/validation/current-software-browser-gate.md').write_text(receipt, encoding='utf-8')
+
+          Path('.github/workflows/validate-current-plan.yml').unlink(missing_ok=True)
+          Path('docs/validation/.trigger-current-plan').unlink(missing_ok=True)
+          PY
+
+      - name: Commit receipt and cleanup
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git commit -m 'test(ci): record current software and browser validation'
+          git push origin main
