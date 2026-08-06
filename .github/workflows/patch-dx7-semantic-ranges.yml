@@ -1,0 +1,95 @@
+name: Enforce DX7 semantic ranges
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - .github/workflows/patch-dx7-semantic-ranges.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Tighten codec validation and tests
+        shell: python
+        run: |
+          from pathlib import Path
+
+          codec_path = Path('src/sysex/dx7.ts')
+          codec = codec_path.read_text(encoding='utf-8')
+          replacements = {
+              "assertRange(`${label} breakpoint`, operator.keyboardScaling.breakPoint, 0, 127)":
+                  "assertRange(`${label} breakpoint`, operator.keyboardScaling.breakPoint, 0, 99)",
+              "assertRange(`${label} detune`, operator.detune, 0, 15)":
+                  "assertRange(`${label} detune`, operator.detune, 0, 14)",
+          }
+          for old, new in replacements.items():
+              if old not in codec:
+                  raise SystemExit(f'Missing codec text: {old}')
+              codec = codec.replace(old, new, 1)
+          codec_path.write_text(codec, encoding='utf-8')
+
+          test_path = Path('src/sysex/dx7.test.ts')
+          tests = test_path.read_text(encoding='utf-8')
+
+          old_detune = '''    const legacyVoice = createInitializedVoice('LEGACY 15')
+    legacyVoice.operators[5].detune = 15
+    const legacyPacked = encodePackedVoice(legacyVoice)
+    const legacySingle = encodeSingleVoiceMessage(legacyVoice)
+
+    expect((legacyPacked[op6DetuneOffset] ?? 0) & 0x0f).toBe(14)
+    expect(decodeSingleVoiceMessage(legacySingle).voice.operators[5].detune).toBe(14)
+'''
+          new_detune = '''    const invalidVoice = createInitializedVoice('INVALID 15')
+    invalidVoice.operators[5].detune = 15
+
+    expect(() => encodePackedVoice(invalidVoice)).toThrow(/detune.*0 to 14/i)
+    expect(() => encodeSingleVoiceMessage(invalidVoice)).toThrow(/detune.*0 to 14/i)
+'''
+          if old_detune not in tests:
+              raise SystemExit('Missing legacy detune test block')
+          tests = tests.replace(old_detune, new_detune, 1)
+
+          old_breakpoint = '''  const legacyVoice = createInitializedVoice('LEGACY BP')
+  legacyVoice.operators[1].keyboardScaling.breakPoint = 127
+  const legacySingle = encodeSingleVoiceMessage(legacyVoice)
+  expect(decodeSingleVoiceMessage(legacySingle).voice.operators[1].keyboardScaling.breakPoint).toBe(99)
+
+  const voices = Array.from({ length: 32 }, (_, index) => createInitializedVoice(`VOICE ${index + 1}`))
+  const bankVoice = voices[3]
+  if (!bankVoice) throw new Error('Missing test bank voice.')
+  bankVoice.operators[1].keyboardScaling.breakPoint = 127
+  const bankMessage = encodeVoiceBankMessage(voices)
+  expect(decodeVoiceBankMessage(bankMessage).voices[3]?.operators[1].keyboardScaling.breakPoint).toBe(99)
+'''
+          new_breakpoint = '''  const invalidVoice = createInitializedVoice('INVALID BP')
+  invalidVoice.operators[1].keyboardScaling.breakPoint = 127
+  expect(() => encodePackedVoice(invalidVoice)).toThrow(/breakpoint.*0 to 99/i)
+  expect(() => encodeSingleVoiceMessage(invalidVoice)).toThrow(/breakpoint.*0 to 99/i)
+
+  const voices = Array.from({ length: 32 }, (_, index) => createInitializedVoice(`VOICE ${index + 1}`))
+  const bankVoice = voices[3]
+  if (!bankVoice) throw new Error('Missing test bank voice.')
+  bankVoice.operators[1].keyboardScaling.breakPoint = 127
+  expect(() => encodeVoiceBankMessage(voices)).toThrow(/breakpoint.*0 to 99/i)
+'''
+          if old_breakpoint not in tests:
+              raise SystemExit('Missing legacy breakpoint test block')
+          tests = tests.replace(old_breakpoint, new_breakpoint, 1)
+          test_path.write_text(tests, encoding='utf-8')
+
+      - name: Commit semantic range enforcement
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/sysex/dx7.ts src/sysex/dx7.test.ts
+          git commit -m "fix(dx7): enforce documented semantic ranges"
+          git push
