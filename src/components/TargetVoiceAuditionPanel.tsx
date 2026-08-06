@@ -7,6 +7,7 @@ import {
 } from '../midi/dx7Transfer'
 import type { MidiOutputTarget } from '../midi/output'
 import { playFm1TestNote } from '../midi/voiceAudition'
+import { Dx7VoiceParameterControls } from './Dx7VoiceParameterControls'
 import { VirtualPiano } from './VirtualPiano'
 import { VoiceAuditionPanel } from './VoiceAuditionPanel'
 
@@ -145,12 +146,12 @@ function Dx7AuditionPanel({
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
-            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-cyan-300">Yamaha DX7 audition and bulk transfer</p>
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-cyan-300">Yamaha DX7 audition and transfer</p>
             <span className="rounded-full border border-amber-300/25 bg-amber-300/10 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.14em] text-amber-200">Explicit transfer only</span>
           </div>
           <h3 className="mt-2 truncate text-lg font-bold text-white">{voice.name || 'UNTITLED'}</h3>
           <p className="mt-1 max-w-4xl text-xs leading-5 text-slate-400">
-            Standard MIDI notes, Yamaha single-voice bulk receive and 32-voice bank receive are available for the stock DX7 target. FM-1 bank merge, preset mapping and effects writes remain hidden. Parameter changes, function data and device dump requests are not enabled here.
+            Standard MIDI notes, Yamaha single/bank bulk receive, semantic voice parameters 0–155 and function parameters 64–77 are available only through guarded controls. FM-1 bank mapping and effects remain hidden; no dump-request or automatic store command is constructed.
           </p>
         </div>
         <div className="text-right text-xs text-slate-500">
@@ -239,7 +240,15 @@ function Dx7AuditionPanel({
 
       {(status || error) && <p aria-live="polite" className={`mt-3 text-xs ${error ? 'text-rose-300' : 'text-emerald-300'}`}>{error ?? status}</p>}
 
-      <div className="mt-4">
+      <div className="mt-4 grid gap-4">
+        <Dx7VoiceParameterControls
+          disabled={busy}
+          hardwareReady={hardwareReady}
+          midiChannel={midiChannel}
+          output={output}
+          sysexEnabled={sysexEnabled}
+          voice={voice}
+        />
         <VirtualPiano
           baseOctave={baseOctave}
           disabled={busy}
