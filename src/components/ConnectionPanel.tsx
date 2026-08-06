@@ -1,17 +1,25 @@
-import type { MidiPortInfo } from '../midi/webMidi'
+import {
+  DEVICE_TARGETS,
+  getDeviceTargetDefinition,
+  isSuggestedPortForTarget,
+  type DeviceTarget,
+} from '../domain/deviceTarget'
 import type { MidiPermissionState } from '../hooks/useMidi'
+import type { MidiPortInfo } from '../midi/webMidi'
 
 interface ConnectionPanelProps {
   supported: boolean
   supportReason?: string
   permission: MidiPermissionState
   sysexEnabled: boolean
+  target: DeviceTarget
   inputs: MidiPortInfo[]
   outputs: MidiPortInfo[]
   selectedInputId: string | null
   selectedOutputId: string | null
   error: string | null
   onConnect: () => void
+  onSelectTarget: (target: DeviceTarget) => void
   onSelectInput: (id: string | null) => void
   onSelectOutput: (id: string | null) => void
 }
@@ -19,11 +27,13 @@ interface ConnectionPanelProps {
 function PortSelect({
   label,
   ports,
+  target,
   value,
   onChange,
 }: {
   label: string
   ports: MidiPortInfo[]
+  target: DeviceTarget
   value: string | null
   onChange: (id: string | null) => void
 }) {
@@ -38,7 +48,7 @@ function PortSelect({
         <option value="">No port selected</option>
         {ports.map((port) => (
           <option key={port.id} value={port.id}>
-            {port.name} · {port.manufacturer}
+            {port.name} · {port.manufacturer}{isSuggestedPortForTarget(port, target) ? ' · suggested' : ''}
           </option>
         ))}
       </select>
@@ -49,6 +59,7 @@ function PortSelect({
 export function ConnectionPanel(props: ConnectionPanelProps) {
   const connected = props.permission === 'granted'
   const ready = connected && props.sysexEnabled
+  const target = getDeviceTargetDefinition(props.target)
 
   return (
     <section className="fm1-connection-panel p-4">
@@ -66,6 +77,21 @@ export function ConnectionPanel(props: ConnectionPanelProps) {
         </span>
       </div>
 
+      <label className="mt-4 grid gap-2 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">
+        Device target
+        <select
+          className="px-3 py-2.5 text-sm normal-case tracking-normal"
+          onChange={(event) => props.onSelectTarget(event.target.value as DeviceTarget)}
+          value={props.target}
+        >
+          {DEVICE_TARGETS.map((definition) => (
+            <option key={definition.id} value={definition.id}>{definition.label}</option>
+          ))}
+        </select>
+      </label>
+      <p className="mt-2 text-xs leading-5 text-slate-400">{target.description}</p>
+      <p className="mt-1 text-[10px] leading-4 text-cyan-200">{target.portHint} Port selectors always remain the explicit manual override.</p>
+
       {!connected ? (
         <div className="mt-4 grid gap-4">
           <p className="text-sm leading-6 text-slate-400">
@@ -78,7 +104,7 @@ export function ConnectionPanel(props: ConnectionPanelProps) {
             onClick={props.onConnect}
             type="button"
           >
-            {props.permission === 'requesting' ? 'Requesting access…' : 'Connect FM-1'}
+            {props.permission === 'requesting' ? 'Requesting access…' : `Connect ${target.shortLabel}`}
           </button>
           {!props.supported && <p className="text-sm text-rose-300">{props.supportReason}</p>}
           {props.error && <p className="text-sm text-rose-300">{props.error}</p>}
@@ -88,12 +114,14 @@ export function ConnectionPanel(props: ConnectionPanelProps) {
           <PortSelect
             label="MIDI input"
             ports={props.inputs}
+            target={props.target}
             value={props.selectedInputId}
             onChange={props.onSelectInput}
           />
           <PortSelect
             label="MIDI output"
             ports={props.outputs}
+            target={props.target}
             value={props.selectedOutputId}
             onChange={props.onSelectOutput}
           />
