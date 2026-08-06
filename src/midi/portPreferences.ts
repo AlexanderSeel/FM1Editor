@@ -18,6 +18,7 @@ export function choosePreferredPort(
   ports: readonly MidiPortInfo[],
   currentId: string | null,
   preference: MidiPortPreference | null,
+  suggestedId: string | null = null,
 ): string | null {
   if (currentId && ports.some((port) => port.id === currentId)) return currentId
   if (preference) {
@@ -28,5 +29,6 @@ export function choosePreferredPort(
     )
     if (descriptorMatch) return descriptorMatch.id
   }
+  if (suggestedId && ports.some((port) => port.id === suggestedId)) return suggestedId
   return ports[0]?.id ?? null
 }
