@@ -1,0 +1,141 @@
+name: Validate DX7 semantic ranges
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - .github/workflows/validate-dx7-semantic-ranges.yml
+      - docs/validation/.trigger-dx7-semantic-ranges
+      - src/sysex/dx7.ts
+      - src/sysex/dx7.test.ts
+    paths-ignore:
+      - docs/validation/dx7-semantic-ranges.md
+
+permissions:
+  contents: write
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        id: setup
+        continue-on-error: true
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install dependencies
+        id: install
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -o pipefail
+          npm install 2>&1 | tee /tmp/npm-install.log
+
+      - name: Typecheck
+        id: typecheck
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -o pipefail
+          npm run typecheck 2>&1 | tee /tmp/typecheck.log
+
+      - name: Lint
+        id: lint
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -o pipefail
+          npm run lint 2>&1 | tee /tmp/lint.log
+
+      - name: Test
+        id: test
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -o pipefail
+          npm run test 2>&1 | tee /tmp/test.log
+
+      - name: Build
+        id: build
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -o pipefail
+          npm run build 2>&1 | tee /tmp/build.log
+
+      - name: Verify semantic range markers
+        id: markers
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -Fq 'breakpoint`, operator.keyboardScaling.breakPoint, 0, 99' src/sysex/dx7.ts
+          grep -Fq 'detune`, operator.detune, 0, 14' src/sysex/dx7.ts
+          grep -Fq 'normalizes reserved detune nibble 15 at the raw import boundary and rejects it in the voice model' src/sysex/dx7.test.ts
+          grep -Fq 'normalizes reserved breakpoint value 127 at the raw import boundary and rejects it in the voice model' src/sysex/dx7.test.ts
+
+      - name: Record validation receipt
+        if: always()
+        shell: bash
+        env:
+          SETUP_OUTCOME: ${{ steps.setup.outcome }}
+          INSTALL_OUTCOME: ${{ steps.install.outcome }}
+          TYPECHECK_OUTCOME: ${{ steps.typecheck.outcome }}
+          LINT_OUTCOME: ${{ steps.lint.outcome }}
+          TEST_OUTCOME: ${{ steps.test.outcome }}
+          BUILD_OUTCOME: ${{ steps.build.outcome }}
+          MARKERS_OUTCOME: ${{ steps.markers.outcome }}
+        run: |
+          set -euo pipefail
+          mkdir -p docs/validation
+          {
+            echo '# DX7 semantic range validation'
+            echo
+            echo "Validated source commit: \`${GITHUB_SHA}\`"
+            echo
+            echo "- Node setup: **${SETUP_OUTCOME^^}**"
+            echo "- npm install: **${INSTALL_OUTCOME^^}**"
+            echo "- npm run typecheck: **${TYPECHECK_OUTCOME^^}**"
+            echo "- npm run lint: **${LINT_OUTCOME^^}**"
+            echo "- npm run test: **${TEST_OUTCOME^^}**"
+            echo "- npm run build: **${BUILD_OUTCOME^^}**"
+            echo "- semantic range marker check: **${MARKERS_OUTCOME^^}**"
+            echo
+            echo '- raw legacy breakpoint 127 is normalized to 99 during decoding.'
+            echo '- raw legacy detune 15 is normalized to 14 during decoding.'
+            echo '- edited/in-memory breakpoint values above 99 are rejected.'
+            echo '- edited/in-memory detune values above 14 are rejected.'
+            echo
+            echo 'Physical FM-1 and Yamaha DX7 hardware behavior remains unverified.'
+          } > docs/validation/dx7-semantic-ranges.md
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add docs/validation/dx7-semantic-ranges.md
+          if ! git diff --cached --quiet; then
+            git commit -m "test(ci): record DX7 semantic range validation"
+            git push
+          fi
+
+      - name: Fail when validation failed
+        if: always()
+        shell: bash
+        env:
+          SETUP_OUTCOME: ${{ steps.setup.outcome }}
+          INSTALL_OUTCOME: ${{ steps.install.outcome }}
+          TYPECHECK_OUTCOME: ${{ steps.typecheck.outcome }}
+          LINT_OUTCOME: ${{ steps.lint.outcome }}
+          TEST_OUTCOME: ${{ steps.test.outcome }}
+          BUILD_OUTCOME: ${{ steps.build.outcome }}
+          MARKERS_OUTCOME: ${{ steps.markers.outcome }}
+        run: |
+          set -euo pipefail
+          for outcome in "$SETUP_OUTCOME" "$INSTALL_OUTCOME" "$TYPECHECK_OUTCOME" "$LINT_OUTCOME" "$TEST_OUTCOME" "$BUILD_OUTCOME" "$MARKERS_OUTCOME"; do
+            [[ "$outcome" == 'success' ]] || exit 1
+          done
