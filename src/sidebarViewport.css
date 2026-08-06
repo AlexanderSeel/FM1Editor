@@ -3,18 +3,32 @@
 }
 
 @media (min-width: 1024px) {
+  .fm1-chassis {
+    grid-template-columns: minmax(340px, 380px) minmax(0, 1fr);
+  }
+
   .fm1-sidebar {
     position: sticky;
     top: 1rem;
     align-self: start;
+    width: 100%;
+    min-width: 0;
     height: calc(100dvh - 2rem);
     max-height: calc(100dvh - 2rem);
+    overflow-x: clip;
     overflow-y: auto;
-    overscroll-behavior: contain;
+    overscroll-behavior-x: none;
+    overscroll-behavior-y: contain;
+    scrollbar-gutter: stable;
+    touch-action: pan-y;
   }
 }
 
 @media (min-width: 1280px) {
+  .fm1-chassis {
+    grid-template-columns: 410px minmax(0, 1fr);
+  }
+
   .fm1-sidebar {
     top: 1.25rem;
     height: calc(100dvh - 2.5rem);
