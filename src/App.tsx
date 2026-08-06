@@ -8,6 +8,7 @@ import { HistoryControls } from './components/HistoryControls'
 import { MidiMonitor } from './components/MidiMonitor'
 import { PatchCatalogBrowser } from './components/PatchCatalogBrowser'
 import { PatchLibrary } from './components/PatchLibrary'
+import { PersistentWorkspace } from './components/PersistentWorkspace'
 import { SequenceEditor } from './components/SequenceEditor'
 import { SysexToolbar } from './components/SysexToolbar'
 import { TargetVoiceAuditionPanel } from './components/TargetVoiceAuditionPanel'
@@ -430,15 +431,16 @@ export default function App() {
                     </p>
                   </section>
                 )
-              ) : (
+              ) : null}
+              <PersistentWorkspace active={workspace === 'sequencer'}>
                 <CollapsibleSection
-                  description={`${sequence.length} steps · ${sequence.bpm} BPM`}
+                  description={`${sequence.length} steps · ${sequence.bpm} BPM · playback remains active across workspaces`}
                   storageKey="sequencer-editor"
                   title="Sequence editor"
                 >
                   <SequenceEditor onChange={sequenceHistory.setValue} output={midi.output} sequence={sequence} />
                 </CollapsibleSection>
-              )}
+              </PersistentWorkspace>
             </div>
           </section>
 
