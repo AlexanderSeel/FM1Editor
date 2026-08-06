@@ -1,6 +1,6 @@
 # Chrome and Edge responsive layout validation
 
-Validated source commit: `5514b36b85d5784a239584ef5d8fdee2a8227dbc`
+Validated source commit: `92a8c1c9eb3f8227d5ca79adb536f163de026866`
 
 - npm install: **SUCCESS**
 - TypeScript typecheck: **SUCCESS**
@@ -8,7 +8,7 @@ Validated source commit: `5514b36b85d5784a239584ef5d8fdee2a8227dbc`
 - Full Vitest suite: **SUCCESS**
 - Production build: **SUCCESS**
 - Transient Playwright install: **SUCCESS**
-- Installed Chrome and Microsoft Edge layout smoke: **FAILURE**
+- Installed Chrome and Microsoft Edge layout smoke: **SUCCESS**
 
 Viewport matrix for each browser:
 

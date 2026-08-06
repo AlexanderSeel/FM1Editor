@@ -51,7 +51,7 @@ Execute sections C and D of [`docs/validation/fm1-hardware-test-protocol.md`](./
 
 ## 8. Validation and delivery
 
-- [ ] Test the viewport-safe sidebar, bank-merge controls and virtual piano in Chrome and Edge at desktop, tablet and narrow mobile widths.
 - [ ] Test Chrome and Edge on Windows with a physical FM-1 over USB MIDI and USB audio, including merged bank import, destination selection, preset recall, recording, note-off recovery and channel selection; test BLE MIDI where browser/platform support permits.
 - [ ] Add GitHub Pages deployment after secure-context routing and Web MIDI/Web Audio behavior are verified.
 - [ ] Document firmware-specific limitations, recovery steps and tested hardware/browser combinations.
+
