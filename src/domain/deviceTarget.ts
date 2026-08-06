@@ -25,7 +25,7 @@ export interface NamedMidiPort {
 export const DEFAULT_DEVICE_TARGET: DeviceTarget = 'fm1'
 export const DEVICE_TARGET_STORAGE_KEY = 'fm1-editor.device-target'
 
-export const DEVICE_TARGETS: readonly DeviceTargetDefinition[] = [
+export const DEVICE_TARGETS = [
   {
     id: 'fm1',
     label: 'M-VAVE FM-1',
@@ -52,7 +52,7 @@ export const DEVICE_TARGETS: readonly DeviceTargetDefinition[] = [
       fileEditing: true,
     },
   },
-] as const
+] as const satisfies readonly DeviceTargetDefinition[]
 
 export function isDeviceTarget(value: unknown): value is DeviceTarget {
   return value === 'fm1' || value === 'dx7'
