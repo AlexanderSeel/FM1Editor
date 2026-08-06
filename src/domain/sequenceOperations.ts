@@ -143,7 +143,7 @@ export function randomizePattern(sequence: Fm1Sequence, rootNote: number, seed: 
 
 export function applySequencePreset(sequence: Fm1Sequence, preset: SequencePresetId, rootNote: number): Fm1Sequence {
   const root = clampNote(rootNote)
-  const steps = Array.from({ length: 16 }, (_, index) => createPresetStep(root, false))
+  const steps = Array.from({ length: 16 }, () => createPresetStep(root, false))
   const setSingle = (index: number, note: number, velocity = 100, gate = 80) => {
     steps[index] = { ...createPresetStep(note, true), velocity, gate }
   }
@@ -242,17 +242,24 @@ export function buildPlaybackSteps(sequence: Fm1Sequence, seed = 0): readonly Pl
 
 export function updateStepNotes(step: SequenceStep, note: number, additive: boolean): SequenceStep {
   const normalized = clampNote(note)
-  if (!additive) return { ...step, enabled: true, note: normalized, notes: undefined }
+  const withoutNotes: Omit<SequenceStep, 'notes'> = {
+    enabled: step.enabled,
+    note: step.note,
+    velocity: step.velocity,
+    gate: step.gate,
+    tie: step.tie,
+  }
+  if (!additive) return { ...withoutNotes, enabled: true, note: normalized }
   const current = [...getStepNotes(step)]
   const existingIndex = current.indexOf(normalized)
   if (existingIndex >= 0) current.splice(existingIndex, 1)
   else if (current.length < 6) current.push(normalized)
   current.sort((left, right) => left - right)
-  if (current.length === 0) return { ...step, enabled: false, notes: undefined }
+  if (current.length === 0) return { ...withoutNotes, enabled: false }
   return {
-    ...step,
+    ...withoutNotes,
     enabled: true,
     note: current[0] ?? normalized,
-    ...(current.length > 1 ? { notes: current } : { notes: undefined }),
+    ...(current.length > 1 ? { notes: current } : {}),
   }
 }
