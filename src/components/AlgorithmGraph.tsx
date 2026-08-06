@@ -24,12 +24,12 @@ interface OperatorPosition {
 }
 
 const GRAPH_WIDTH = 720
-const GRAPH_HEIGHT = 360
-const NODE_HALF_WIDTH = 48
-const NODE_HALF_HEIGHT = 34
-const HORIZONTAL_PADDING = 62
-const BOTTOM_Y = 292
-const TOP_Y = 58
+const GRAPH_HEIGHT = 380
+const NODE_HALF_WIDTH = 54
+const NODE_HALF_HEIGHT = 32
+const HORIZONTAL_PADDING = 68
+const BOTTOM_Y = 306
+const TOP_Y = 60
 
 function clamp(value: number, minimum: number, maximum: number): number {
   return Math.min(maximum, Math.max(minimum, value))
@@ -50,7 +50,7 @@ function spreadLayer(
 
   const minimum = HORIZONTAL_PADDING
   const maximum = GRAPH_WIDTH - HORIZONTAL_PADDING
-  const minimumGap = Math.min(112, (maximum - minimum) / Math.max(1, operators.length - 1))
+  const minimumGap = Math.min(122, (maximum - minimum) / Math.max(1, operators.length - 1))
   const sorted = [...operators].sort((left, right) =>
     (idealX.get(left) ?? 0) - (idealX.get(right) ?? 0) || left - right,
   )
@@ -125,15 +125,15 @@ function edgePath(
   if (feedback && from.operator === to.operator) {
     const startX = from.x + NODE_HALF_WIDTH - 5
     const startY = from.y - 4
-    return `M ${startX} ${startY} C ${startX + 70} ${startY - 70}, ${startX + 70} ${startY + 70}, ${startX} ${startY + 24}`
+    return `M ${startX} ${startY} C ${startX + 62} ${startY - 62}, ${startX + 62} ${startY + 62}, ${startX} ${startY + 22}`
   }
 
   const startY = from.y + NODE_HALF_HEIGHT
   const endY = to.y - NODE_HALF_HEIGHT
   if (feedback) {
     const side = from.x <= to.x ? -1 : 1
-    const controlX = clamp(Math.min(from.x, to.x) - 58 * side, 24, GRAPH_WIDTH - 24)
-    return `M ${from.x} ${startY} C ${controlX} ${startY + 24}, ${controlX} ${endY - 24}, ${to.x} ${endY}`
+    const controlX = clamp(Math.min(from.x, to.x) - 54 * side, 24, GRAPH_WIDTH - 24)
+    return `M ${from.x} ${startY} C ${controlX} ${startY + 22}, ${controlX} ${endY - 22}, ${to.x} ${endY}`
   }
 
   const middleY = (startY + endY) / 2
@@ -170,7 +170,7 @@ export function AlgorithmGraph({
         </div>
       </div>
 
-      <div className="fm1-algorithm-canvas relative min-h-[300px] overflow-hidden rounded-xl border border-black/80" role="group" aria-label={`DX7 algorithm ${algorithm.number} routing controls`}>
+      <div className="fm1-algorithm-canvas relative min-h-[320px] overflow-hidden border border-black/80 sm:min-h-[350px]" role="group" aria-label={`DX7 algorithm ${algorithm.number} routing controls`}>
         <svg aria-hidden="true" className="absolute inset-0 h-full w-full" preserveAspectRatio="xMidYMid meet" viewBox={`0 0 ${GRAPH_WIDTH} ${GRAPH_HEIGHT}`}>
           <defs>
             <marker id={`algorithm-arrow-${algorithm.number}`} markerHeight="7" markerWidth="7" orient="auto" refX="6" refY="3.5">
@@ -206,13 +206,13 @@ export function AlgorithmGraph({
             if (!position) return null
             return (
               <g className="text-sky-200/55" key={`output-${carrier}`}>
-                <path d={`M ${position.x} ${position.y + NODE_HALF_HEIGHT} V 334`} fill="none" stroke="currentColor" strokeWidth="2" />
-                <circle cx={position.x} cy="338" fill="currentColor" r="4" />
+                <path d={`M ${position.x} ${position.y + NODE_HALF_HEIGHT} V 350`} fill="none" stroke="currentColor" strokeWidth="2" />
+                <circle cx={position.x} cy="354" fill="currentColor" r="4" />
               </g>
             )
           })}
-          <path className="text-sky-200/35" d="M 70 338 H 650" fill="none" stroke="currentColor" strokeWidth="2" />
-          <text className="fill-sky-100/55 text-[11px] font-bold tracking-[0.2em]" textAnchor="middle" x="360" y="354">AUDIO OUT</text>
+          <path className="text-sky-200/35" d="M 70 354 H 650" fill="none" stroke="currentColor" strokeWidth="2" />
+          <text className="fill-sky-100/55 text-[11px] font-bold tracking-[0.2em]" textAnchor="middle" x="360" y="372">AUDIO OUT</text>
         </svg>
 
         {positions.map((position) => {
@@ -225,16 +225,15 @@ export function AlgorithmGraph({
           return (
             <button
               aria-label={`Select operator ${position.operator}, ${carrier ? 'carrier' : 'modulator'}, ${enabled ? 'enabled' : 'muted'}`}
-              className={`fm1-algorithm-node absolute grid w-24 -translate-x-1/2 -translate-y-1/2 place-items-center px-2 py-2 text-center ${carrier ? 'fm1-algorithm-carrier' : 'fm1-algorithm-modulator'} ${enabled ? '' : 'fm1-algorithm-muted'} ${soloed ? 'fm1-algorithm-solo' : ''}`}
+              className={`fm1-algorithm-node absolute text-center ${carrier ? 'fm1-algorithm-carrier' : 'fm1-algorithm-modulator'} ${enabled ? '' : 'fm1-algorithm-muted'} ${soloed ? 'fm1-algorithm-solo' : ''}`}
               data-active={selected}
               key={position.operator}
               onClick={() => onSelect(operatorIndex)}
               style={{ left: `${(position.x / GRAPH_WIDTH) * 100}%`, top: `${(position.y / GRAPH_HEIGHT) * 100}%` }}
               type="button"
             >
-              <span className="text-[9px] font-black uppercase tracking-[0.13em]">OP {position.operator}</span>
-              <span className="text-[8px] uppercase tracking-[0.12em] opacity-70">{carrier ? 'Carrier' : 'Modulator'}</span>
-              <span className="font-mono text-[10px]">LVL {operator?.outputLevel ?? 0}</span>
+              <span className="fm1-algorithm-node-title">OP {position.operator}</span>
+              <span className="fm1-algorithm-node-meta">{carrier ? 'CAR' : 'MOD'} · LVL {operator?.outputLevel ?? 0}</span>
             </button>
           )
         })}
@@ -247,7 +246,7 @@ export function AlgorithmGraph({
           const enabled = operator.outputLevel > 0
           const soloed = soloOperator === operatorIndex
           return (
-            <div className={`grid grid-cols-[1fr_auto_auto] items-center gap-2 rounded-lg border px-3 py-2 ${selectedOperator === operatorIndex ? 'border-sky-300/45 bg-sky-300/5' : 'border-white/8 bg-black/15'}`} key={operatorNumber}>
+            <div className={`grid grid-cols-[1fr_auto_auto] items-center gap-2 border px-3 py-2 ${selectedOperator === operatorIndex ? 'border-sky-300/45 bg-sky-300/5' : 'border-white/8 bg-black/15'}`} key={operatorNumber}>
               <button className="min-w-0 text-left" onClick={() => onSelect(operatorIndex)} type="button">
                 <span className="block text-[10px] font-black uppercase tracking-[0.12em] text-slate-200">OP {operatorNumber} · {carrier ? 'Carrier' : 'Modulator'}</span>
                 <span className="mt-1 block truncate font-mono text-[10px] text-slate-500">Level {operator.outputLevel} · {operator.oscillatorMode === 'fixed' ? 'FIX' : 'RATIO'}</span>
