@@ -1,3 +1,4 @@
+import './browser-dx7-layout-smoke.mjs'
 import { spawn, spawnSync } from 'node:child_process'
 import process from 'node:process'
 
