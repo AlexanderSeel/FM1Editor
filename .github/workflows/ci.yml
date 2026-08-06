@@ -3,18 +3,19 @@ name: CI
 on:
   push:
     branches: [main]
+  pull_request:
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-  finalize-ui-plan:
+  validate:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 10
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -24,135 +25,17 @@ jobs:
         with:
           node-version: 22
 
-      - name: Apply scoped source and documentation changes
-        run: python scripts/finalize-ui-plan.py
-
       - name: Install dependencies
-        id: install
-        continue-on-error: true
         run: npm install --no-audit --no-fund
 
       - name: Typecheck
-        id: typecheck
-        continue-on-error: true
         run: npm run typecheck
 
       - name: Lint and accessibility
-        id: lint
-        continue-on-error: true
         run: npm run lint
 
       - name: Test
-        id: test
-        continue-on-error: true
         run: npm run test
 
       - name: Build
-        id: build
-        continue-on-error: true
         run: npm run build
-
-      - name: Publish receipt, source and cleanup
-        env:
-          INSTALL_OUTCOME: ${{ steps.install.outcome }}
-          TYPECHECK_OUTCOME: ${{ steps.typecheck.outcome }}
-          LINT_OUTCOME: ${{ steps.lint.outcome }}
-          TEST_OUTCOME: ${{ steps.test.outcome }}
-          BUILD_OUTCOME: ${{ steps.build.outcome }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          receipt=/tmp/ui-live-midi-and-sequencer.md
-          {
-            echo '# UI, live MIDI and advanced sequencer validation'
-            echo
-            echo "Validated source commit: $GITHUB_SHA"
-            echo
-            echo "- npm install: **${INSTALL_OUTCOME^^}**"
-            echo "- TypeScript typecheck: **${TYPECHECK_OUTCOME^^}**"
-            echo "- ESLint and JSX accessibility: **${LINT_OUTCOME^^}**"
-            echo "- Full Vitest suite: **${TEST_OUTCOME^^}**"
-            echo "- Production build: **${BUILD_OUTCOME^^}**"
-            echo
-            echo '- Algorithm selection is located beside the graphical routing display.'
-            echo '- Live MIDI controls are directly above the virtual piano in FM-1 and DX7 modes.'
-            echo '- Program Change, Start, Continue, Stop, Clock and All Notes Off are explicit user actions.'
-            echo '- FM-1 exposes the documented CC 0–23 effects map with opt-in live send and shared Effects-workspace state.'
-            echo '- Advanced sequencer properties cover piano roll, polyphony, presets, transforms, arrangements, playhead, diagnostics and internal/external 24-PPQN clock.'
-            echo '- No guessed voice/function SysEx or FM-1 internal pattern transfer was enabled.'
-          } > "$receipt"
-
-          success=true
-          for outcome in "$INSTALL_OUTCOME" "$TYPECHECK_OUTCOME" "$LINT_OUTCOME" "$TEST_OUTCOME" "$BUILD_OUTCOME"; do
-            [ "$outcome" = success ] || success=false
-          done
-
-          if [ "$success" != true ]; then
-            git reset --hard HEAD
-          fi
-
-          cat > .github/workflows/ci.yml <<'EOF'
-          name: CI
-
-          on:
-            push:
-              branches: [main]
-            pull_request:
-
-          permissions:
-            contents: read
-
-          concurrency:
-            group: ci-${{ github.ref }}
-            cancel-in-progress: true
-
-          jobs:
-            validate:
-              runs-on: ubuntu-latest
-              timeout-minutes: 10
-              steps:
-                - name: Checkout
-                  uses: actions/checkout@v4
-
-                - name: Set up Node.js
-                  uses: actions/setup-node@v4
-                  with:
-                    node-version: 22
-
-                - name: Install dependencies
-                  run: npm install --no-audit --no-fund
-
-                - name: Typecheck
-                  run: npm run typecheck
-
-                - name: Lint and accessibility
-                  run: npm run lint
-
-                - name: Test
-                  run: npm run test
-
-                - name: Build
-                  run: npm run build
-          EOF
-
-          rm -f \
-            .github/workflows/patch-validate-sequencer.yml \
-            .github/workflows/patch-validate-ui-plan.yml \
-            .github/workflows/patch-validate-ui-plan-v2.yml \
-            docs/validation/.trigger-advanced-sequencer \
-            docs/validation/.trigger-ui-plan \
-            docs/validation/.trigger-ui-plan-v2 \
-            scripts/finalize-ui-plan.py
-          mkdir -p docs/validation
-          cp "$receipt" docs/validation/ui-live-midi-and-sequencer.md
-
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add -A
-          if [ "$success" = true ]; then
-            git commit -m "feat(ui): consolidate live MIDI and sequencer controls"
-          else
-            git commit -m "test(ci): record UI and sequencer validation failure"
-          fi
-          git push
-          [ "$success" = true ]
