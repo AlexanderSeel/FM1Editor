@@ -1,0 +1,39 @@
+name: Fix keyboard scaling final workflow
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/fix-keyboard-scaling-final-workflow.yml
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+      - name: Fix result staging
+        shell: bash
+        run: |
+          python <<'PY'
+          from pathlib import Path
+
+          path = Path('.github/workflows/verify-keyboard-scaling-final.yml')
+          text = path.read_text()
+          old = "          git add docs/validation/keyboard-scaling-editor.md docs/validation/keyboard-scaling-final-diagnostics.md 2>/dev/null || true\n          git commit -m \"$commit_message\""
+          new = "          if [ -f docs/validation/keyboard-scaling-editor.md ]; then git add docs/validation/keyboard-scaling-editor.md; fi\n          if [ -f docs/validation/keyboard-scaling-final-diagnostics.md ]; then git add docs/validation/keyboard-scaling-final-diagnostics.md; else git add -u docs/validation/keyboard-scaling-final-diagnostics.md 2>/dev/null || true; fi\n          git commit -m \"$commit_message\""
+          if old not in text:
+            raise SystemExit('Result staging marker not found.')
+          path.write_text(text.replace(old, new, 1))
+          PY
+
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add .github/workflows/verify-keyboard-scaling-final.yml
+          git commit -m 'chore(ci): stage keyboard scaling result safely'
+          git push origin HEAD:main
