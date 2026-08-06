@@ -165,16 +165,17 @@ export function EnvelopeGraph({ envelope, label, accent = 'cyan', onChange }: En
   const pointList = points.map((point) => `${point.x},${point.y}`).join(' ')
 
   return (
-    <figure className="rounded-2xl border border-white/10 bg-slate-950/80 p-4">
-      <figcaption className="mb-3 flex flex-wrap items-center justify-between gap-2">
-        <span className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">{label}</span>
-        <span className="font-mono text-[11px] text-slate-500">
-          R {draft.rates.join(' · ')} / L {draft.levels.join(' · ')}
+    <figure className="fm1-envelope-panel border">
+      <figcaption className="fm1-envelope-caption flex flex-wrap justify-between gap-2">
+        <span className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-400">{label}</span>
+        <span className="fm1-envelope-values font-mono">
+          <span>R {draft.rates.join(' · ')}</span>
+          <span>L {draft.levels.join(' · ')}</span>
         </span>
       </figcaption>
       <svg
         aria-label={`${label}${onChange ? ' draggable controls' : ' visualization'}`}
-        className="h-36 w-full select-none"
+        className="h-32 w-full select-none"
         preserveAspectRatio="none"
         ref={svgRef}
         role={onChange ? 'group' : 'img'}
@@ -183,8 +184,8 @@ export function EnvelopeGraph({ envelope, label, accent = 'cyan', onChange }: En
       >
         <defs>
           <linearGradient id={gradientId} x1="0" x2="0" y1="0" y2="1">
-            <stop offset="0" stopColor={stroke} stopOpacity="0.28" />
-            <stop offset="1" stopColor={stroke} stopOpacity="0.02" />
+            <stop offset="0" stopColor={stroke} stopOpacity="0.22" />
+            <stop offset="1" stopColor={stroke} stopOpacity="0.01" />
           </linearGradient>
         </defs>
         {[0, 25, 50, 75, 99].map((level) => {
@@ -192,7 +193,7 @@ export function EnvelopeGraph({ envelope, label, accent = 'cyan', onChange }: En
           return (
             <line
               key={level}
-              stroke="rgba(148,163,184,0.12)"
+              stroke="rgba(148,163,184,0.1)"
               strokeWidth="1"
               x1="0"
               x2={ENVELOPE_GRAPH_WIDTH}
@@ -204,7 +205,7 @@ export function EnvelopeGraph({ envelope, label, accent = 'cyan', onChange }: En
         {points.slice(1).map((point, index) => (
           <line
             key={`stage-guide-${index}`}
-            stroke="rgba(148,163,184,0.13)"
+            stroke="rgba(148,163,184,0.11)"
             strokeDasharray="3 4"
             strokeWidth="1"
             x1={point.x}
@@ -221,9 +222,9 @@ export function EnvelopeGraph({ envelope, label, accent = 'cyan', onChange }: En
           fill="none"
           points={pointList}
           stroke={stroke}
-          strokeLinecap="round"
+          strokeLinecap="square"
           strokeLinejoin="round"
-          strokeWidth="3"
+          strokeWidth="2.5"
         />
         <circle
           cx={points[0]?.x ?? 0}
@@ -245,7 +246,7 @@ export function EnvelopeGraph({ envelope, label, accent = 'cyan', onChange }: En
               aria-valuemax={99}
               aria-valuemin={0}
               aria-valuenow={rate}
-              className="cursor-ew-resize outline-none focus-visible:drop-shadow-[0_0_5px_rgba(255,255,255,0.9)]"
+              className="cursor-ew-resize outline-none focus-visible:drop-shadow-[0_0_4px_rgba(255,255,255,0.75)]"
               key={`rate-${stage}`}
               onKeyDown={(event) => handleKeyboard('rate', stage, event)}
               onPointerCancel={cancelDrag}
@@ -257,13 +258,13 @@ export function EnvelopeGraph({ envelope, label, accent = 'cyan', onChange }: En
             >
               <rect
                 fill="#081015"
-                height="10"
+                height="9"
                 stroke={stroke}
-                strokeWidth="2"
+                strokeWidth="1.7"
                 transform={`rotate(45 ${point.x} 8)`}
-                width="10"
-                x={point.x - 5}
-                y="3"
+                width="9"
+                x={point.x - 4.5}
+                y="3.5"
               />
               <circle cx={point.x} cy="8" fill="transparent" r="12" />
             </g>
@@ -280,7 +281,7 @@ export function EnvelopeGraph({ envelope, label, accent = 'cyan', onChange }: En
               aria-valuemax={99}
               aria-valuemin={0}
               aria-valuenow={level}
-              className="cursor-ns-resize outline-none focus-visible:drop-shadow-[0_0_5px_rgba(255,255,255,0.9)]"
+              className="cursor-ns-resize outline-none focus-visible:drop-shadow-[0_0_4px_rgba(255,255,255,0.75)]"
               key={`level-${stage}`}
               onKeyDown={(event) => handleKeyboard('level', stage, event)}
               onPointerCancel={cancelDrag}
@@ -290,15 +291,15 @@ export function EnvelopeGraph({ envelope, label, accent = 'cyan', onChange }: En
               role={onChange ? 'slider' : undefined}
               tabIndex={onChange ? 0 : undefined}
             >
-              <circle cx={point.x} cy={point.y} fill="#071018" r="6" stroke={stroke} strokeWidth="2.5" />
+              <circle cx={point.x} cy={point.y} fill="#071018" r="5.5" stroke={stroke} strokeWidth="2" />
               <circle cx={point.x} cy={point.y} fill="transparent" r="13" />
             </g>
           )
         })}
       </svg>
       {onChange && (
-        <p className="mt-2 text-[10px] leading-4 text-slate-500">
-          Drag diamonds horizontally for rates and circles vertically for levels. Focus a handle and use arrow keys for single-value precision; Page Up/Down changes ten values.
+        <p className="mt-1.5 text-[9px] leading-4 text-slate-500">
+          Diamonds adjust rates horizontally; circles adjust levels vertically. Arrow keys change 1 and Page Up/Down changes 10.
         </p>
       )}
     </figure>
