@@ -12,13 +12,12 @@
 
 ## 2. Device target modes
 
-- [ ] Add a persistent target selector for `FM-1` and a stock Yamaha `DX7`, with an optional MIDI-port-name suggestion but an explicit manual override before any transmission.
-- [ ] Route capabilities and safety messages through the selected target: retain the guarded FM-1 merged 32-voice workflow while enabling only documented Yamaha DX7 single-voice, 32-voice bank, parameter-change, dump-request and function-data operations.
+- [ ] Implement documented Yamaha DX7 single-voice, 32-voice bank, parameter-change, dump-request and function-data operations behind the selected DX7 target. Until each operation has target-specific confirmation and tests, DX7 mode must remain note-audition only and continue blocking FM-1 bank/effects writes.
 - [ ] Keep documented DX7 voice parameters normalized to their semantic ranges in both modes: values `100–127` remain invalid for parameters defined as `0–99`, and detune `15` remains invalid for the defined `0–14` positions.
 - [ ] Preserve the original imported SysEx bytes and record every compatibility normalization so an untouched file can be downloaded exactly as received, while edited or hardware-bound exports use standards-compliant values and a recalculated checksum.
 - [ ] Treat DX7 parameter `155` as an edit-session operator enable bitmask only; do not add it to the 155-byte single-voice dump or 128-byte packed bank voice.
 - [ ] Separate DX7 function/performance data such as mono/poly, portamento and pitch-bend settings from the 155-byte voice model instead of incorrectly embedding them in voice dumps.
-- [ ] Add target-specific tests and hardware validation for stock DX7 receive/send, bank dump requests, MIDI channel handling, memory-protect guidance and recovery from interrupted transfers.
+- [ ] Add operation-level tests as DX7 transmissions are implemented, then hardware-validate stock DX7 receive/send, bank dump requests, MIDI channel handling, memory-protect guidance and recovery from interrupted transfers.
 
 ## 3. FM-1 USB audio capture and recording
 
