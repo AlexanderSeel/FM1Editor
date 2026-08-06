@@ -5,6 +5,7 @@ import './algorithmGraph.css'
 import { PwaStatus } from './components/PwaStatus'
 import './index.css'
 import './flatHardware.css'
+import './sidebarViewport.css'
 import { registerServiceWorker } from './pwa/registerServiceWorker'
 
 const rootElement = document.getElementById('root')
