@@ -1,12 +1,12 @@
 # Yamaha DX7 bulk transfer validation
 
-Validated source commit: `9d581c936c0203607e34cb74aee0a2b2b82d49d1`
+Validated source commit: `651d6a04813cd850e848d8d593bdd9b47aba2118`
 
 - Node setup: **SUCCESS**
 - npm install: **SUCCESS**
 - npm run typecheck: **SUCCESS**
 - npm run lint: **SUCCESS**
-- npm run test: **FAILURE**
+- npm run test: **SUCCESS**
 - npm run build: **SUCCESS**
 - guarded DX7 transfer marker check: **SUCCESS**
 
@@ -18,7 +18,7 @@ Validated source commit: `9d581c936c0203607e34cb74aee0a2b2b82d49d1`
 
 ```text
 
-added 317 packages, and audited 318 packages in 17s
+added 317 packages, and audited 318 packages in 18s
 
 138 packages are looking for funding
   run `npm fund` for details
@@ -54,65 +54,44 @@ found 0 vulnerabilities
 
  RUN  v4.1.10 /home/runner/work/FM1Editor/FM1Editor
 
- ✓ scripts/catalog-release-audit.test.mjs (5 tests) 39ms
- ✓ src/audio/recorder.test.ts (8 tests) 22ms
- ✓ src/sysex/dx7.test.ts (9 tests) 38ms
- ✓ src/domain/voiceVariations.test.ts (5 tests) 17ms
+ ✓ scripts/catalog-release-audit.test.mjs (5 tests) 27ms
+ ✓ src/audio/recorder.test.ts (8 tests) 13ms
+ ✓ src/sysex/dx7.test.ts (9 tests) 40ms
  ✓ src/domain/deviceTarget.test.ts (6 tests) 13ms
- ✓ src/sysex/normalizeLegacyVoice.test.ts (2 tests) 19ms
- ✓ src/catalog/patchCatalog.test.ts (3 tests) 27ms
- ✓ src/library/backup.test.ts (3 tests) 34ms
- ✓ src/domain/keyboardScalingGeometry.test.ts (6 tests) 17ms
- ❯ src/midi/dx7Transfer.test.ts (3 tests | 1 failed) 22ms
-     ✓ sends all notes off followed by one channel-addressed single voice 8ms
-     ✓ sends one complete channel-addressed 32-voice bank 8ms
-     × rejects invalid channels and incomplete banks before opening the output 4ms
- ✓ src/midi/fm1BankTransfer.test.ts (4 tests) 19ms
- ✓ src/domain/envelopeGeometry.test.ts (5 tests) 18ms
- ✓ src/library/storageMigration.test.ts (3 tests) 18ms
+ ✓ src/domain/voiceVariations.test.ts (5 tests) 11ms
+ ✓ src/sysex/normalizeLegacyVoice.test.ts (2 tests) 20ms
+ ✓ src/library/backup.test.ts (3 tests) 35ms
+ ✓ src/catalog/patchCatalog.test.ts (3 tests) 33ms
+ ✓ src/domain/keyboardScalingGeometry.test.ts (6 tests) 8ms
+ ✓ src/domain/envelopeGeometry.test.ts (5 tests) 21ms
+ ✓ src/midi/dx7Transfer.test.ts (3 tests) 23ms
+ ✓ src/midi/fm1BankTransfer.test.ts (4 tests) 21ms
  ✓ src/domain/dx7Algorithms.test.ts (5 tests) 13ms
- ✓ src/sysex/importSysex.test.ts (2 tests) 10ms
+ ✓ src/library/storageMigration.test.ts (3 tests) 34ms
+ ✓ src/sysex/importSysex.test.ts (2 tests) 13ms
  ✓ src/library/model.test.ts (4 tests) 25ms
- ✓ src/history/history.test.ts (4 tests) 9ms
- ✓ src/midi/voiceAudition.test.ts (2 tests) 12ms
+ ✓ src/midi/voiceAudition.test.ts (2 tests) 13ms
+ ✓ src/history/history.test.ts (4 tests) 8ms
  ✓ src/domain/operatorLevels.test.ts (5 tests) 9ms
- ✓ src/midi/monitor.test.ts (3 tests) 7ms
- ✓ src/catalog/catalogManifest.test.ts (2 tests) 22ms
- ✓ src/midi/fm1Protocol.test.ts (5 tests) 9ms
- ✓ src/midi/portPreferences.test.ts (4 tests) 5ms
- ✓ src/components/AlgorithmGraph.test.ts (2 tests) 59ms
- ✓ src/midi/fxProtocol.test.ts (3 tests) 9ms
- ✓ src/catalog/catalogSysexValidation.test.ts (4 tests) 20ms
- ✓ src/catalog/remoteSysex.test.ts (2 tests) 58ms
- ✓ src/midi/sequenceScheduler.test.ts (1 test) 10ms
- ✓ src/domain/dx7Note.test.ts (2 tests) 5ms
- ✓ src/domain/bank.test.ts (2 tests) 6ms
- ✓ src/catalog/trackedArchive.test.ts (1 test) 300ms
+ ✓ src/catalog/catalogManifest.test.ts (2 tests) 19ms
+ ✓ src/midi/monitor.test.ts (3 tests) 6ms
+ ✓ src/midi/portPreferences.test.ts (4 tests) 6ms
+ ✓ src/midi/fm1Protocol.test.ts (5 tests) 11ms
+ ✓ src/components/AlgorithmGraph.test.ts (2 tests) 48ms
+ ✓ src/midi/fxProtocol.test.ts (3 tests) 10ms
+ ✓ src/catalog/catalogSysexValidation.test.ts (4 tests) 12ms
+ ✓ src/midi/sequenceScheduler.test.ts (1 test) 6ms
+ ✓ src/catalog/remoteSysex.test.ts (2 tests) 63ms
+ ✓ src/catalog/trackedArchive.test.ts (1 test) 311ms
+     ✓ is the exact audited ZIP and indexes all supported banks  308ms
+ ✓ src/domain/bank.test.ts (2 tests) 4ms
+ ✓ src/domain/dx7Note.test.ts (2 tests) 4ms
 
-⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+ Test Files  31 passed (31)
+      Tests  115 passed (115)
+   Start at  10:40:00
+   Duration  2.50s (transform 625ms, setup 0ms, import 1.27s, tests 877ms, environment 5ms)
 
- FAIL  src/midi/dx7Transfer.test.ts > Yamaha DX7 bulk transfer > rejects invalid channels and incomplete banks before opening the output
-RangeError: MIDI channel must be from 1 to 16; received 0.
- ❯ assertMidiChannel src/midi/dx7Transfer.ts:21:11
-     19| function assertMidiChannel(midiChannel: number): void {
-     20|   if (!Number.isInteger(midiChannel) || midiChannel < 1 || midiChannel…
-     21|     throw new RangeError(`MIDI channel must be from 1 to 16; received …
-       |           ^
-     22|   }
-     23| }
- ❯ sendSingleVoiceToDx7 src/midi/dx7Transfer.ts:54:3
- ❯ src/midi/dx7Transfer.test.ts:73:18
-
-⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
-
-
- Test Files  1 failed | 30 passed (31)
-      Tests  1 failed | 114 passed (115)
-   Start at  10:38:59
-   Duration  2.62s (transform 748ms, setup 0ms, import 1.42s, tests 888ms, environment 5ms)
-
-
-::error file=/home/runner/work/FM1Editor/FM1Editor/src/midi/dx7Transfer.ts,title=src/midi/dx7Transfer.test.ts > Yamaha DX7 bulk transfer > rejects invalid channels and incomplete banks before opening the output,line=21,column=11::RangeError: MIDI channel must be from 1 to 16; received 0.%0A ❯ assertMidiChannel src/midi/dx7Transfer.ts:21:11%0A ❯ sendSingleVoiceToDx7 src/midi/dx7Transfer.ts:54:3%0A ❯ src/midi/dx7Transfer.test.ts:73:18%0A%0A
 ```
 
 ## Build output
@@ -133,8 +112,8 @@ rendering chunks...
 computing gzip size...
 dist/index.html                   0.96 kB │ gzip:   0.46 kB
 dist/assets/index-Dr0lVQxS.css   59.92 kB │ gzip:  11.84 kB
-dist/assets/index-D881D1A5.js   391.13 kB │ gzip: 115.70 kB
+dist/assets/index-urj-ykjR.js   391.14 kB │ gzip: 115.70 kB
 
-✓ built in 275ms
-Service worker generated with 7 precached URLs (68206541e443c7ee).
+✓ built in 264ms
+Service worker generated with 7 precached URLs (513e73e723d78171).
 ```
