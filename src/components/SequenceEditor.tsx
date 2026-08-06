@@ -25,6 +25,12 @@ import {
   updateStepNotes,
   type SequencePresetId,
 } from '../domain/sequenceOperations'
+import {
+  buildPianoRollNoteRows,
+  MAX_PIANO_ROLL_START_NOTE,
+  revealPianoRollNote,
+  shiftPianoRollStartNote,
+} from '../domain/pianoRollView'
 import { subscribeMidiInputMessages } from '../midi/inputBus'
 import type { MidiOutputTarget } from '../midi/output'
 import {
@@ -107,10 +113,14 @@ export function SequenceEditor({ sequence, output, onChange }: SequenceEditorPro
   const fileInput = useRef<HTMLInputElement>(null)
   const uiTimers = useRef<number[]>([])
   const externalPlayer = useRef<ExternalSequencePlayer | null>(null)
+  const playbackRun = useRef(0)
+  const loopEnabledRef = useRef(true)
   const [selectedStep, setSelectedStep] = useState(0)
   const [playhead, setPlayhead] = useState<number | null>(null)
   const [playheadPattern, setPlayheadPattern] = useState<string | null>(null)
-  const [baseOctave, setBaseOctave] = useState(3)
+  const [pianoRollStartNote, setPianoRollStartNote] = useState(48)
+  const [cursorNote, setCursorNote] = useState(60)
+  const [loopEnabled, setLoopEnabled] = useState(true)
   const [rootNote, setRootNote] = useState(60)
   const [preset, setPreset] = useState<SequencePresetId>('single-note')
   const [clipboard, setClipboard] = useState<SequencePattern | null>(null)
@@ -122,11 +132,23 @@ export function SequenceEditor({ sequence, output, onChange }: SequenceEditorPro
   const clockMode = getSequenceClockMode(sequence)
   const direction = getSequenceDirection(sequence)
   const selected = sequence.steps[selectedStep] ?? sequence.steps[0]
-  const baseNote = (baseOctave + 1) * 12
   const noteRows = useMemo(
-    () => Array.from({ length: 24 }, (_, index) => Math.min(127, baseNote + 23 - index)),
-    [baseNote],
+    () => buildPianoRollNoteRows(pianoRollStartNote),
+    [pianoRollStartNote],
   )
+  const pianoRollEndNote = pianoRollStartNote + noteRows.length - 1
+
+  const revealCursor = useCallback((note: number) => {
+    const normalized = Math.min(127, Math.max(0, Math.round(note)))
+    setCursorNote(normalized)
+    setPianoRollStartNote((current) => revealPianoRollNote(current, normalized))
+  }, [])
+
+  const toggleLoop = () => {
+    const next = !loopEnabledRef.current
+    loopEnabledRef.current = next
+    setLoopEnabled(next)
+  }
 
   const clearUiTimers = useCallback(() => {
     uiTimers.current.forEach((timer) => window.clearTimeout(timer))
@@ -144,6 +166,7 @@ export function SequenceEditor({ sequence, output, onChange }: SequenceEditorPro
   }, [])
 
   useEffect(() => () => {
+    playbackRun.current += 1
     clearUiTimers()
     externalPlayer.current?.stop()
   }, [clearUiTimers])
@@ -191,47 +214,81 @@ export function SequenceEditor({ sequence, output, onChange }: SequenceEditorPro
     try {
       validateSequence(sequence)
       await output.open()
+      playbackRun.current += 1
+      const runId = playbackRun.current
+      output.clear?.()
       clearUiTimers()
       setPlayhead(null)
       setDiagnostics(emptyDiagnostics())
 
       if (clockMode === 'external') {
-        setStatus('External clock armed. Send MIDI Start and 24-PPQN Clock from the selected input.')
+        setStatus('External clock armed. Playback follows Start/Clock and loops until MIDI Stop.')
         return
       }
 
-      const events = scheduleSequence(output, sequence)
-      const timing = describeSequenceTiming(events)
-      setDiagnostics({ ...emptyDiagnostics(), ...timing })
-      const startTimestamp = events.find((event) => event.kind === 'start')?.timestamp ?? performance.now()
-      const duration = sequenceStepDurationMs(sequence.bpm)
-      const swingOffset = duration * (sequence.swing / 100) * 0.5
-      const playback = buildPlaybackSteps(sequence, Math.floor(startTimestamp))
+      const runCycle = (startDelayMs: number, cycleNumber: number): void => {
+        if (playbackRun.current !== runId) return
+        const events = scheduleSequence(output, sequence, startDelayMs)
+        const timing = describeSequenceTiming(events)
+        if (cycleNumber === 1) {
+          setDiagnostics({ ...emptyDiagnostics(), ...timing })
+        } else {
+          setDiagnostics((current) => ({
+            ...current,
+            eventCount: current.eventCount + timing.eventCount,
+            noteOnCount: current.noteOnCount + timing.noteOnCount,
+            noteOffCount: current.noteOffCount + timing.noteOffCount,
+            clockPulseCount: current.clockPulseCount + timing.clockPulseCount,
+            playbackStepCount: current.playbackStepCount + timing.playbackStepCount,
+            durationMs: current.durationMs + timing.durationMs,
+          }))
+        }
 
-      playback.forEach((step, timelineIndex) => {
-        const expected = startTimestamp + timelineIndex * duration + (timelineIndex % 2 === 1 ? swingOffset : 0)
+        const startTimestamp = events.find((event) => event.kind === 'start')?.timestamp ?? performance.now()
+        const duration = sequenceStepDurationMs(sequence.bpm)
+        const swingOffset = duration * (sequence.swing / 100) * 0.5
+        const playback = buildPlaybackSteps(sequence, Math.floor(startTimestamp))
+
+        playback.forEach((step, timelineIndex) => {
+          const expected = startTimestamp + timelineIndex * duration + (timelineIndex % 2 === 1 ? swingOffset : 0)
+          uiTimers.current.push(window.setTimeout(() => {
+            if (playbackRun.current !== runId) return
+            setPlayhead(step.sourceStepIndex)
+            setSelectedStep(step.sourceStepIndex)
+            setCursorNote(step.step.note)
+            setPlayheadPattern(step.patternName)
+            recordDrift(expected)
+          }, Math.max(0, expected - performance.now())))
+        })
+
+        const stopTimestamp = events.find((event) => event.kind === 'stop')?.timestamp ?? startTimestamp
         uiTimers.current.push(window.setTimeout(() => {
-          setPlayhead(step.sourceStepIndex)
-          setSelectedStep(step.sourceStepIndex)
-          setPlayheadPattern(step.patternName)
-          recordDrift(expected)
-        }, Math.max(0, expected - performance.now())))
-      })
+          if (playbackRun.current !== runId) return
+          recordDrift(stopTimestamp)
+          if (loopEnabledRef.current) {
+            uiTimers.current = []
+            setStatus(`Loop ${cycleNumber + 1} scheduled.`)
+            runCycle(0, cycleNumber + 1)
+            return
+          }
+          setPlayhead(null)
+          setPlayheadPattern(null)
+          setStatus('Arrangement playback completed.')
+        }, Math.max(0, stopTimestamp - performance.now())))
 
-      const stopTimestamp = events.find((event) => event.kind === 'stop')?.timestamp ?? startTimestamp
-      uiTimers.current.push(window.setTimeout(() => {
-        setPlayhead(null)
-        setPlayheadPattern(null)
-        setStatus('Arrangement playback completed.')
-        recordDrift(stopTimestamp)
-      }, Math.max(0, stopTimestamp - performance.now())))
-      setStatus(`Scheduled ${timing.playbackStepCount} steps and ${timing.eventCount} MIDI events.`)
+        setStatus(loopEnabledRef.current
+          ? `Loop ${cycleNumber} scheduled: ${timing.playbackStepCount} steps and ${timing.eventCount} MIDI events.`
+          : `Scheduled ${timing.playbackStepCount} steps and ${timing.eventCount} MIDI events.`)
+      }
+
+      runCycle(80, 1)
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'Sequence playback could not be started.')
     }
   }
 
   const stop = () => {
+    playbackRun.current += 1
     clearUiTimers()
     externalPlayer.current?.stop()
     setPlayhead(null)
@@ -251,6 +308,7 @@ export function SequenceEditor({ sequence, output, onChange }: SequenceEditorPro
       const loaded = parseSequenceProject(await file.text())
       onChange(loaded)
       setSelectedStep(0)
+      revealCursor(loaded.steps[0]?.note ?? 60)
       setStatus(`Loaded ${loaded.name || file.name}.`)
       setError(null)
     } catch (cause) {
@@ -328,19 +386,29 @@ export function SequenceEditor({ sequence, output, onChange }: SequenceEditorPro
             </select>
           </label>
           <button className={`rounded-xl border border-white/8 p-3 text-xs font-bold ${sequence.sendMidiClock !== false ? 'bg-violet-300 text-slate-950' : 'bg-black/15 text-slate-400'}`} onClick={() => onChange({ ...sequence, sendMidiClock: sequence.sendMidiClock === false })} type="button">{sequence.sendMidiClock !== false ? '24 PPQN enabled' : 'Clock output off'}</button>
-          <label className="grid gap-2 rounded-xl border border-white/8 bg-black/15 p-3 text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">
-            Piano-roll octave
-            <select className="rounded-lg border border-white/10 bg-slate-950 px-3 py-2 text-sm normal-case text-white" onChange={(event) => setBaseOctave(Number(event.target.value))} value={baseOctave}>
-              {Array.from({ length: 8 }, (_, octave) => <option key={octave} value={octave}>C{octave}–B{octave + 1}</option>)}
-            </select>
-          </label>
+          <button
+            className={`rounded-xl border border-white/8 p-3 text-xs font-bold ${loopEnabled ? 'bg-emerald-300 text-slate-950' : 'bg-black/15 text-slate-400'}`}
+            disabled={clockMode === 'external'}
+            onClick={toggleLoop}
+            type="button"
+          >
+            {clockMode === 'external' ? 'External loops until Stop' : loopEnabled ? 'Loop enabled' : 'Play once'}
+          </button>
         </div>
       </section>
 
       <section className="rounded-2xl border border-white/10 bg-white/[0.025] p-4">
         <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
-          <div><p className="text-xs font-semibold uppercase tracking-[0.18em] text-cyan-300">Piano-roll step sequencer</p><h3 className="mt-1 text-xl font-bold text-white">Current pattern</h3><p className="mt-1 text-xs text-slate-500">Click for one note; Shift-click adds or removes chord notes.</p></div>
-          <div className="flex flex-wrap gap-2">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-cyan-300">Piano-roll step sequencer</p>
+            <h3 className="mt-1 text-xl font-bold text-white">Current pattern</h3>
+            <p className="mt-1 text-xs text-slate-500">Click for one note; Shift-click adds or removes chord notes. The edit cursor follows every note change.</p>
+            <p className="mt-2 font-mono text-xs font-bold text-violet-200">Cursor · Step {String(selectedStep + 1).padStart(2, '0')} · {formatNote(cursorNote)} · View {formatNote(pianoRollStartNote)}–{formatNote(pianoRollEndNote)}</p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <button className="rounded-lg border border-violet-300/20 bg-violet-300/5 px-3 py-2 text-xs font-bold text-violet-200 disabled:opacity-35" disabled={pianoRollStartNote <= 0} onClick={() => setPianoRollStartNote((current) => shiftPianoRollStartNote(current, -1))} type="button">Octave ↓</button>
+            <span className="rounded-lg border border-white/10 bg-black/20 px-3 py-2 font-mono text-xs text-slate-300">{formatNote(pianoRollStartNote)}–{formatNote(pianoRollEndNote)}</span>
+            <button className="rounded-lg border border-violet-300/20 bg-violet-300/5 px-3 py-2 text-xs font-bold text-violet-200 disabled:opacity-35" disabled={pianoRollStartNote >= MAX_PIANO_ROLL_START_NOTE} onClick={() => setPianoRollStartNote((current) => shiftPianoRollStartNote(current, 1))} type="button">Octave ↑</button>
             <button className="rounded-lg bg-white/8 px-3 py-2 text-xs font-bold" onClick={() => onChange(rotatePattern(sequence, -1))} type="button">Rotate ←</button>
             <button className="rounded-lg bg-white/8 px-3 py-2 text-xs font-bold" onClick={() => onChange(rotatePattern(sequence, 1))} type="button">Rotate →</button>
             <button className="rounded-lg bg-white/8 px-3 py-2 text-xs font-bold" onClick={() => { setClipboard(createCurrentPattern(sequence)); setStatus('Pattern copied.') }} type="button">Copy</button>
@@ -352,14 +420,28 @@ export function SequenceEditor({ sequence, output, onChange }: SequenceEditorPro
         <div className="overflow-x-auto rounded-xl border border-white/10 bg-black/20">
           <div className="grid min-w-[760px]" style={{ gridTemplateColumns: '72px repeat(16, minmax(38px, 1fr))' }}>
             <div className="sticky left-0 z-20 border-b border-r border-white/10 bg-slate-950 p-2 text-[10px] font-black text-slate-500">NOTE</div>
-            {sequence.steps.map((_, index) => <button className={`border-b border-r border-white/10 p-2 text-xs font-black ${index >= sequence.length ? 'bg-black/30 text-slate-700' : selectedStep === index ? 'bg-violet-300 text-slate-950' : 'bg-white/[0.03] text-slate-400'} ${playhead === index ? 'ring-2 ring-inset ring-emerald-300' : ''}`} disabled={index >= sequence.length} key={`header-${index}`} onClick={() => setSelectedStep(index)} type="button">{String(index + 1).padStart(2, '0')}</button>)}
+            {sequence.steps.map((_, index) => <button className={`border-b border-r border-white/10 p-2 text-xs font-black ${index >= sequence.length ? 'bg-black/30 text-slate-700' : selectedStep === index ? 'bg-violet-300 text-slate-950' : 'bg-white/[0.03] text-slate-400'} ${playhead === index ? 'ring-2 ring-inset ring-emerald-300' : ''}`} disabled={index >= sequence.length} key={`header-${index}`} onClick={() => { setSelectedStep(index); revealCursor(sequence.steps[index]?.note ?? cursorNote) }} type="button">{String(index + 1).padStart(2, '0')}</button>)}
             {noteRows.map((note) => (
               <div className="contents" key={note}>
                 <div className={`sticky left-0 z-10 border-b border-r border-white/10 px-2 py-1.5 font-mono text-xs ${note % 12 === 0 ? 'bg-slate-200 text-slate-950' : NOTE_NAMES[note % 12]?.includes('♯') ? 'bg-slate-950 text-slate-200' : 'bg-slate-800 text-slate-100'}`}>{formatNote(note)}</div>
                 {sequence.steps.map((step, index) => {
                   const active = step.enabled && getStepNotes(step).includes(note)
                   const outsideLength = index >= sequence.length
-                  return <button aria-label={`Step ${index + 1} ${formatNote(note)}${active ? ' active' : ''}`} className={`min-h-8 border-b border-r border-white/8 ${outsideLength ? 'bg-black/35' : active ? 'bg-cyan-300' : note % 12 === 0 ? 'bg-white/[0.07] hover:bg-white/[0.14]' : 'bg-white/[0.025] hover:bg-white/[0.1]'} ${playhead === index ? 'border-x-emerald-300/70' : ''}`} disabled={outsideLength} key={`${note}-${index}`} onClick={(event) => { setSelectedStep(index); onChange(updateStep(sequence, index, (current) => updateStepNotes(current, note, event.shiftKey))) }} title={`${formatNote(note)} · Step ${index + 1}`} type="button" />
+                  const cursorActive = selectedStep === index && cursorNote === note
+                  return <button
+                    aria-label={`Step ${index + 1} ${formatNote(note)}${active ? ' active' : ''}${cursorActive ? ' cursor' : ''}`}
+                    className={`min-h-8 border-b border-r border-white/8 ${outsideLength ? 'bg-black/35' : active ? 'bg-cyan-300' : note % 12 === 0 ? 'bg-white/[0.07] hover:bg-white/[0.14]' : 'bg-white/[0.025] hover:bg-white/[0.1]'} ${playhead === index ? 'border-x-emerald-300/70' : ''} ${cursorActive ? 'ring-2 ring-inset ring-violet-300' : ''}`}
+                    disabled={outsideLength}
+                    key={`${note}-${index}`}
+                    onClick={(event) => {
+                      setSelectedStep(index)
+                      revealCursor(note)
+                      onChange(updateStep(sequence, index, (current) => updateStepNotes(current, note, event.shiftKey)))
+                      setStatus(`Cursor moved to step ${index + 1}, ${formatNote(note)}.`)
+                    }}
+                    title={`${formatNote(note)} · Step ${index + 1}`}
+                    type="button"
+                  />
                 })}
               </div>
             ))}
@@ -368,7 +450,7 @@ export function SequenceEditor({ sequence, output, onChange }: SequenceEditorPro
 
         {selected && <div className="mt-4 grid gap-3 rounded-xl border border-violet-300/15 bg-violet-300/[0.04] p-4 lg:grid-cols-[1fr_3fr]">
           <div><p className="text-xs font-semibold uppercase tracking-[0.16em] text-violet-300">Step {selectedStep + 1}</p><p className="mt-1 font-mono text-lg font-black text-white">{selected.enabled ? getStepNotes(selected).map(formatNote).join(' · ') : 'REST'}</p>{playhead === selectedStep && <p className="text-xs text-emerald-300">Playing {playheadPattern ?? 'current pattern'}</p>}<div className="mt-3 flex gap-2"><button className={`rounded-lg px-3 py-2 text-xs font-bold ${selected.enabled ? 'bg-cyan-300 text-slate-950' : 'bg-white/8'}`} onClick={() => onChange(updateStep(sequence, selectedStep, (step) => ({ ...step, enabled: !step.enabled })))} type="button">{selected.enabled ? 'Enabled' : 'Rest'}</button><button className={`rounded-lg px-3 py-2 text-xs font-bold ${selected.tie ? 'bg-amber-300 text-slate-950' : 'bg-white/8'}`} disabled={!selected.enabled} onClick={() => onChange(updateStep(sequence, selectedStep, (step) => ({ ...step, tie: !step.tie })))} type="button">Tie</button></div></div>
-          <div className="grid gap-3 sm:grid-cols-3"><RangeControl label="Primary note" max={127} onChange={(note) => onChange(updateStep(sequence, selectedStep, (step) => updateStepNotes(step, note, false)))} suffix={` · ${formatNote(selected.note)}`} value={selected.note} /><RangeControl label="Velocity" max={127} min={1} onChange={(velocity) => onChange(updateStep(sequence, selectedStep, (step) => ({ ...step, velocity })))} value={selected.velocity} /><RangeControl label="Gate" max={100} min={1} onChange={(gate) => onChange(updateStep(sequence, selectedStep, (step) => ({ ...step, gate })))} suffix="%" value={selected.gate} /></div>
+          <div className="grid gap-3 sm:grid-cols-3"><RangeControl label="Primary note" max={127} onChange={(note) => { revealCursor(note); onChange(updateStep(sequence, selectedStep, (step) => updateStepNotes(step, note, false))) }} suffix={` · ${formatNote(selected.note)}`} value={selected.note} /><RangeControl label="Velocity" max={127} min={1} onChange={(velocity) => onChange(updateStep(sequence, selectedStep, (step) => ({ ...step, velocity })))} value={selected.velocity} /><RangeControl label="Gate" max={100} min={1} onChange={(gate) => onChange(updateStep(sequence, selectedStep, (step) => ({ ...step, gate })))} suffix="%" value={selected.gate} /></div>
         </div>}
       </section>
 
