@@ -62,7 +62,7 @@ function cloneOperator(operator: Dx7Operator, voiceIndex: number, operatorIndex:
     },
     amplitudeModulationSensitivity: seed % 4,
     keyVelocitySensitivity: seed % 8,
-    outputLevel: (99 - seed) % 100,
+    outputLevel: 99 - (seed % 100),
     oscillatorMode: seed % 2 === 0 ? 'ratio' : 'fixed',
     frequencyCoarse: seed % 32,
     frequencyFine: (seed * 11) % 100,

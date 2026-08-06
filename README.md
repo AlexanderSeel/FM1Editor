@@ -40,6 +40,7 @@ A TypeScript web editor and librarian with separate, persistent target modes for
 - documented FM-1 effects workspace for filter, reverb, delay, distortion, chorus and phaser CC 0–23;
 - local 16-step piano-roll sequencer with mono/poly note entry, note/rest/tie, velocity, gate, tempo, swing, length, MIDI channel, full-range octave viewport movement and a visible edit cursor;
 - versioned sequence JSON load/save, internal loop playback, external-clock continuous playback and scheduled Web MIDI output through the monitored adapter;
+- deterministic MIT-licensed synthetic SysEx compatibility fixtures covering valid single/bank messages, legacy reserved values, mixed-file salvage and malformed input;
 - Vitest coverage for codecs, imports, catalog, library migration/backup, bank merging, audition, audio recording, effects, sequencing and MIDI monitoring;
 - GitHub Actions workflow for typecheck, ESLint/JSX accessibility, tests and production build.
 
