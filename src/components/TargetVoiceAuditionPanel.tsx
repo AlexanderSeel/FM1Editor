@@ -1,6 +1,10 @@
 import { useState } from 'react'
 import type { DeviceTarget } from '../domain/deviceTarget'
 import type { Dx7Voice } from '../domain/voice'
+import {
+  sendSingleVoiceToDx7,
+  sendVoiceBankToDx7,
+} from '../midi/dx7Transfer'
 import type { MidiOutputTarget } from '../midi/output'
 import { playFm1TestNote } from '../midi/voiceAudition'
 import { VirtualPiano } from './VirtualPiano'
@@ -15,35 +19,124 @@ interface TargetVoiceAuditionPanelProps {
   sysexEnabled: boolean
 }
 
-function Dx7NoteAuditionPanel({
+type Dx7BusyAction = 'test' | 'single-voice' | 'voice-bank' | null
+
+function Dx7AuditionPanel({
   voice,
+  baseBank,
   output,
-}: Pick<TargetVoiceAuditionPanelProps, 'voice' | 'output'>) {
+  sysexEnabled,
+}: Pick<TargetVoiceAuditionPanelProps, 'voice' | 'baseBank' | 'output' | 'sysexEnabled'>) {
   const [midiChannel, setMidiChannel] = useState(1)
   const [velocity, setVelocity] = useState(105)
   const [baseOctave, setBaseOctave] = useState(3)
-  const [busy, setBusy] = useState(false)
+  const [systemInfoReady, setSystemInfoReady] = useState(false)
+  const [memoryProtectOff, setMemoryProtectOff] = useState(false)
+  const [busyAction, setBusyAction] = useState<Dx7BusyAction>(null)
   const [status, setStatus] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
 
+  const busy = busyAction !== null
+  const hardwareReady = systemInfoReady && memoryProtectOff
+  const singleTransferReady = Boolean(output && sysexEnabled && hardwareReady)
+  const bankTransferReady = singleTransferReady && baseBank.length === 32
+
+  const requireOutput = (): MidiOutputTarget | null => {
+    if (output) return output
+    setError('Connect and manually select a Yamaha DX7 MIDI output first.')
+    setStatus(null)
+    return null
+  }
+
   const testNote = async () => {
     if (busy) return
-    if (!output) {
-      setError('Connect and manually select a Yamaha DX7 MIDI output first.')
-      setStatus(null)
-      return
-    }
+    const target = requireOutput()
+    if (!target) return
 
-    setBusy(true)
+    setBusyAction('test')
     setError(null)
     setStatus(null)
     try {
-      await playFm1TestNote(output, midiChannel, 60, velocity)
+      await playFm1TestNote(target, midiChannel, 60, velocity)
       setStatus(`Sent C4 on MIDI channel ${midiChannel}. No DX7 SysEx data was transmitted.`)
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'The test note could not be sent.')
     } finally {
-      setBusy(false)
+      setBusyAction(null)
+    }
+  }
+
+  const sendSingleVoice = async () => {
+    if (busy) return
+    const target = requireOutput()
+    if (!target) return
+    if (!sysexEnabled) {
+      setError('Reconnect Web MIDI with SysEx permission before sending a voice.')
+      return
+    }
+    if (!hardwareReady) {
+      setError('Confirm the DX7 System Info and Memory Protect settings before transmission.')
+      return
+    }
+
+    const confirmed = window.confirm(
+      `Send the current voice to the Yamaha DX7 edit buffer?\n\n` +
+      `Voice: ${voice.name || 'UNTITLED'}\n` +
+      `MIDI channel: ${midiChannel}\n` +
+      `Message: standard 163-byte Yamaha single-voice bulk dump\n\n` +
+      `Verify the manually selected output, matching DX7 MIDI channel, System Info availability and Memory Protect setting. This does not save the voice to a numbered internal slot automatically.`,
+    )
+    if (!confirmed) return
+
+    setBusyAction('single-voice')
+    setError(null)
+    setStatus(null)
+    try {
+      const result = await sendSingleVoiceToDx7(target, voice, midiChannel)
+      setStatus(`Sent ${result.byteLength} bytes to ${result.outputName} on MIDI channel ${result.midiChannel}. Audition the edit buffer, then store it from the DX7 front panel if required.`)
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'The single voice could not be sent.')
+    } finally {
+      setBusyAction(null)
+    }
+  }
+
+  const sendVoiceBank = async () => {
+    if (busy) return
+    const target = requireOutput()
+    if (!target) return
+    if (!sysexEnabled) {
+      setError('Reconnect Web MIDI with SysEx permission before sending a bank.')
+      return
+    }
+    if (!hardwareReady) {
+      setError('Confirm the DX7 System Info and Memory Protect settings before transmission.')
+      return
+    }
+    if (baseBank.length !== 32) {
+      setError('Load a complete 32-voice bank before sending a DX7 bank dump.')
+      return
+    }
+
+    const confirmed = window.confirm(
+      `Overwrite the Yamaha DX7 internal 32-voice memory with the loaded bank?\n\n` +
+      `Voices: 32\n` +
+      `MIDI channel: ${midiChannel}\n` +
+      `Message: standard 4,104-byte Yamaha bank bulk dump\n\n` +
+      `This is a destructive whole-bank operation. Back up the current DX7 memory first, verify the selected output and channel, enable System Info, and turn Memory Protect off. Continue only when the loaded bank is the exact bank you intend to write.`,
+    )
+    if (!confirmed) return
+
+    setBusyAction('voice-bank')
+    setError(null)
+    setStatus(null)
+    try {
+      const result = await sendVoiceBankToDx7(target, baseBank, midiChannel)
+      setStatus(`Sent ${result.byteLength} bytes to ${result.outputName} on MIDI channel ${result.midiChannel}. Verify all internal voices on the DX7 before treating the transfer as complete.`)
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'The 32-voice bank could not be sent.')
+    } finally {
+      setBusyAction(null)
     }
   }
 
@@ -52,27 +145,39 @@ function Dx7NoteAuditionPanel({
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
-            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-cyan-300">Yamaha DX7 note audition</p>
-            <span className="rounded-full border border-emerald-300/25 bg-emerald-300/10 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.14em] text-emerald-200">Notes only</span>
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-cyan-300">Yamaha DX7 audition and bulk transfer</p>
+            <span className="rounded-full border border-amber-300/25 bg-amber-300/10 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.14em] text-amber-200">Explicit transfer only</span>
           </div>
           <h3 className="mt-2 truncate text-lg font-bold text-white">{voice.name || 'UNTITLED'}</h3>
           <p className="mt-1 max-w-4xl text-xs leading-5 text-slate-400">
-            Standard MIDI note audition is available. FM-1 bank merge, preset recall and effects writes are hidden for this target. DX7 single-voice, bank, parameter-change, dump-request and function-data SysEx remain disabled until implemented with target-specific validation.
+            Standard MIDI notes, Yamaha single-voice bulk receive and 32-voice bank receive are available for the stock DX7 target. FM-1 bank merge, preset mapping and effects writes remain hidden. Parameter changes, function data and device dump requests are not enabled here.
           </p>
         </div>
         <div className="text-right text-xs text-slate-500">
           <p className={output ? 'text-emerald-300' : 'text-amber-200'}>{output ? output.name || 'MIDI output selected' : 'No MIDI output'}</p>
-          <p className="mt-1">No SysEx operation enabled</p>
+          <p className="mt-1">SysEx {sysexEnabled ? 'enabled' : 'not enabled'}</p>
+          <p className="mt-1">Loaded bank {baseBank.length}/32</p>
         </div>
       </div>
 
       <div className="mt-4 rounded-xl border border-cyan-300/20 bg-cyan-300/[0.06] p-3 text-xs leading-5 text-cyan-100">
-        <strong>Manual port boundary:</strong> verify that the selected output is the intended DX7 port before playing. Selecting the DX7 target never transmits a voice or bank automatically.
+        <strong>Manual port boundary:</strong> selecting Yamaha DX7 never sends data automatically. Verify the selected output and matching DX7 MIDI channel before every note or SysEx operation.
+      </div>
+
+      <div className="mt-3 grid gap-2 sm:grid-cols-2">
+        <label className="flex items-start gap-3 rounded-xl border border-white/10 bg-black/20 p-3 text-xs leading-5 text-slate-300">
+          <input checked={systemInfoReady} className="mt-0.5 h-4 w-4 accent-cyan-300" disabled={busy} onChange={(event) => setSystemInfoReady(event.target.checked)} type="checkbox" />
+          <span><strong className="block text-white">DX7 System Info is available</strong>I verified the receiving DX7 is configured to accept system-exclusive data on the selected channel.</span>
+        </label>
+        <label className="flex items-start gap-3 rounded-xl border border-white/10 bg-black/20 p-3 text-xs leading-5 text-slate-300">
+          <input checked={memoryProtectOff} className="mt-0.5 h-4 w-4 accent-cyan-300" disabled={busy} onChange={(event) => setMemoryProtectOff(event.target.checked)} type="checkbox" />
+          <span><strong className="block text-white">Memory Protect is off</strong>I accept that a complete bank transfer can overwrite all 32 internal voices.</span>
+        </label>
       </div>
 
       <div className="mt-4 grid gap-3 sm:grid-cols-3">
         <div className="grid gap-1.5 text-xs text-slate-400">
-          <label className="font-semibold uppercase tracking-[0.12em]" htmlFor="dx7-audition-midi-channel">Note channel</label>
+          <label className="font-semibold uppercase tracking-[0.12em]" htmlFor="dx7-audition-midi-channel">DX7 MIDI channel</label>
           <select
             className="rounded-xl border border-white/10 bg-slate-950 px-3 py-2.5 text-sm text-white"
             disabled={busy}
@@ -112,7 +217,23 @@ function Dx7NoteAuditionPanel({
           onClick={() => void testNote()}
           type="button"
         >
-          {busy ? 'Testing…' : 'Test C4'}
+          {busyAction === 'test' ? 'Testing…' : 'Test C4'}
+        </button>
+        <button
+          className="rounded-xl border border-violet-300/20 bg-violet-300/5 px-4 py-2.5 text-sm font-bold text-violet-200 hover:bg-violet-300/10 disabled:opacity-40"
+          disabled={!singleTransferReady || busy}
+          onClick={() => void sendSingleVoice()}
+          type="button"
+        >
+          {busyAction === 'single-voice' ? 'Sending voice…' : 'Send current voice to edit buffer'}
+        </button>
+        <button
+          className="rounded-xl bg-amber-300 px-4 py-2.5 text-sm font-black text-slate-950 hover:bg-amber-200 disabled:cursor-not-allowed disabled:opacity-40"
+          disabled={!bankTransferReady || busy}
+          onClick={() => void sendVoiceBank()}
+          type="button"
+        >
+          {busyAction === 'voice-bank' ? 'Sending bank…' : 'Overwrite DX7 with loaded 32-voice bank'}
         </button>
       </div>
 
@@ -134,7 +255,14 @@ function Dx7NoteAuditionPanel({
 
 export function TargetVoiceAuditionPanel(props: TargetVoiceAuditionPanelProps) {
   if (props.target === 'dx7') {
-    return <Dx7NoteAuditionPanel output={props.output} voice={props.voice} />
+    return (
+      <Dx7AuditionPanel
+        baseBank={props.baseBank}
+        output={props.output}
+        sysexEnabled={props.sysexEnabled}
+        voice={props.voice}
+      />
+    )
   }
 
   return (
