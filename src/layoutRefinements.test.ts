@@ -25,4 +25,15 @@ describe('compact application chrome', () => {
     expect(styles).toContain('.fm1-control-deck')
     expect(styles).toContain('min-height: 108px')
   })
+
+  it('keeps the wider desktop sidebar vertical-only', () => {
+    const styles = source('./sidebarViewport.css')
+
+    expect(styles).toContain('grid-template-columns: minmax(340px, 380px) minmax(0, 1fr)')
+    expect(styles).toContain('grid-template-columns: 410px minmax(0, 1fr)')
+    expect(styles).toContain('overflow-x: clip')
+    expect(styles).toContain('overflow-y: auto')
+    expect(styles).toContain('overscroll-behavior-x: none')
+    expect(styles).toContain('touch-action: pan-y')
+  })
 })
