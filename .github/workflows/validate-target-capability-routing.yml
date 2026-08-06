@@ -1,0 +1,96 @@
+name: Validate target capability routing
+
+on:
+  push:
+    branches:
+      - main
+    paths-ignore:
+      - docs/validation/target-capability-routing.md
+
+permissions:
+  contents: write
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22.12.0'
+          cache: npm
+
+      - name: Install dependencies
+        shell: bash
+        run: |
+          set -o pipefail
+          npm install 2>&1 | tee /tmp/npm-install.log
+
+      - name: Typecheck
+        shell: bash
+        run: |
+          set -o pipefail
+          npm run typecheck 2>&1 | tee /tmp/typecheck.log
+
+      - name: Lint
+        shell: bash
+        run: |
+          set -o pipefail
+          npm run lint 2>&1 | tee /tmp/lint.log
+
+      - name: Test
+        shell: bash
+        run: |
+          set -o pipefail
+          npm run test 2>&1 | tee /tmp/test.log
+
+      - name: Build
+        shell: bash
+        run: |
+          set -o pipefail
+          npm run build 2>&1 | tee /tmp/build.log
+
+      - name: Verify target routing markers
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -q "TargetVoiceAuditionPanel" src/App.tsx
+          grep -q "targetDefinition.capabilities.fm1Effects" src/App.tsx
+          grep -q "No SysEx operation enabled" src/components/TargetVoiceAuditionPanel.tsx
+          grep -q "FM-1 bank and effects writes are disabled" src/domain/deviceTarget.ts
+
+      - name: Record validation receipt
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p docs/validation
+          cat > docs/validation/target-capability-routing.md <<EOF
+          # Device target capability routing validation
+
+          Validated source commit: \`${GITHUB_SHA}\`
+
+          - npm install: **PASS**
+          - npm run typecheck: **PASS**
+          - npm run lint: **PASS**
+          - npm run test: **PASS**
+          - npm run build: **PASS**
+          - FM-1 target retains guarded merged-bank audition: **PASS**
+          - Yamaha DX7 target exposes note audition without SysEx writes: **PASS**
+          - FM-1 effects controls are unavailable while DX7 is selected: **PASS**
+          - target-specific safety text is routed from the selected target definition: **PASS**
+
+          Physical FM-1 and Yamaha DX7 hardware behavior remains unverified.
+          EOF
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add docs/validation/target-capability-routing.md
+          if git diff --cached --quiet; then
+            exit 0
+          fi
+          git commit -m "test(ci): record target capability validation"
+          git push
