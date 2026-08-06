@@ -17,9 +17,27 @@ F0 43 1n 0gggggpp 0ppppppp 0ddddddd F7
 - the next byte carries the low seven parameter-number bits
 - data is seven-bit
 
-This repository now encodes only documented DX7 function parameters 64–77 through the selected DX7 target. Each parameter uses the semantic range printed by Yamaha, requires an explicit session enable confirmation and a parameter-specific confirmation before transmission.
+## Implemented voice parameters
 
-DX7 voice-parameter writes remain disabled until every editor field is mapped to parameters 0–155 with the same semantic guarantees.
+The semantic voice model is mapped to Yamaha common-voice parameters `0–154` by the existing 155-byte single-voice encoder, whose byte indexes are the documented parameter numbers:
+
+- six 21-parameter operator blocks in Yamaha order OP6 through OP1;
+- pitch envelope parameters `126–133`;
+- algorithm, feedback, oscillator sync, LFO and transpose parameters `134–144`;
+- ten printable voice-name bytes `145–154`.
+
+Edit-only parameter `155` remains separate from voice and bank payloads and is represented as the six-operator enable mask, with OP1 on bit 5 through OP6 on bit 0.
+
+The selected DX7 target offers two explicitly confirmed operations:
+
+1. send all 156 current semantic parameters to the edit buffer with 8 ms message spacing;
+2. enable throttled live updates that coalesce graphical editor changes for 75 ms and send only changed parameters.
+
+No arbitrary raw parameter-number or raw data entry is exposed. The controls require a manually selected SysEx-capable output, matching MIDI channel, System Info confirmation, Memory Protect confirmation, session enable confirmation and operation-specific confirmation.
+
+## Implemented function parameters
+
+Documented function parameters `64–77` use Yamaha group `2` and the printed semantic ranges. They are exposed through the selected DX7 target with a separate session enable and a parameter-specific confirmation. Function state remains separate from voice files and bank payloads.
 
 ## Dump-request decision
 
@@ -30,3 +48,5 @@ The application therefore constructs no dump-request message. Voice and bank dum
 ## Hardware boundary
 
 Software encoding is not physical-device validation. Stock DX7 reception still requires hardware verification with matching MIDI channel, System Info available, Memory Protect off and recovery testing after interrupted operations.
+
+The current software changes also require a complete typecheck, lint, test, production-build and Chrome/Edge responsive validation run. That gate is not marked complete until an executable checkout or GitHub Actions result is available.
