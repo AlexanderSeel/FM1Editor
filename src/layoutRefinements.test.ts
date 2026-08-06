@@ -36,4 +36,13 @@ describe('compact application chrome', () => {
     expect(styles).toContain('overscroll-behavior-x: none')
     expect(styles).toContain('touch-action: pan-y')
   })
+
+  it('contains long sidebar controls and text without horizontal scrolling', () => {
+    const styles = source('./sidebarViewport.css')
+
+    expect(styles).toContain('.fm1-sidebar :where(select, input, textarea, button)')
+    expect(styles).toContain('max-width: 100%')
+    expect(styles).toContain('.fm1-sidebar :where(p, span, label, h1, h2, h3)')
+    expect(styles).toContain('overflow-wrap: anywhere')
+  })
 })
