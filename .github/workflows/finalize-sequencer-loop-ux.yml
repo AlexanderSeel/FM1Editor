@@ -1,0 +1,130 @@
+name: Finalize sequencer loop UX
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - docs/validation/.trigger-finalize-sequencer-loop-ux
+
+permissions:
+  contents: write
+
+jobs:
+  finalize:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Apply deterministic patch
+        id: patch
+        continue-on-error: true
+        shell: bash
+        run: |
+          set +e
+          python scripts/apply-sequencer-loop-ux.py > /tmp/sequencer-loop-patch.log 2>&1
+          status=$?
+          set -e
+          echo "status=$status" >> "$GITHUB_OUTPUT"
+
+      - name: Install and validate
+        id: checks
+        continue-on-error: true
+        shell: bash
+        run: |
+          if [ "${{ steps.patch.outputs.status }}" != 0 ]; then
+            echo "install=125" >> "$GITHUB_OUTPUT"
+            echo "typecheck=125" >> "$GITHUB_OUTPUT"
+            echo "lint=125" >> "$GITHUB_OUTPUT"
+            echo "test=125" >> "$GITHUB_OUTPUT"
+            echo "build=125" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          set +e
+          npm install --no-audit --no-fund; install=$?
+          npm run typecheck; typecheck=$?
+          npm run lint; lint=$?
+          npm run test; test=$?
+          npm run build; build=$?
+          set -e
+          {
+            echo "install=$install"
+            echo "typecheck=$typecheck"
+            echo "lint=$lint"
+            echo "test=$test"
+            echo "build=$build"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Publish result and cleanup
+        env:
+          PATCH: ${{ steps.patch.outputs.status }}
+          INSTALL: ${{ steps.checks.outputs.install }}
+          TYPECHECK: ${{ steps.checks.outputs.typecheck }}
+          LINT: ${{ steps.checks.outputs.lint }}
+          TEST: ${{ steps.checks.outputs.test }}
+          BUILD: ${{ steps.checks.outputs.build }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          result() { if [ "$1" = 0 ]; then echo SUCCESS; elif [ "$1" = 125 ]; then echo SKIPPED; else echo FAILURE; fi; }
+          success=true
+          for status in "$PATCH" "$INSTALL" "$TYPECHECK" "$LINT" "$TEST" "$BUILD"; do
+            [ "$status" = 0 ] || success=false
+          done
+
+          if [ "$PATCH" != 0 ]; then
+            git checkout -- src/components/SequenceEditor.tsx README.md || true
+          fi
+
+          mkdir -p docs/validation
+          {
+            echo '# Sequencer loop, viewport and cursor validation'
+            echo
+            echo "Validated source commit: \`$GITHUB_SHA\`"
+            echo
+            echo "- deterministic patch: **$(result "$PATCH")**"
+            echo "- npm install: **$(result "$INSTALL")**"
+            echo "- TypeScript typecheck: **$(result "$TYPECHECK")**"
+            echo "- ESLint and JSX accessibility: **$(result "$LINT")**"
+            echo "- Full Vitest suite: **$(result "$TEST")**"
+            echo "- Production build: **$(result "$BUILD")**"
+            echo
+            echo 'Covered changes:'
+            echo
+            echo '- internal-clock playback repeats until Stop or the Loop control is disabled;'
+            echo '- external-clock playback follows Start/Clock continuously until MIDI Stop;'
+            echo '- Stop and a new Play invalidate previous loop generations and clear scheduled output;'
+            echo '- octave controls move a 24-note piano-roll viewport across MIDI notes 0–127;'
+            echo '- note edits outside the current viewport reveal the edited note automatically;'
+            echo '- grid and primary-note edits move a visible step/note cursor immediately.'
+            if [ "$PATCH" != 0 ]; then
+              echo
+              echo 'Patch diagnostics:'
+              echo
+              echo '```text'
+              cat /tmp/sequencer-loop-patch.log
+              echo '```'
+            fi
+          } > docs/validation/sequencer-loop-viewport-cursor.md
+
+          rm -f \
+            .github/workflows/finalize-sequencer-loop-ux.yml \
+            .github/workflows/validate-sequencer-loop-ux.yml \
+            docs/validation/.trigger-finalize-sequencer-loop-ux \
+            docs/validation/.trigger-sequencer-loop-ux \
+            docs/validation/sequencer-loop-patch-diagnostics.md \
+            scripts/apply-sequencer-loop-ux.py
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          if [ "$success" = true ]; then
+            git commit -m "feat(sequencer): add loop viewport and edit cursor"
+          else
+            git commit -m "test(ci): record sequencer loop UX failure"
+          fi
+          git push
+          [ "$success" = true ]
