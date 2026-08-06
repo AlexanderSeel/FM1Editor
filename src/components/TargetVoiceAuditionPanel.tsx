@@ -7,6 +7,7 @@ import {
 } from '../midi/dx7Transfer'
 import type { MidiOutputTarget } from '../midi/output'
 import { playFm1TestNote } from '../midi/voiceAudition'
+import { Dx7FunctionControls } from './Dx7FunctionControls'
 import { Dx7VoiceParameterControls } from './Dx7VoiceParameterControls'
 import { VirtualPiano } from './VirtualPiano'
 import { VoiceAuditionPanel } from './VoiceAuditionPanel'
@@ -248,6 +249,13 @@ function Dx7AuditionPanel({
           output={output}
           sysexEnabled={sysexEnabled}
           voice={voice}
+        />
+        <Dx7FunctionControls
+          disabled={busy}
+          hardwareReady={hardwareReady}
+          midiChannel={midiChannel}
+          output={output}
+          sysexEnabled={sysexEnabled}
         />
         <VirtualPiano
           baseOctave={baseOctave}
