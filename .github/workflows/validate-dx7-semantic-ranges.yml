@@ -9,6 +9,9 @@ on:
       - docs/validation/.trigger-dx7-semantic-ranges
       - src/sysex/dx7.ts
       - src/sysex/dx7.test.ts
+      - src/sysex/importSysex.ts
+      - src/sysex/normalizeLegacyVoice.ts
+      - src/sysex/normalizeLegacyVoice.test.ts
 
 permissions:
   contents: write
@@ -67,7 +70,7 @@ jobs:
           set -o pipefail
           npm run build 2>&1 | tee /tmp/build.log
 
-      - name: Verify semantic range markers
+      - name: Verify semantic range and normalization markers
         id: markers
         continue-on-error: true
         shell: bash
@@ -75,8 +78,10 @@ jobs:
           set -euo pipefail
           grep -Fq 'breakpoint`, operator.keyboardScaling.breakPoint, 0, 99' src/sysex/dx7.ts
           grep -Fq 'detune`, operator.detune, 0, 14' src/sysex/dx7.ts
-          grep -Fq 'normalizes reserved detune nibble 15 at the raw import boundary and rejects it in the voice model' src/sysex/dx7.test.ts
-          grep -Fq 'normalizes reserved breakpoint value 127 at the raw import boundary and rejects it in the voice model' src/sysex/dx7.test.ts
+          grep -Fq 'normalizeLegacyVoiceWithReport' src/sysex/normalizeLegacyVoice.ts
+          grep -Fq "code: 'compatibility-normalization'" src/sysex/importSysex.ts
+          grep -Fq 'normalizations: normalized.normalizations' src/sysex/importSysex.ts
+          grep -Fq 'records bank import normalizations and emits visible diagnostics' src/sysex/normalizeLegacyVoice.test.ts
 
       - name: Record validation receipt
         if: always()
@@ -93,7 +98,7 @@ jobs:
           set -euo pipefail
           mkdir -p docs/validation
           {
-            echo '# DX7 semantic range validation'
+            echo '# DX7 semantic range and normalization validation'
             echo
             echo "Validated source commit: \`${GITHUB_SHA}\`"
             echo
@@ -103,21 +108,23 @@ jobs:
             echo "- npm run lint: **${LINT_OUTCOME^^}**"
             echo "- npm run test: **${TEST_OUTCOME^^}**"
             echo "- npm run build: **${BUILD_OUTCOME^^}**"
-            echo "- semantic range marker check: **${MARKERS_OUTCOME^^}**"
+            echo "- semantic range and normalization marker check: **${MARKERS_OUTCOME^^}**"
             echo
-            echo '- raw legacy breakpoint 127 is normalized to 99 during decoding.'
-            echo '- raw legacy detune 15 is normalized to 14 during decoding.'
+            echo '- raw legacy breakpoint 127 is normalized to 99 during import.'
+            echo '- raw legacy detune 15 is normalized to 14 during import.'
             echo '- edited/in-memory breakpoint values above 99 are rejected.'
             echo '- edited/in-memory detune values above 14 are rejected.'
+            echo '- every compatibility normalization is retained as structured path/from/to metadata.'
+            echo '- every normalization is emitted as a visible import warning diagnostic.'
             echo
-            echo 'Physical FM-1 and Yamaha DX7 hardware behavior remains unverified.'
+            echo 'Exact untouched-file download remains unresolved; physical FM-1 and Yamaha DX7 behavior remains unverified.'
           } > docs/validation/dx7-semantic-ranges.md
 
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add docs/validation/dx7-semantic-ranges.md
           if ! git diff --cached --quiet; then
-            git commit -m "test(ci): record DX7 semantic range validation"
+            git commit -m "test(ci): record DX7 normalization validation"
             git push
           fi
 
