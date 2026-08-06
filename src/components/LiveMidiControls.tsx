@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import type { DeviceTarget } from '../domain/deviceTarget'
 import {
+  createInitializedFxState,
   FM1_FX_PARAMETERS,
   updateFxValue,
   type Fm1FxBlockId,
@@ -97,12 +98,15 @@ export function LiveMidiControls({
   onFxChange,
 }: LiveMidiControlsProps) {
   const [program, setProgram] = useState(1)
+  const [localFxState, setLocalFxState] = useState<Fm1FxState>(() => createInitializedFxState())
   const [liveFx, setLiveFx] = useState(false)
   const [status, setStatus] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const fm1Mode = target === 'fm1'
   const programMaximum = fm1Mode ? 128 : 32
   const unavailable = disabled || !output
+  const activeFxState = fxState ?? localFxState
+  const changeFxState = onFxChange ?? setLocalFxState
 
   const requireOutput = (): MidiOutputTarget | null => {
     if (disabled) {
@@ -158,20 +162,19 @@ export function LiveMidiControls({
   }
 
   const changeFxParameter = (parameter: Fm1FxParameterDefinition, value: number) => {
-    if (!fxState || !onFxChange) return
-    const next = updateFxValue(fxState, parameter.id, value)
-    onFxChange(next)
+    const next = updateFxValue(activeFxState, parameter.id, value)
+    changeFxState(next)
     if (liveFx) void sendFxParameter(parameter, value, next)
   }
 
   const sendAllFx = async () => {
     const selectedOutput = requireOutput()
-    if (!selectedOutput || !fxState) return
+    if (!selectedOutput) return
     try {
       await selectedOutput.open()
-      const messages = encodeFm1FxState(fxState)
+      const messages = encodeFm1FxState(activeFxState)
       messages.forEach((message) => selectedOutput.send(message.data))
-      setStatus(`Sent all ${messages.length} documented FX controls on MIDI channel ${fxState.midiChannel}.`)
+      setStatus(`Sent all ${messages.length} documented FX controls on MIDI channel ${activeFxState.midiChannel}.`)
       setError(null)
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'The complete FX state could not be sent.')
@@ -218,10 +221,10 @@ export function LiveMidiControls({
             <button className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-xs font-bold disabled:opacity-40" disabled={unavailable} onClick={() => sendTransport('clock')} type="button">Clock</button>
             <button className="rounded-lg bg-rose-300/15 px-3 py-2 text-xs font-bold text-rose-200 disabled:opacity-40" disabled={unavailable} onClick={sendPanic} type="button">Panic</button>
           </div>
-          <p className="text-[11px] leading-5 text-slate-500">Program changes use the note/piano MIDI channel {midiChannel}. Transport messages are system real-time and have no channel.</p>
+          <p className="text-[11px] leading-5 text-slate-500">Program changes use MIDI channel {midiChannel}. Transport messages are system real-time and have no channel.</p>
         </div>
 
-        {fm1Mode && fxState && onFxChange ? (
+        {fm1Mode ? (
           <details className="rounded-xl border border-cyan-300/15 bg-cyan-300/[0.035] p-3">
             <summary className="cursor-pointer list-none">
               <div className="flex flex-wrap items-center justify-between gap-3">
@@ -229,18 +232,19 @@ export function LiveMidiControls({
                   <p className="text-xs font-bold uppercase tracking-[0.14em] text-cyan-300">Filter and effects · CC 0–23</p>
                   <p className="mt-1 text-xs text-slate-500">Expand all documented live-changeable FM-1 effect parameters.</p>
                 </div>
-                <div className="flex flex-wrap gap-2" onClick={(event) => event.stopPropagation()}>
-                  <label className="flex items-center gap-2 rounded-lg border border-white/10 bg-black/20 px-3 py-2 text-xs text-slate-300">
-                    <input checked={liveFx} disabled={unavailable} onChange={(event) => setLiveFx(event.target.checked)} type="checkbox" />
-                    Live send
-                  </label>
-                  <button className="rounded-lg bg-cyan-300 px-3 py-2 text-xs font-black text-slate-950 disabled:opacity-40" disabled={unavailable} onClick={() => void sendAllFx()} type="button">Send all FX</button>
-                </div>
+                <span className="rounded-lg border border-white/10 bg-black/20 px-3 py-2 text-xs text-slate-300">FX channel {activeFxState.midiChannel}</span>
               </div>
             </summary>
 
             <div className="mt-4 grid gap-3">
-              <RangeControl label="FX MIDI channel" max={16} min={1} onChange={(midiChannelValue) => onFxChange({ ...fxState, midiChannel: midiChannelValue })} value={fxState.midiChannel} />
+              <div className="flex flex-wrap items-center gap-2">
+                <label className="flex items-center gap-2 rounded-lg border border-white/10 bg-black/20 px-3 py-2 text-xs text-slate-300">
+                  <input checked={liveFx} disabled={unavailable} onChange={(event) => setLiveFx(event.target.checked)} type="checkbox" />
+                  Live send
+                </label>
+                <button className="rounded-lg bg-cyan-300 px-3 py-2 text-xs font-black text-slate-950 disabled:opacity-40" disabled={unavailable} onClick={() => void sendAllFx()} type="button">Send all FX</button>
+              </div>
+              <RangeControl label="FX MIDI channel" max={16} min={1} onChange={(midiChannelValue) => changeFxState({ ...activeFxState, midiChannel: midiChannelValue })} value={activeFxState.midiChannel} />
               <div className="grid gap-3 lg:grid-cols-2 2xl:grid-cols-3">
                 {(Object.keys(blockLabels) as Fm1FxBlockId[]).map((block) => {
                   const parameters = FM1_FX_PARAMETERS.filter((parameter) => parameter.block === block)
@@ -257,7 +261,7 @@ export function LiveMidiControls({
                             key={parameter.id}
                             onChange={(value) => changeFxParameter(parameter, value)}
                             parameter={parameter}
-                            value={fxState.values[parameter.id] ?? parameter.minimum}
+                            value={activeFxState.values[parameter.id] ?? parameter.minimum}
                           />
                         ))}
                       </div>
