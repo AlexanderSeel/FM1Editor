@@ -12,10 +12,9 @@
 
 ## 2. Device target modes
 
-- [ ] Implement only primary-source-verified Yamaha DX7 voice-parameter and function-parameter changes behind the selected DX7 target, with semantic ranges, operation-specific confirmation and tests.
-- [ ] Determine from an original Yamaha data-format source whether a stock DX7 supports a programmatic single-voice or bank dump request. Until verified, provide no request frame and require dumps to be initiated from the DX7 front panel.
+- [ ] Map every graphical DX7 voice field to primary-source parameters `0–155`, preserve semantic ranges and add guarded opt-in voice-parameter transmission. Yamaha-defined function parameters `64–77` are now encoded and exposed behind the selected DX7 target with session and per-send confirmation.
 - [ ] Hardware-validate stock DX7 single-voice edit-buffer reception and destructive 32-voice bank reception, including MIDI channel matching, System Info, Memory Protect guidance and recovery from interrupted transfers.
-- [ ] Add hardware validation for later parameter/function operations and any verified dump-request workflow.
+- [ ] Hardware-validate function-parameter reception for mono/poly, pitch bend, portamento and controller assignments on a stock DX7. No programmatic dump-request frame is constructed because Yamaha's original MIDI Data Format documents none.
 
 ## 3. FM-1 USB audio capture and recording
 
@@ -30,8 +29,8 @@ Execute sections A and B of [`docs/validation/fm1-hardware-test-protocol.md`](./
 
 ## 5. Graphical voice editor
 
-- [ ] Add mono/poly, portamento, pitch-bend and performance controls only after the FM-1 support and direct MIDI semantics are hardware-verified.
-- [ ] Add opt-in throttled live voice-parameter writes only after the FM-1 semantic parameter map is hardware-verified.
+- [ ] Add mono/poly, portamento, pitch-bend and performance controls for FM-1 only after FM-1 support and direct MIDI semantics are hardware-verified.
+- [ ] Add opt-in throttled FM-1 live voice-parameter writes only after the FM-1 semantic parameter map is hardware-verified.
 
 ## 6. FM-1 bank/device workflow
 
@@ -47,8 +46,7 @@ Execute sections C and D of [`docs/validation/fm1-hardware-test-protocol.md`](./
 
 ## 8. Validation and delivery
 
-- [ ] Re-run typecheck, lint, the full test suite, production build and the Chrome/Edge responsive matrix for the compact layout cleanup and widened vertical-only sidebar when GitHub Actions scheduling is available.
-- [ ] Verify at desktop widths that the left sidebar remains 340–410 px wide, exposes only vertical scrolling and never creates a horizontal scrollbar with long device names, MIDI endpoint labels or safety text.
+- [ ] Re-run typecheck, lint, the full test suite, production build and the Chrome/Edge responsive matrix for the compact layout, 340–410 px vertical-only sidebar with long labels, and guarded DX7 function-parameter controls when GitHub Actions scheduling is available.
 - [ ] Test Chrome and Edge on Windows with a physical FM-1 over USB MIDI and USB audio, including merged bank import, destination selection, preset recall, recording, note-off recovery and channel selection; test BLE MIDI where browser/platform support permits.
 - [ ] Add GitHub Pages deployment after secure-context routing and Web MIDI/Web Audio behavior are verified.
 - [ ] Document firmware-specific limitations, recovery steps and tested hardware/browser combinations.
