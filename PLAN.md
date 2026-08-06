@@ -19,6 +19,8 @@
 
 ## 3. FM-1 USB audio capture and recording
 
+Execute sections A and B of [`docs/validation/fm1-hardware-test-protocol.md`](./docs/validation/fm1-hardware-test-protocol.md) and attach sanitized evidence before closing these physical checks.
+
 - [ ] Physically verify that the Windows input endpoint shown as `Microphone (FM-1)` carries the FM-1 synthesizer output over USB, and record firmware, driver, Windows version, sample rate, bit depth, channel count, latency and whether the MASTER control affects the USB stream.
 - [ ] Test USB audio capture in Chrome and Edge on Windows with the physical FM-1, including reconnects, device removal, denied permission, silent streams, stereo/dual-mono behavior and concurrent MIDI use.
 
@@ -28,10 +30,12 @@
 
 ## 5. Graphical voice editor
 
-- [ ] Add mono/poly, portamento, pitch-bend and performance controls where supported by the FM-1.
-- [ ] Add opt-in throttled live parameter writes only after the FM-1 semantic parameter map is hardware-verified.
+- [ ] Add mono/poly, portamento, pitch-bend and performance controls only after the FM-1 support and direct MIDI semantics are hardware-verified.
+- [ ] Add opt-in throttled live voice-parameter writes only after the FM-1 semantic parameter map is hardware-verified.
 
 ## 6. FM-1 bank/device workflow
+
+Execute sections C and D of [`docs/validation/fm1-hardware-test-protocol.md`](./docs/validation/fm1-hardware-test-protocol.md) before enabling completion detection, readback or recovery automation.
 
 - [ ] Confirm the app's bank A/B/C/D and slot-to-preset mapping against the physical device.
 - [ ] Add transfer completion detection if the FM-1 exposes an acknowledgement or observable response.
@@ -39,13 +43,7 @@
 
 ## 7. Sequencer
 
-- [ ] Add octave-oriented note entry, direction modes, copy/paste, rotation and pattern randomization.
-- [ ] Add a playhead and timing diagnostics while browser MIDI events are scheduled.
-- [ ] Add MIDI clock output at 24 PPQN and selectable internal/external clock behavior.
-- [ ] Add pattern chaining and a small song-arrangement view.
 - [ ] Add FM-1 internal pattern transfer only after a stable protocol is verified.
-- [ ] Make it more like a step sequencer with a piano-roll layout.
-- [ ] Add common presets and patterns for single-note, polyphonic and chord-progression styles based on a starting note.
 
 ## 8. Validation and delivery
 
