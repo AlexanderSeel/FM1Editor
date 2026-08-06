@@ -1,16 +1,21 @@
-name: Publish compact layout
+name: CI
 
 on:
   push:
     branches: [main]
+  pull_request:
 
 permissions:
-  contents: write
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
-  validate-and-publish:
+  validate:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 10
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -19,9 +24,6 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 22
-
-      - name: Apply exact layout cleanup
-        run: python scripts/apply-layout-cleanup.py
 
       - name: Install dependencies
         run: npm install --no-audit --no-fund
@@ -37,98 +39,3 @@ jobs:
 
       - name: Build
         run: npm run build
-
-      - name: Finalize validated source
-        shell: bash
-        run: |
-          python - <<'PY'
-          import os
-          from pathlib import Path
-
-          plan_path = Path('PLAN.md')
-          plan = plan_path.read_text(encoding='utf-8')
-          layout_block = '''## 1.1 Layout
-          - [ ] Remove the unusde knobs in the header section like Master, Select, etc
-          - [ ] make the blue a little bit darker and try to waste less space
-          - [ ] don't use 10 or more font-size, try to keep 1-3 and clean everything out which has no use
-          '''
-          if layout_block not in plan:
-              raise SystemExit('Expected PLAN.md layout block was not found.')
-          plan_path.write_text(plan.replace(layout_block, '', 1), encoding='utf-8')
-
-          receipt = f'''# Compact layout software validation
-
-          Validated source commit: `{os.environ['GITHUB_SHA']}`
-
-          - npm install: **SUCCESS**
-          - TypeScript typecheck: **SUCCESS**
-          - ESLint and JSX accessibility: **SUCCESS**
-          - Full Vitest suite: **SUCCESS**
-          - Production build: **SUCCESS**
-
-          - Decorative Master, Select, Algorithm and placeholder knobs are removed from application markup.
-          - Brand, status screen and action-toolbar vertical space is reduced without removing operational controls.
-          - Screen and active-control cyan gradients are darker.
-          - Application chrome uses shared metadata, control and title text scales.
-          '''
-          Path('docs/validation/layout-cleanup-software.md').write_text(receipt, encoding='utf-8')
-
-          standard_ci = '''name: CI
-
-          on:
-            push:
-              branches: [main]
-            pull_request:
-
-          permissions:
-            contents: read
-
-          concurrency:
-            group: ci-${{ github.ref }}
-            cancel-in-progress: true
-
-          jobs:
-            validate:
-              runs-on: ubuntu-latest
-              timeout-minutes: 10
-              steps:
-                - name: Checkout
-                  uses: actions/checkout@v4
-
-                - name: Set up Node.js
-                  uses: actions/setup-node@v4
-                  with:
-                    node-version: 22
-
-                - name: Install dependencies
-                  run: npm install --no-audit --no-fund
-
-                - name: Typecheck
-                  run: npm run typecheck
-
-                - name: Lint and accessibility
-                  run: npm run lint
-
-                - name: Test
-                  run: npm run test
-
-                - name: Build
-                  run: npm run build
-          '''
-          Path('.github/workflows/ci.yml').write_text(standard_ci, encoding='utf-8')
-
-          for filename in (
-              'scripts/apply-layout-cleanup.py',
-              '.github/workflows/apply-layout-cleanup.yml',
-              'docs/validation/.trigger-apply-layout-cleanup',
-          ):
-              Path(filename).unlink(missing_ok=True)
-          PY
-
-      - name: Commit validated cleanup
-        run: |
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add -A
-          git commit -m 'style(layout): remove decorative chrome and compact UI'
-          git push
