@@ -1,0 +1,48 @@
+name: Document DX7 function-state boundary
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - docs/validation/.trigger-readme-dx7-function-state
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Update README
+        shell: python
+        run: |
+          from pathlib import Path
+
+          path = Path('README.md')
+          content = path.read_text(encoding='utf-8')
+          replacements = {
+              '- parameter `155` modeled separately as six-bit edit-session operator state, never embedded in voice payloads;':
+                  '- parameter `155` modeled separately as six-bit edit-session operator state, never embedded in voice payloads;\n- DX7 function parameters `64–77` modeled separately from voice data, without constructing or sending SysEx;',
+              'Parameter `155` isolation is validated in [`docs/validation/dx7-edit-session.md`](./docs/validation/dx7-edit-session.md).':
+                  'Parameter `155` isolation is validated in [`docs/validation/dx7-edit-session.md`](./docs/validation/dx7-edit-session.md), and detached function data in [`docs/validation/dx7-function-state.md`](./docs/validation/dx7-function-state.md).',
+              'Voice-parameter changes, function/performance data and programmatic dump requests remain disabled.':
+                  'Mono/poly, pitch-bend, portamento, modulation-wheel, foot-control, breath-control and aftertouch function values are modeled independently as parameters `64–77`; they are not embedded in voice files and are not transmitted. Voice-parameter changes, function-parameter transmission and programmatic dump requests remain disabled.',
+          }
+          for old, new in replacements.items():
+              if old not in content:
+                  raise SystemExit(f'Missing README anchor: {old}')
+              content = content.replace(old, new, 1)
+          path.write_text(content, encoding='utf-8')
+
+      - name: Commit README
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add README.md
+          git commit -m "docs(dx7): document detached function state"
+          git push
