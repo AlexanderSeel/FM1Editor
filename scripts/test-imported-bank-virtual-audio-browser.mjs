@@ -125,7 +125,10 @@ class CdpConnection {
 }
 
 async function evaluate(cdp, expression, awaitPromise = false) {
-  const result = await cdp.send('Runtime.evaluate', { expression, awaitPromise, returnByValue: true })
+  // Do not ask CDP to recursively serialize arbitrary browser objects. Primitive
+  // values are available directly even with returnByValue=false; structured
+  // diagnostics are explicitly JSON-stringified at the call site below.
+  const result = await cdp.send('Runtime.evaluate', { expression, awaitPromise, returnByValue: false })
   if (result.exceptionDetails) throw new Error(result.exceptionDetails.exception?.description ?? result.exceptionDetails.text ?? 'Browser evaluation failed')
   return result.result?.value
 }
@@ -174,6 +177,7 @@ async function attachAnalyser(cdp, index, name) {
     analyser.connect(sink);
     sink.connect(node.context.destination);
     window[${JSON.stringify(name)}] = analyser;
+    return true;
   })()`)
 }
 
@@ -226,7 +230,7 @@ try {
   await cdp.send('Runtime.enable')
   await cdp.send('Page.enable')
   await cdp.send('Page.navigate', { url: pageUrl })
-  await waitForExpression(cdp, `document.readyState === 'complete' && document.querySelector('.fm1-lcd-title')`)
+  await waitForExpression(cdp, `document.readyState === 'complete' && Boolean(document.querySelector('.fm1-lcd-title'))`)
 
   await evaluate(cdp, `(() => {
     window.__fm1ImportedBankErrors = [];
@@ -250,6 +254,7 @@ try {
         value: (...args) => { window.__fm1ImportedBankMidiRequests += 1; return original(...args); }
       });
     }
+    return true;
   })()`)
 
   // Reproduce the reported flow: Library -> real bank -> Voice -> local audio.
@@ -277,11 +282,13 @@ try {
     if (!button || button.disabled) throw new Error('Local virtual piano focus button unavailable');
     button.focus();
     button.dispatchEvent(new KeyboardEvent('keydown', { key: 'a', code: 'KeyA', bubbles: true }));
+    return true;
   })()`)
   const loadedVoicePeak = await samplePeak(cdp, '__fm1LoadedVoiceAnalyser', 650)
   await evaluate(cdp, `(() => {
     const button = document.querySelector('button[aria-label^="Focus computer keyboard piano input"]');
     button?.dispatchEvent(new KeyboardEvent('keyup', { key: 'a', code: 'KeyA', bubbles: true }));
+    return true;
   })()`)
   if (!(loadedVoicePeak > 1e-5)) throw new Error(`Loaded ROM1A BRASS 1 produced no measurable local PCM: ${loadedVoicePeak}`)
   await clickButton(cdp, 'Disable local audio')
@@ -314,13 +321,14 @@ try {
 
   await clickButton(cdp, 'Voice')
   await waitForExpression(cdp, `document.querySelector('.fm1-lcd-title')?.textContent?.trim() === ${JSON.stringify(loadedVoiceTitle)}`)
-  const diagnostics = await evaluate(cdp, `({
+  const diagnosticsJson = await evaluate(cdp, `JSON.stringify({
     errors: window.__fm1ImportedBankErrors,
     rejections: window.__fm1ImportedBankRejections,
     midiRequests: window.__fm1ImportedBankMidiRequests,
     workletNodeCount: window.__fm1ImportedBankNodes.length,
     finalVoiceTitle: document.querySelector('.fm1-lcd-title')?.textContent?.trim() ?? '',
   })`)
+  const diagnostics = JSON.parse(diagnosticsJson ?? '{}')
   if (diagnostics.errors.length || diagnostics.rejections.length) throw new Error(`Browser errors: ${JSON.stringify(diagnostics)}`)
   if (diagnostics.midiRequests !== 0) throw new Error(`Local audio path requested Web MIDI ${diagnostics.midiRequests} time(s)`)
 
