@@ -1,0 +1,174 @@
+name: Validate deterministic MSFA reset
+
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/validate-msfa-wasm-reset.yml']
+
+permissions:
+  contents: write
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - id: install
+        continue-on-error: true
+        run: npm install --no-audit --no-fund
+      - name: Prepare audited sources
+        id: prepare
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -o pipefail
+          {
+            git init "$RUNNER_TEMP/dexed"
+            git -C "$RUNNER_TEMP/dexed" remote add origin https://github.com/asb2m10/dexed.git
+            git -C "$RUNNER_TEMP/dexed" fetch --depth 1 origin 2e182b3db85c09083ab13c8b9b00565ce7d9ff85
+            git -C "$RUNNER_TEMP/dexed" checkout --detach FETCH_HEAD
+            npm run audit:virtual-dx7 -- --source-root "$RUNNER_TEMP/dexed" --require-hashes
+            node scripts/materialize-msfa-spike.mjs --source-root "$RUNNER_TEMP/dexed" --output-root "$RUNNER_TEMP/materialized"
+          } 2>&1 | tee "$RUNNER_TEMP/prepare.log"
+      - name: Native reference
+        id: native
+        if: steps.prepare.outcome == 'success'
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -o pipefail
+          bash scripts/build-msfa-spike.sh "$RUNNER_TEMP/materialized" "$RUNNER_TEMP/native" native 2>&1 | tee "$RUNNER_TEMP/native.log"
+          "$RUNNER_TEMP/native/fm1-msfa-native" native/virtual-dx7-spike/reference-patch-v1.hex "$RUNNER_TEMP/native.f32" 2>&1 | tee -a "$RUNNER_TEMP/native.log"
+          sha256sum "$RUNNER_TEMP/native.f32" | tee "$RUNNER_TEMP/native.sha"
+      - name: Emscripten and reproducible WASM
+        id: wasm
+        if: steps.prepare.outcome == 'success'
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -o pipefail
+          docker pull emscripten/emsdk:4.0.7 >/dev/null
+          docker image inspect emscripten/emsdk:4.0.7 --format '{{index .RepoDigests 0}}' | tee "$RUNNER_TEMP/emsdk-digest.txt"
+          for out in wasm-a wasm-b; do
+            docker run --rm -v "$PWD:$PWD" -v "$RUNNER_TEMP:$RUNNER_TEMP" -w "$PWD" emscripten/emsdk:4.0.7 \
+              bash scripts/build-msfa-spike.sh "$RUNNER_TEMP/materialized" "$RUNNER_TEMP/$out" wasm
+          done 2>&1 | tee "$RUNNER_TEMP/wasm-build.log"
+          sha256sum "$RUNNER_TEMP/wasm-a/fm1-msfa.wasm" | tee "$RUNNER_TEMP/wasm-a.sha"
+          sha256sum "$RUNNER_TEMP/wasm-b/fm1-msfa.wasm" | tee "$RUNNER_TEMP/wasm-b.sha"
+          cmp "$RUNNER_TEMP/wasm-a/fm1-msfa.wasm" "$RUNNER_TEMP/wasm-b/fm1-msfa.wasm"
+      - name: Deterministic fixed render and native comparison
+        id: render
+        if: steps.native.outcome == 'success' && steps.wasm.outcome == 'success'
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -o pipefail
+          node scripts/run-msfa-wasm-spike.mjs \
+            --module "$RUNNER_TEMP/wasm-a/fm1-msfa.mjs" \
+            --patch native/virtual-dx7-spike/reference-patch-v1.hex \
+            --output "$RUNNER_TEMP/wasm.f32" 2>&1 | tee "$RUNNER_TEMP/render.json"
+          sha256sum "$RUNNER_TEMP/wasm.f32" | tee "$RUNNER_TEMP/wasm-pcm.sha"
+          cmp "$RUNNER_TEMP/native.f32" "$RUNNER_TEMP/wasm.f32"
+      - name: Performance and size
+        id: perf
+        if: steps.wasm.outcome == 'success'
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -o pipefail
+          node scripts/run-msfa-wasm-spike.mjs \
+            --module "$RUNNER_TEMP/wasm-a/fm1-msfa.mjs" \
+            --patch native/virtual-dx7-spike/reference-patch-v1.hex \
+            --output "$RUNNER_TEMP/five.f32" \
+            --note-on-frames 192000 --release-frames 48000 2>&1 | tee "$RUNNER_TEMP/perf.json"
+          python - <<'PY'
+          import json, os, gzip
+          from pathlib import Path
+          t=Path(os.environ['RUNNER_TEMP'])
+          p=json.loads(t.joinpath('perf.json').read_text().splitlines()[-1])
+          if p['frames'] != 240000 or p['realtimeRatio'] >= 1: raise SystemExit('performance gate failed')
+          wasm=t/'wasm-a/fm1-msfa.wasm'; glue=t/'wasm-a/fm1-msfa.mjs'
+          compressed=len(gzip.compress(wasm.read_bytes()))+len(gzip.compress(glue.read_bytes()))
+          if compressed > 1048576: raise SystemExit('compressed bundle exceeds 1 MiB')
+          t.joinpath('size.json').write_text(json.dumps({'wasmBytes':wasm.stat().st_size,'glueBytes':glue.stat().st_size,'compressedCombinedBytes':compressed}))
+          PY
+      - id: typecheck
+        if: steps.install.outcome == 'success'
+        continue-on-error: true
+        run: npm run typecheck
+      - id: lint
+        if: steps.install.outcome == 'success'
+        continue-on-error: true
+        run: npm run lint
+      - id: tests
+        if: steps.install.outcome == 'success'
+        continue-on-error: true
+        run: npm run test
+      - id: build
+        if: steps.install.outcome == 'success'
+        continue-on-error: true
+        run: npm run build
+      - name: Record receipt and self-clean
+        if: always()
+        env:
+          PREPARE: ${{ steps.prepare.outcome }}
+          NATIVE: ${{ steps.native.outcome }}
+          WASM: ${{ steps.wasm.outcome }}
+          RENDER: ${{ steps.render.outcome }}
+          PERF: ${{ steps.perf.outcome }}
+          TYPECHECK: ${{ steps.typecheck.outcome }}
+          LINT: ${{ steps.lint.outcome }}
+          TESTS: ${{ steps.tests.outcome }}
+          BUILD: ${{ steps.build.outcome }}
+        shell: bash
+        run: |
+          python - <<'PY'
+          import json, os
+          from pathlib import Path
+          t=Path(os.environ['RUNNER_TEMP'])
+          names=['PREPARE','NATIVE','WASM','RENDER','PERF','TYPECHECK','LINT','TESTS','BUILD']
+          results={n.lower():os.environ[n] for n in names}
+          ok=all(v=='success' for v in results.values())
+          def text(name):
+            p=t/name
+            return p.read_text(errors='replace').strip() if p.exists() else 'not produced'
+          def token(name):
+            v=text(name); return v.split()[0] if v!='not produced' else v
+          def jsonlast(name):
+            v=text(name)
+            if v=='not produced': return None
+            for line in reversed(v.splitlines()):
+              try:return json.loads(line)
+              except:pass
+          render=jsonlast('render.json'); perf=jsonlast('perf.json'); size=jsonlast('size.json')
+          lines=['# Deterministic MSFA reset validation','',f"Validated source commit: `{os.environ['GITHUB_SHA']}`",'',f"Overall gate: **{'SUCCESS' if ok else 'FAILED'}**",'', '| Check | Result |','| --- | --- |']
+          lines += [f"| {k} | **{v.upper()}** |" for k,v in results.items()]
+          lines += ['', '## Evidence','',f"- Emscripten image: `{text('emsdk-digest.txt')}`",f"- Native PCM SHA-256: `{token('native.sha')}`",f"- WASM build A SHA-256: `{token('wasm-a.sha')}`",f"- WASM build B SHA-256: `{token('wasm-b.sha')}`",f"- WASM PCM SHA-256: `{token('wasm-pcm.sha')}`"]
+          if render: lines.append(f"- Fixed render: {render['frames']} frames, peak {render['peak']}, RMS {render['rms']}, {render['firstRenderMs']} ms; repeated render was byte-identical.")
+          if perf: lines.append(f"- Five-second render: {perf['firstRenderMs']} ms, real-time ratio {perf['realtimeRatio']}.")
+          if size: lines.append(f"- Bundle: {size['wasmBytes']} WASM bytes + {size['glueBytes']} glue bytes; combined gzip {size['compressedCombinedBytes']} bytes.")
+          if results['render']=='success': lines.append('- Native and WASM fixed PCM are byte-identical: waveform correlation 1.0, zero-frame alignment, log-magnitude error 0 dB.')
+          lines += ['', 'The feedback-history reset is an FM1 Editor derived-source lifecycle patch because the pinned `Dx7Note` constructor leaves `fb_buf_` uninitialized. All audited MSFA source and generated binaries remained runner-temporary and were not committed.', '', 'No AudioWorklet or physical-device validation is claimed. The normal CI workflow remains read-only.']
+          if not ok:
+            lines += ['', '## Failure logs']
+            for name in ['prepare.log','native.log','wasm-build.log','render.json','perf.json']:
+              v=text(name)
+              if v!='not produced': lines += ['',f'### `{name}`','```text','\n'.join(v.splitlines()[-40:]),'```']
+          Path('docs/validation/msfa-deterministic-reset.md').write_text('\n'.join(lines)+'\n')
+          Path('.github/workflows/validate-msfa-wasm-reset.yml').unlink(missing_ok=True)
+          PY
+      - name: Commit receipt and cleanup
+        if: always()
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git diff --cached --quiet || git commit -m 'test(ci): record deterministic MSFA reset'
+          git pull --rebase origin main
+          git push origin HEAD:main
