@@ -2,7 +2,7 @@
 
 import { createHash } from 'node:crypto'
 import { existsSync, readFileSync } from 'node:fs'
-import { isAbsolute, relative, resolve } from 'node:path'
+import { isAbsolute, posix, relative, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const repoRoot = resolve(fileURLToPath(new URL('..', import.meta.url)))
@@ -35,6 +35,10 @@ function resolvesInside(root, path) {
   const candidate = resolve(root, path)
   const fromRoot = relative(root, candidate)
   return fromRoot !== '..' && !fromRoot.startsWith(`..${process.platform === 'win32' ? '\\' : '/'}`) && !isAbsolute(fromRoot)
+}
+
+function quotedIncludes(text) {
+  return [...text.matchAll(/^\s*#\s*include\s*"([^"]+)"/gm)].map((match) => match[1])
 }
 
 check(manifest.schemaVersion === 1, 'schemaVersion must be 1')
@@ -126,6 +130,27 @@ if (sourceRoot) {
       } else if (found) {
         check(declared, `patch-required file contains undeclared forbidden dependency ${forbidden}: ${file.path}`)
       }
+    }
+
+    for (const includeName of quotedIncludes(text)) {
+      const localPath = posix.normalize(posix.join(posix.dirname(file.path), includeName))
+      const declaredForbidden = forbiddenIncludes.includes(includeName)
+
+      if (paths.has(localPath)) continue
+
+      if (excludedPaths.has(localPath)) {
+        check(file.action === 'patch-required' && declaredForbidden,
+          `excluded local include must be declared for removal in a patch-required file: ${file.path} -> ${includeName}`)
+        continue
+      }
+
+      if (resolvesInside(sourceRoot, localPath) && existsSync(resolve(sourceRoot, localPath))) {
+        failures.push(`unaudited local include dependency: ${file.path} -> ${localPath}`)
+        continue
+      }
+
+      if (file.action === 'patch-required' && declaredForbidden) continue
+      failures.push(`unresolved quoted include is not an admitted source or declared replacement: ${file.path} -> ${includeName}`)
     }
   }
 }
