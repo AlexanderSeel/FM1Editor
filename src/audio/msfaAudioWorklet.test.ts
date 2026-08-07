@@ -39,6 +39,7 @@ function browserHarness(options: {
   fatal?: string
   readyPolyphony?: number
   readyPerformanceAbi?: number
+  outputRoute?: boolean
 } = {}) {
   const messages: unknown[] = []
   const addModule = vi.fn(async () => {})
@@ -46,10 +47,14 @@ function browserHarness(options: {
   const close = vi.fn(async () => {})
   const connect = vi.fn()
   const disconnect = vi.fn()
+  const defaultDestination = {} as AudioNode
+  const routedDestination = {} as AudioNode
+  const routeDispose = vi.fn()
+  const createOutputRoute = vi.fn(() => ({ destination: routedDestination, dispose: routeDispose }))
   const createContext = vi.fn(() => ({
     sampleRate: options.sampleRate ?? 48_000,
     state: 'running' as AudioContextState,
-    destination: {} as AudioNode,
+    destination: defaultDestination,
     audioWorklet: { addModule },
     resume,
     close,
@@ -93,6 +98,7 @@ function browserHarness(options: {
     createAudioContext: createContext as never,
     createAudioWorkletNode: createNode as never,
     loadPackage,
+    ...(options.outputRoute ? { createOutputRoute: createOutputRoute as never } : {}),
   })
 
   return {
@@ -106,6 +112,10 @@ function browserHarness(options: {
     createContext,
     createNode,
     loadPackage,
+    defaultDestination,
+    routedDestination,
+    createOutputRoute,
+    routeDispose,
     get nodeOptions() { return nodeOptions },
   }
 }
@@ -150,6 +160,22 @@ describe('performance-capable MSFA AudioWorklet controller', () => {
     expect(harness.nodeOptions?.outputChannelCount).toEqual([1])
     expect(harness.controller.state).toBe('ready')
     expect(harness.controller.sampleRate).toBe(48_000)
+  })
+
+  it('keeps direct dry routing by default and supports an explicit disposable output route', async () => {
+    const dry = browserHarness()
+    await dry.controller.enable()
+    expect(dry.createOutputRoute).not.toHaveBeenCalled()
+    expect(dry.connect).toHaveBeenCalledWith(dry.defaultDestination)
+    await dry.controller.close()
+    expect(dry.routeDispose).not.toHaveBeenCalled()
+
+    const routed = browserHarness({ outputRoute: true })
+    await routed.controller.enable()
+    expect(routed.createOutputRoute).toHaveBeenCalledTimes(1)
+    expect(routed.connect).toHaveBeenCalledWith(routed.routedDestination)
+    await routed.controller.close()
+    expect(routed.routeDispose).toHaveBeenCalledTimes(1)
   })
 
   it('routes semantic voice, performance controls and independent notes', async () => {
@@ -225,8 +251,9 @@ describe('performance-capable MSFA AudioWorklet controller', () => {
     expect(harness.messages).toContainEqual({ type: 'command', command: 'allNotesOff' })
     expect(harness.messages).toContainEqual({ type: 'command', command: 'dispose' })
 
-    const fatal = browserHarness({ fatal: 'WASM init failed' })
+    const fatal = browserHarness({ fatal: 'WASM init failed', outputRoute: true })
     await expect(fatal.controller.enable()).rejects.toThrow('WASM init failed')
     expect(fatal.controller.state).toBe('error')
+    expect(fatal.routeDispose).toHaveBeenCalledTimes(1)
   })
 })

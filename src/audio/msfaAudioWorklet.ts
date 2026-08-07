@@ -83,6 +83,11 @@ interface AudioWorkletNodeLike {
   disconnect(): void
 }
 
+export interface MsfaAudioWorkletOutputRoute {
+  readonly destination: AudioNode
+  dispose?(): void
+}
+
 export interface MsfaAudioWorkletDependencies {
   createAudioContext?: () => AudioContextLike
   createAudioWorkletNode?: (
@@ -91,6 +96,8 @@ export interface MsfaAudioWorkletDependencies {
     options: AudioWorkletNodeOptions,
   ) => AudioWorkletNodeLike
   loadPackage?: () => Promise<MsfaWorkletPackage>
+  /** Optional browser-audio route used by richer local preview targets. Default remains direct dry destination. */
+  createOutputRoute?: (context: AudioContext) => MsfaAudioWorkletOutputRoute
   readyTimeoutMs?: number
 }
 
@@ -229,6 +236,7 @@ export function createMsfaAudioWorkletController(
   const createContext = dependencies.createAudioContext ?? defaultAudioContext
   const createNode = dependencies.createAudioWorkletNode ?? defaultAudioWorkletNode
   const packageLoader = dependencies.loadPackage ?? loadMsfaWorkletPackage
+  const createOutputRoute = dependencies.createOutputRoute
   const readyTimeoutMs = dependencies.readyTimeoutMs ?? MSFA_WORKLET_READY_TIMEOUT_MS
   if (!Number.isFinite(readyTimeoutMs) || readyTimeoutMs <= 0) {
     throw new RangeError('readyTimeoutMs must be a positive finite number')
@@ -237,6 +245,7 @@ export function createMsfaAudioWorkletController(
   let state: MsfaAudioWorkletState = 'disabled'
   let context: AudioContextLike | null = null
   let node: AudioWorkletNodeLike | null = null
+  let outputRoute: MsfaAudioWorkletOutputRoute | null = null
   let enablePromise: Promise<void> | null = null
   let readyResolve: (() => void) | null = null
   let readyReject: ((error: Error) => void) | null = null
@@ -341,6 +350,15 @@ export function createMsfaAudioWorkletController(
       }
     }
     node = null
+    const closingRoute = outputRoute
+    outputRoute = null
+    if (closingRoute) {
+      try {
+        closingRoute.dispose?.()
+      } catch {
+        // Output route teardown must not prevent AudioContext shutdown.
+      }
+    }
     const closingContext = context
     context = null
     if (closingContext && closingContext.state !== 'closed') {
@@ -402,7 +420,8 @@ export function createMsfaAudioWorkletController(
             reject?.(error)
             rejectPending(error)
           }
-          node.connect(context.destination)
+          outputRoute = createOutputRoute ? createOutputRoute(context as AudioContext) : null
+          node.connect(outputRoute?.destination ?? context.destination)
           await ready
           state = 'ready'
         } catch (cause) {
