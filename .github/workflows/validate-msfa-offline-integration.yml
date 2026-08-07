@@ -1,0 +1,118 @@
+name: Validate integrated MSFA offline engine
+
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/validate-msfa-offline-integration.yml']
+
+permissions:
+  contents: write
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - id: install
+        continue-on-error: true
+        run: npm install --no-audit --no-fund
+      - name: Verify packaged identities
+        id: identity
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import hashlib, json
+          from pathlib import Path
+          m=json.loads(Path('public/virtual-dx7/manifest.json').read_text())
+          def sha(path): return hashlib.sha256(Path(path).read_bytes()).hexdigest()
+          assert m['engineId']=='fm1-editor-msfa-compatible'
+          assert m['engineVersion']=='msfa-2e182b3-fm1-v2-seeded'
+          assert m['licenseSpdx']=='Apache-2.0'
+          assert sha('public/virtual-dx7/fm1-msfa.wasm')==m['wasm']['sha256']=='d45658932e6cf8c9c1f670e152ee476f90c4d5e8a63ac08ee0f20acf53f0d442'
+          assert sha('public/virtual-dx7/fm1-msfa.mjs')==m['glue']['sha256']
+          assert sha('third_party/msfa/manifest.json')==m['sourceManifestSha256']
+          assert m['acceptedReferencePcmSha256']=='313be5ffcb29436e92ecce45b5e1002c72dd810c6999379844b82ce87a18cfc2'
+          print(json.dumps({'engineVersion':m['engineVersion'],'wasmSha256':m['wasm']['sha256'],'glueSha256':m['glue']['sha256'],'sourceManifestSha256':m['sourceManifestSha256']}))
+          PY
+      - name: Render packaged fixed artifact
+        id: artifact
+        if: steps.identity.outcome == 'success'
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -o pipefail
+          node scripts/run-msfa-wasm-spike.mjs \
+            --module public/virtual-dx7/fm1-msfa.mjs \
+            --patch native/virtual-dx7-spike/reference-patch-v1.hex \
+            --output "$RUNNER_TEMP/packaged-reference.f32" \
+            --random-seed 42 2>&1 | tee "$RUNNER_TEMP/artifact.json"
+          actual=$(sha256sum "$RUNNER_TEMP/packaged-reference.f32" | awk '{print $1}')
+          test "$actual" = '313be5ffcb29436e92ecce45b5e1002c72dd810c6999379844b82ce87a18cfc2'
+      - id: typecheck
+        if: steps.install.outcome == 'success'
+        continue-on-error: true
+        run: npm run typecheck
+      - id: lint
+        if: steps.install.outcome == 'success'
+        continue-on-error: true
+        run: npm run lint
+      - id: tests
+        if: steps.install.outcome == 'success'
+        continue-on-error: true
+        run: npm run test
+      - id: build
+        if: steps.install.outcome == 'success'
+        continue-on-error: true
+        run: npm run build
+      - name: Record receipt and self-clean
+        if: always()
+        env:
+          IDENTITY: ${{ steps.identity.outcome }}
+          ARTIFACT: ${{ steps.artifact.outcome }}
+          TYPECHECK: ${{ steps.typecheck.outcome }}
+          LINT: ${{ steps.lint.outcome }}
+          TESTS: ${{ steps.tests.outcome }}
+          BUILD: ${{ steps.build.outcome }}
+        shell: bash
+        run: |
+          python - <<'PY'
+          import json, os
+          from pathlib import Path
+          keys=['IDENTITY','ARTIFACT','TYPECHECK','LINT','TESTS','BUILD']
+          r={k.lower():os.environ[k] for k in keys}; ok=all(v=='success' for v in r.values())
+          temp=Path(os.environ['RUNNER_TEMP'])
+          artifact=None
+          p=temp/'artifact.json'
+          if p.exists():
+            for line in reversed(p.read_text(errors='replace').splitlines()):
+              try: artifact=json.loads(line); break
+              except: pass
+          lines=['# Integrated MSFA offline engine validation','',f"Validated source commit: `{os.environ['GITHUB_SHA']}`",'',f"Overall gate: **{'SUCCESS' if ok else 'FAILED'}**",'', '| Check | Result |','| --- | --- |']
+          lines += [f"| {k} | **{v.upper()}** |" for k,v in r.items()]
+          lines += ['', '## Boundary evidence','', '- `createMsfaOfflineEngine()` loads the packaged local `public/virtual-dx7/fm1-msfa.mjs` artifact through the semantic `VirtualDx7Engine` contract.', '- The TypeScript wrapper accepts a validated render plan, creates the private 156-byte semantic bridge, forwards note/velocity/sample rate/block-aligned durations/random seed, copies normalized mono PCM, validates it, and releases both WASM allocations.', '- Cancellation is checked before module load, before the synchronous native call and after it. The current WASM call itself is synchronous and therefore cannot be preempted mid-call.', '- The default loader performs local browser module loading only; it contains no Web MIDI, SysEx, upload or hardware-send path.']
+          if artifact:
+            lines += [f"- Packaged fixed render: `{artifact['sha256']}`, {artifact['frames']} frames, seed {artifact['randomSeed']}, peak {artifact['peak']}, RMS {artifact['rms']}."]
+          lines += ['', 'This receipt validates the dry **offline** DX7-compatible renderer only. It does not claim AudioWorklet execution or physical Yamaha DX7 / M-VAVE FM-1 equivalence.', '', 'The temporary workflow removes itself; normal CI remains read-only.']
+          if not ok:
+            lines += ['', '## Failure detail']
+            if p.exists(): lines += ['```text', '\n'.join(p.read_text(errors='replace').splitlines()[-50:]), '```']
+          Path('docs/validation/msfa-offline-engine-integration.md').write_text('\n'.join(lines)+'\n')
+          Path('.github/workflows/validate-msfa-offline-integration.yml').unlink(missing_ok=True)
+          PY
+      - name: Commit receipt and cleanup
+        if: always()
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git diff --cached --quiet || git commit -m 'test(ci): record integrated MSFA offline engine'
+          git pull --rebase origin main
+          git push origin HEAD:main
