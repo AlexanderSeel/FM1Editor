@@ -240,17 +240,19 @@ export function VirtualDx7PreviewPanel({
         </p>
 
         <div className="mt-3 grid gap-3 lg:grid-cols-2 xl:grid-cols-4">
-          <label className="grid gap-1.5 text-xs text-slate-400">
+          <label className="grid gap-1.5 text-xs text-slate-400" htmlFor="virtual-dx7-pitch-bend-range">
             <span className="flex justify-between font-semibold uppercase tracking-[0.12em]"><span>Pitch-bend range</span><strong>{performance.pitchBendRange}</strong></span>
-            <input max={12} min={0} onChange={(event) => setPerformance((current) => ({ ...current, pitchBendRange: Number(event.target.value) }))} type="range" value={performance.pitchBendRange} />
           </label>
-          <label className="grid gap-1.5 text-xs text-slate-400">
+          <input className="self-end" id="virtual-dx7-pitch-bend-range" max={12} min={0} onChange={(event) => setPerformance((current) => ({ ...current, pitchBendRange: Number(event.target.value) }))} type="range" value={performance.pitchBendRange} />
+
+          <label className="grid gap-1.5 text-xs text-slate-400" htmlFor="virtual-dx7-pitch-bend-step">
             <span className="flex justify-between font-semibold uppercase tracking-[0.12em]"><span>Pitch-bend step</span><strong>{performance.pitchBendStep}</strong></span>
-            <input max={12} min={0} onChange={(event) => setPerformance((current) => ({ ...current, pitchBendStep: Number(event.target.value) }))} type="range" value={performance.pitchBendStep} />
           </label>
-          <label className="grid gap-1.5 text-xs text-slate-400">
-            <span className="flex justify-between font-semibold uppercase tracking-[0.12em]"><span>Pitch bend</span><strong>{pitchBend - 8192}</strong></span>
-            <input disabled={!ready} max={16383} min={0} onChange={(event) => {
+          <input className="self-end" id="virtual-dx7-pitch-bend-step" max={12} min={0} onChange={(event) => setPerformance((current) => ({ ...current, pitchBendStep: Number(event.target.value) }))} type="range" value={performance.pitchBendStep} />
+
+          <div className="grid gap-1.5 text-xs text-slate-400">
+            <label className="flex justify-between font-semibold uppercase tracking-[0.12em]" htmlFor="virtual-dx7-pitch-bend"><span>Pitch bend</span><strong>{pitchBend - 8192}</strong></label>
+            <input disabled={!ready} id="virtual-dx7-pitch-bend" max={16383} min={0} onChange={(event) => {
               const value = Number(event.target.value)
               setPitchBend(value)
               runLiveControl((controller) => controller.setPitchBend(value))
@@ -259,7 +261,7 @@ export function VirtualDx7PreviewPanel({
               setPitchBend(8192)
               runLiveControl((controller) => controller.setPitchBend(8192))
             }} type="button">Center</button>
-          </label>
+          </div>
           <div className="grid content-start gap-1.5 text-xs text-slate-400">
             <span className="font-semibold uppercase tracking-[0.12em]">Sustain</span>
             <button className={`rounded-lg px-3 py-2 text-sm font-bold disabled:opacity-40 ${sustain ? 'bg-violet-300 text-slate-950' : 'border border-white/10 bg-white/5 text-slate-300'}`} disabled={!ready} onClick={() => {
@@ -275,26 +277,27 @@ export function VirtualDx7PreviewPanel({
           const mask = assignmentMask(controllerConfig.assignment)
           const liveValue = controllerName === 'modulationWheel' ? modulation : aftertouch
           const setLiveValue = controllerName === 'modulationWheel' ? setModulation : setAftertouch
+          const prefix = `virtual-dx7-${controllerName}`
           return (
             <div className="mt-3 grid gap-3 rounded-lg border border-white/8 p-3 sm:grid-cols-3" key={controllerName}>
-              <label className="grid gap-1.5 text-xs text-slate-400">
-                <span className="flex justify-between font-semibold uppercase tracking-[0.12em]"><span>{controllerName === 'modulationWheel' ? 'Mod wheel range' : 'Aftertouch range'}</span><strong>{controllerConfig.range}</strong></span>
-                <input max={99} min={0} onChange={(event) => updateControllerConfig(controllerName, Number(event.target.value), mask)} type="range" value={controllerConfig.range} />
-              </label>
-              <label className="grid gap-1.5 text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">
-                Assignment
-                <select className="rounded-lg border border-white/10 bg-slate-950 px-3 py-2 text-sm normal-case tracking-normal text-white" onChange={(event) => updateControllerConfig(controllerName, controllerConfig.range, Number(event.target.value))} value={mask}>
+              <div className="grid gap-1.5 text-xs text-slate-400">
+                <label className="flex justify-between font-semibold uppercase tracking-[0.12em]" htmlFor={`${prefix}-range`}><span>{controllerName === 'modulationWheel' ? 'Mod wheel range' : 'Aftertouch range'}</span><strong>{controllerConfig.range}</strong></label>
+                <input id={`${prefix}-range`} max={99} min={0} onChange={(event) => updateControllerConfig(controllerName, Number(event.target.value), mask)} type="range" value={controllerConfig.range} />
+              </div>
+              <div className="grid gap-1.5 text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">
+                <label htmlFor={`${prefix}-assignment`}>Assignment</label>
+                <select className="rounded-lg border border-white/10 bg-slate-950 px-3 py-2 text-sm normal-case tracking-normal text-white" id={`${prefix}-assignment`} onChange={(event) => updateControllerConfig(controllerName, controllerConfig.range, Number(event.target.value))} value={mask}>
                   {Array.from({ length: 8 }, (_, value) => <option key={value} value={value}>{value} · {assignmentLabel(value)}</option>)}
                 </select>
-              </label>
-              <label className="grid gap-1.5 text-xs text-slate-400">
-                <span className="flex justify-between font-semibold uppercase tracking-[0.12em]"><span>{controllerName === 'modulationWheel' ? 'Mod wheel' : 'Aftertouch'}</span><strong>{liveValue}</strong></span>
-                <input disabled={!ready} max={127} min={0} onChange={(event) => {
+              </div>
+              <div className="grid gap-1.5 text-xs text-slate-400">
+                <label className="flex justify-between font-semibold uppercase tracking-[0.12em]" htmlFor={`${prefix}-value`}><span>{controllerName === 'modulationWheel' ? 'Mod wheel' : 'Aftertouch'}</span><strong>{liveValue}</strong></label>
+                <input disabled={!ready} id={`${prefix}-value`} max={127} min={0} onChange={(event) => {
                   const value = Number(event.target.value)
                   setLiveValue(value)
                   runLiveControl((controller) => controllerName === 'modulationWheel' ? controller.setModulation(value) : controller.setAftertouch(value))
                 }} type="range" value={liveValue} />
-              </label>
+              </div>
             </div>
           )
         })}
