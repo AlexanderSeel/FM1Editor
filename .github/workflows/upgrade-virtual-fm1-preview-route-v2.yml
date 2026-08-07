@@ -1,0 +1,91 @@
+name: Upgrade Virtual FM1 preview route v2
+
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/upgrade-virtual-fm1-preview-route-v2.yml']
+
+permissions:
+  contents: write
+
+jobs:
+  integrate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - name: Apply routed preview upgrade with backwards-compatible props
+        shell: python
+        run: |
+          from pathlib import Path
+          p=Path('src/components/VirtualDx7PreviewPanel.tsx'); t=p.read_text(encoding='utf-8')
+          def rep(old,new,label):
+              global t
+              if old in t: t=t.replace(old,new,1)
+              elif new not in t: raise SystemExit(label)
+          rep("import { MSFA_OFFLINE_ENGINE_VERSION } from '../audio/msfaOfflineEngine'\n", "import { MSFA_OFFLINE_ENGINE_VERSION } from '../audio/msfaOfflineEngine'\nimport { createVirtualFm1OutputRoute, VIRTUAL_FM1_LIMITER, VIRTUAL_FM1_MASTER_GAIN_DEFAULT_DB, VIRTUAL_FM1_MASTER_GAIN_MAX_DB, VIRTUAL_FM1_MASTER_GAIN_MIN_DB, type VirtualFm1OutputRoute } from '../audio/virtualFm1OutputRoute'\n", 'route import')
+          rep("import type { Dx7ControllerAssignment } from '../domain/dx7FunctionState'\n", "import type { Dx7ControllerAssignment } from '../domain/dx7FunctionState'\nimport { createInitializedFxState, type Fm1FxState } from '../domain/fx'\n", 'fx import')
+          rep("type PerformanceController = 'modulationWheel' | 'aftertouch'\n", "type PerformanceController = 'modulationWheel' | 'aftertouch'\nconst DEFAULT_VIRTUAL_FM1_FX_STATE = createInitializedFxState()\n", 'fx default')
+          rep('''interface VirtualDx7PreviewPanelProps {\n  voice: Dx7Voice\n  createController?: () => MsfaAudioWorkletController\n}\n''','''interface VirtualDx7PreviewPanelProps {\n  voice: Dx7Voice\n  fxState?: Fm1FxState\n  createController?: () => MsfaAudioWorkletController\n}\n''','props')
+          rep('''export function VirtualDx7PreviewPanel({\n  voice,\n  createController = createMsfaAudioWorkletController,\n}: VirtualDx7PreviewPanelProps) {\n  const controllerRef = useRef<MsfaAudioWorkletController | null>(null)\n''','''export function VirtualDx7PreviewPanel({\n  voice,\n  fxState = DEFAULT_VIRTUAL_FM1_FX_STATE,\n  createController,\n}: VirtualDx7PreviewPanelProps) {\n  const controllerRef = useRef<MsfaAudioWorkletController | null>(null)\n  const outputRouteRef = useRef<VirtualFm1OutputRoute | null>(null)\n  const fxStateRef = useRef(fxState)\n  const fxBypassedRef = useRef(true)\n  const masterGainDbRef = useRef<number>(VIRTUAL_FM1_MASTER_GAIN_DEFAULT_DB)\n''','signature')
+          rep('''  const [sustain, setSustain] = useState(false)\n  const [status, setStatus] = useState<string | null>(null)\n''','''  const [sustain, setSustain] = useState(false)\n  const [fxBypassed, setFxBypassed] = useState(true)\n  const [masterGainDb, setMasterGainDb] = useState<number>(VIRTUAL_FM1_MASTER_GAIN_DEFAULT_DB)\n  const [status, setStatus] = useState<string | null>(null)\n''','state')
+          rep('''  const closeController = useCallback(async () => {\n''','''  fxStateRef.current = fxState\n  fxBypassedRef.current = fxBypassed\n  masterGainDbRef.current = masterGainDb\n\n  const createPreviewController = useCallback(() => {\n    if (createController) return createController()\n    return createMsfaAudioWorkletController({\n      createOutputRoute: (context) => {\n        const route = createVirtualFm1OutputRoute(context, fxStateRef.current, { fxBypassed: fxBypassedRef.current, masterGainDb: masterGainDbRef.current })\n        outputRouteRef.current = route\n        return { destination: route.input, dispose() { if (outputRouteRef.current === route) outputRouteRef.current = null; route.dispose() } }\n      },\n    })\n  }, [createController])\n\n  const closeController = useCallback(async () => {\n''','factory')
+          t=t.replace('const controller = createController()','const controller = createPreviewController()',1)
+          t=t.replace('closeController, createController, modulation','closeController, createPreviewController, modulation',1)
+          t=t.replace("setStatus(`Local dry preview enabled at ${controller.sampleRate ?? 'browser'} Hz with ${controller.polyphony}-voice polyphony.`)", "setStatus(`Virtual FM-1 preview enabled at ${controller.sampleRate ?? 'browser'} Hz · ${fxBypassedRef.current ? 'dry' : 'FM-1-inspired FX'} · ${controller.polyphony}-voice polyphony.`)",1)
+          rep('''  useEffect(() => {\n    const controller = controllerRef.current\n    if (state !== 'ready' || !controller || loadedVoiceRef.current === voice) return\n''','''  useEffect(() => { outputRouteRef.current?.setFxState(fxState) }, [fxState])\n  useEffect(() => { outputRouteRef.current?.setFxBypass(fxBypassed) }, [fxBypassed])\n  useEffect(() => { outputRouteRef.current?.setMasterGainDb(masterGainDb) }, [masterGainDb])\n\n  useEffect(() => {\n    const controller = controllerRef.current\n    if (state !== 'ready' || !controller || loadedVoiceRef.current === voice) return\n''','effects')
+          t=t.replace("label: `local DX7-compatible dry audio · ${MSFA_WORKLET_POLYPHONY}-voice polyphony`,", "label: `local ${fxBypassed ? 'DX7-compatible dry' : 'FM-1-inspired FX'} audio · ${MSFA_WORKLET_POLYPHONY}-voice polyphony`,",1)
+          marker='''  }), [])\n\n  const runLiveControl'''
+          t=t.replace(marker,'''  }), [fxBypassed])\n\n  const runLiveControl''',1)
+          t=t.replace('Local DX7-compatible preview</p>','Virtual FM-1 preview</p>',1)
+          t=t.replace('Audition the current semantic voice through the audited dry WebAssembly engine. Enabling this creates local browser audio only; it does not request Web MIDI, transmit SysEx or send anything to connected hardware.','Audition the current semantic voice through the audited DX7-compatible engine, optionally routed through the FM-1-inspired software FX approximation. Local audio never requests Web MIDI, transmits SysEx or sends anything to connected hardware.',1)
+          t=t.replace('<p className="mt-1">Dry · 12-TET · {MSFA_WORKLET_POLYPHONY} voices · performance ABI {MSFA_WORKLET_PERFORMANCE_ABI}</p>','<p className="mt-1">{fxBypassed ? \'Dry\' : \'FM-1-inspired FX\'} · {masterGainDb} dB · limiter {VIRTUAL_FM1_LIMITER.thresholdDb} dB · {MSFA_WORKLET_POLYPHONY} voices</p>\n          <p className="mt-1">12-TET · performance ABI {MSFA_WORKLET_PERFORMANCE_ABI}</p>',1)
+          control='''        {!ready ? (\n          <button className="rounded-xl bg-violet-300 px-4 py-2.5 text-sm font-black text-slate-950 hover:bg-violet-200 disabled:cursor-not-allowed disabled:opacity-40" disabled={state === 'enabling'} onClick={() => void enableLocalAudio()} type="button">\n'''
+          controls='''        <div className="grid gap-1.5 text-xs text-slate-400"><span className="font-semibold uppercase tracking-[0.12em]">Output</span><button className={`rounded-xl px-3 py-2.5 text-sm font-bold ${fxBypassed ? 'border border-white/10 bg-white/5 text-slate-200' : 'bg-cyan-300 text-slate-950'}`} onClick={() => setFxBypassed((current) => !current)} type="button">{fxBypassed ? 'Dry bypass' : 'FX enabled'}</button></div>\n        <div className="grid min-w-[190px] flex-1 gap-1.5 text-xs text-slate-400"><label className="flex justify-between font-semibold uppercase tracking-[0.12em]" htmlFor="virtual-fm1-master-gain"><span>Master gain</span><strong className="text-cyan-200">{masterGainDb} dB</strong></label><input id="virtual-fm1-master-gain" max={VIRTUAL_FM1_MASTER_GAIN_MAX_DB} min={VIRTUAL_FM1_MASTER_GAIN_MIN_DB} onChange={(event) => setMasterGainDb(Number(event.target.value))} step={1} type="range" value={masterGainDb} /></div>\n'''+control
+          if 'id="virtual-fm1-master-gain"' not in t:
+              if control not in t: raise SystemExit('control anchor')
+              t=t.replace(control,controls,1)
+          p.write_text(t,encoding='utf-8')
+
+          app=Path('src/App.tsx'); a=app.read_text(encoding='utf-8')
+          a=a.replace('<VirtualDx7PreviewPanel voice={voice} />','<VirtualDx7PreviewPanel fxState={effects} voice={voice} />',1)
+          a=a.replace('description="Audited dry DX7-compatible AudioWorklet · explicit browser-local enable · no MIDI hardware required"','description="DX7-compatible AudioWorklet · FM-1-inspired FX/master/limiter · explicit browser-local enable · no MIDI hardware required"',1)
+          a=a.replace('title="Local virtual preview"','title="Virtual FM-1 preview"',1)
+          app.write_text(a,encoding='utf-8')
+
+          test=Path('src/components/VirtualDx7PreviewPanel.test.tsx'); x=test.read_text(encoding='utf-8')
+          x=x.replace("expect(markup).toContain('Local DX7-compatible preview')","expect(markup).toContain('Virtual FM-1 preview')",1)
+          x=x.replace("expect(markup).toContain('Dry · 12-TET · 16 voices · performance ABI 1')","expect(markup).toContain('Dry · -6 dB · limiter -1 dB · 16 voices')\n    expect(markup).toContain('Dry bypass')\n    expect(markup).toContain('Master gain')",1)
+          test.write_text(x,encoding='utf-8')
+      - run: npm install --no-audit --no-fund
+      - run: npm run audit:virtual-dx7
+      - run: npm run typecheck
+      - run: npm run lint
+      - run: npm test -- src/audio/msfaAudioWorklet.test.ts src/audio/virtualFm1OutputRoute.test.ts src/audio/fm1InspiredFxGraph.test.ts src/components/VirtualDx7PreviewPanel.test.tsx
+      - run: npm run test
+      - run: npm run build
+      - name: Persist receipt
+        run: |
+          cat > docs/validation/virtual-fm1-preview-route-ui.md <<EOF
+          # Virtual FM-1 preview routed-output UI validation
+
+          Source commit: \`${GITHUB_SHA}\`
+
+          Overall software gate: **SUCCESS**
+
+          The existing local Voice preview now acts as the Virtual FM-1 preview target while retaining the audited DX7-compatible dry engine. Its default browser controller opts into the validated FM-1-inspired output route; injected/custom controllers retain their existing behavior.
+
+          The panel synchronizes current semantic `Dx7Voice` plus App `Fm1FxState`, exposes explicit dry/FX bypass, −48…+6 dB master gain and the accepted −1 dB/20:1 limiter. Dry remains default. Catalog audition and sequencer local audio remain direct dry because they do not request the optional route.
+
+          Virtual-engine audit, typecheck, lint, focused route/preview tests, full tests and production build passed. Measured diagnostics, WAV browser execution and shared reference A/B remain open before overall preview acceptance.
+          EOF
+          rm -f .github/workflows/upgrade-virtual-fm1-preview-route.yml .github/workflows/upgrade-virtual-fm1-preview-route-v2.yml
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add -A
+          git commit -m 'feat(audio): route Virtual FM1 preview through FX output' || true
+          git pull --rebase origin main
+          git push origin HEAD:main
