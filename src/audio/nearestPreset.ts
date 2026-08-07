@@ -1,4 +1,5 @@
 import type { Dx7Voice } from '../domain/voice'
+import { createPresetDescriptorCacheKey, type PresetDescriptorCache } from './presetDescriptorCache'
 import {
   createAudioDescriptorProfile,
   DEFAULT_AUDIO_DESCRIPTOR_CONFIG,
@@ -65,6 +66,8 @@ export interface BuildPresetDescriptorIndexOptions {
   readonly probes?: readonly PresetRenderProbe[]
   readonly descriptorConfig?: AudioDescriptorConfig
   readonly signal?: AbortSignal
+  readonly descriptorCache?: PresetDescriptorCache
+  readonly onCacheHit?: (candidate: PresetIndexCandidate, probe: PresetRenderProbe, cacheKey: string) => void
   readonly onProgress?: (completedRenders: number, totalRenders: number, candidate: PresetIndexCandidate, probe: PresetRenderProbe) => void
 }
 
@@ -148,10 +151,23 @@ export async function buildPresetDescriptorIndex(
         releaseSeconds: probe.releaseSeconds,
         randomSeed: probe.randomSeed,
       })
-      const render = await engine.render(plan, options.signal)
+      const cacheKey = createPresetDescriptorCacheKey({
+        engineId: engine.engineId,
+        engineVersion: engine.engineVersion,
+        renderKey: plan.renderKey,
+        descriptorConfig,
+      })
+      let descriptor = options.descriptorCache ? await options.descriptorCache.get(cacheKey) : null
       throwIfAborted(options.signal)
-      const descriptor = createAudioDescriptorProfile(render.samples, render.sampleRate, descriptorConfig)
-      indexedProbes.push({ probe: cloneProbe(probe), renderKey: render.renderKey, descriptor })
+      if (descriptor) {
+        options.onCacheHit?.(candidate, probe, cacheKey)
+      } else {
+        const render = await engine.render(plan, options.signal)
+        throwIfAborted(options.signal)
+        descriptor = createAudioDescriptorProfile(render.samples, render.sampleRate, descriptorConfig)
+        if (options.descriptorCache) await options.descriptorCache.put(cacheKey, descriptor)
+      }
+      indexedProbes.push({ probe: cloneProbe(probe), renderKey: plan.renderKey, descriptor })
       completedRenders += 1
       options.onProgress?.(completedRenders, totalRenders, candidate, probe)
     }
