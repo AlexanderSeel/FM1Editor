@@ -1,0 +1,256 @@
+name: Fix Yamaha DX7 packed operator layout
+
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/fix-dx7-packed-operator-layout.yml']
+
+permissions:
+  contents: write
+
+concurrency:
+  group: fix-dx7-packed-operator-layout
+  cancel-in-progress: false
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Correct Yamaha packed operator byte mapping
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          path=Path('src/sysex/dx7.ts')
+          text=path.read_text(encoding='utf-8')
+          old='''function decodePackedOperator(data: Uint8Array, offset: number): Dx7Operator {
+  const curvesAndScaling = data[offset + 11] ?? 0
+  const modulationAndVelocity = data[offset + 12] ?? 0
+  const oscillatorAndCoarse = data[offset + 14] ?? 0
+
+  return {
+    envelope: {
+      rates: asFour(data, offset),
+      levels: asFour(data, offset + 4),
+    },
+    keyboardScaling: {
+      breakPoint: normalizeBreakpoint(data[offset + 8] ?? 0),
+      leftDepth: data[offset + 9] ?? 0,
+      rightDepth: data[offset + 10] ?? 0,
+      leftCurve: readCurve(curvesAndScaling),
+      rightCurve: readCurve(curvesAndScaling >> 2),
+      rateScaling: (curvesAndScaling >> 4) & 0x07,
+    },
+    amplitudeModulationSensitivity: modulationAndVelocity & 0x03,
+    keyVelocitySensitivity: (modulationAndVelocity >> 2) & 0x07,
+    outputLevel: data[offset + 13] ?? 0,
+    oscillatorMode: (oscillatorAndCoarse & 0x01) === 0 ? 'ratio' : 'fixed',
+    frequencyCoarse: (oscillatorAndCoarse >> 1) & 0x1f,
+    frequencyFine: data[offset + 15] ?? 0,
+    detune: normalizeDetune((data[offset + 16] ?? 0) & 0x0f),
+  }
+}
+'''
+          new='''function decodePackedOperator(data: Uint8Array, offset: number): Dx7Operator {
+  // Yamaha's 128-byte bulk format packs the operator tail as:
+  // 11 curves, 12 detune/rate-scaling, 13 velocity/AMS, 14 output,
+  // 15 coarse/mode, 16 fine. Keep this mapping independent from the
+  // 21-byte edit-buffer layout used by single-voice dumps.
+  const curves = data[offset + 11] ?? 0
+  const detuneAndRateScaling = data[offset + 12] ?? 0
+  const modulationAndVelocity = data[offset + 13] ?? 0
+  const oscillatorAndCoarse = data[offset + 15] ?? 0
+
+  return {
+    envelope: {
+      rates: asFour(data, offset),
+      levels: asFour(data, offset + 4),
+    },
+    keyboardScaling: {
+      breakPoint: normalizeBreakpoint(data[offset + 8] ?? 0),
+      leftDepth: data[offset + 9] ?? 0,
+      rightDepth: data[offset + 10] ?? 0,
+      leftCurve: readCurve(curves),
+      rightCurve: readCurve(curves >> 2),
+      rateScaling: detuneAndRateScaling & 0x07,
+    },
+    amplitudeModulationSensitivity: modulationAndVelocity & 0x03,
+    keyVelocitySensitivity: (modulationAndVelocity >> 2) & 0x07,
+    outputLevel: data[offset + 14] ?? 0,
+    oscillatorMode: (oscillatorAndCoarse & 0x01) === 0 ? 'ratio' : 'fixed',
+    frequencyCoarse: (oscillatorAndCoarse >> 1) & 0x1f,
+    frequencyFine: data[offset + 16] ?? 0,
+    detune: normalizeDetune((detuneAndRateScaling >> 3) & 0x0f),
+  }
+}
+'''
+          if old not in text: raise SystemExit('decodePackedOperator anchor does not match')
+          text=text.replace(old,new,1)
+
+          old='''    data[offset + 11] =
+      ((data[offset + 11] ?? 0) & 0x80) |
+      writeCurve(operator.keyboardScaling.leftCurve) |
+      (writeCurve(operator.keyboardScaling.rightCurve) << 2) |
+      (operator.keyboardScaling.rateScaling << 4)
+    data[offset + 12] =
+      ((data[offset + 12] ?? 0) & 0x60) |
+      operator.amplitudeModulationSensitivity |
+      (operator.keyVelocitySensitivity << 2)
+    data[offset + 13] = operator.outputLevel
+    data[offset + 14] =
+      ((data[offset + 14] ?? 0) & 0x40) |
+      (operator.oscillatorMode === 'fixed' ? 1 : 0) |
+      (operator.frequencyCoarse << 1)
+    data[offset + 15] = operator.frequencyFine
+    data[offset + 16] = ((data[offset + 16] ?? 0) & 0x70) | normalizeDetune(operator.detune)
+'''
+          new='''    data[offset + 11] =
+      ((data[offset + 11] ?? 0) & 0x70) |
+      writeCurve(operator.keyboardScaling.leftCurve) |
+      (writeCurve(operator.keyboardScaling.rightCurve) << 2)
+    data[offset + 12] =
+      (normalizeDetune(operator.detune) << 3) |
+      operator.keyboardScaling.rateScaling
+    data[offset + 13] =
+      ((data[offset + 13] ?? 0) & 0x60) |
+      operator.amplitudeModulationSensitivity |
+      (operator.keyVelocitySensitivity << 2)
+    data[offset + 14] = operator.outputLevel
+    data[offset + 15] =
+      ((data[offset + 15] ?? 0) & 0x40) |
+      (operator.oscillatorMode === 'fixed' ? 1 : 0) |
+      (operator.frequencyCoarse << 1)
+    data[offset + 16] = operator.frequencyFine
+'''
+          if old not in text: raise SystemExit('encodePackedVoice operator anchor does not match')
+          text=text.replace(old,new,1)
+          path.write_text(text,encoding='utf-8')
+
+          test=Path('src/sysex/dx7.test.ts')
+          text=test.read_text(encoding='utf-8')
+          start=text.index("describe('DX7 packed voice', () => {")
+          end=text.index("\ndescribe('DX7 bank', () => {", start)
+          replacement='''describe('DX7 packed voice', () => {
+  it('uses the Yamaha 128-byte operator packing layout', () => {
+    const voice = createInitializedVoice('YAMAHA MAP')
+    const operator = voice.operators[1]
+    operator.keyboardScaling.rateScaling = 6
+    operator.keyboardScaling.leftCurve = 'positive-linear'
+    operator.keyboardScaling.rightCurve = 'negative-exponential'
+    operator.amplitudeModulationSensitivity = 3
+    operator.keyVelocitySensitivity = 5
+    operator.outputLevel = 87
+    operator.oscillatorMode = 'fixed'
+    operator.frequencyCoarse = 27
+    operator.frequencyFine = 73
+    operator.detune = 12
+
+    const packed = encodePackedVoice(voice)
+    const offset = 4 * 17
+
+    expect(packed[offset + 11] & 0x0f).toBe(0x07)
+    expect(packed[offset + 12]).toBe((12 << 3) | 6)
+    expect(packed[offset + 13] & 0x1f).toBe(3 | (5 << 2))
+    expect(packed[offset + 14]).toBe(87)
+    expect(packed[offset + 15] & 0x3f).toBe(1 | (27 << 1))
+    expect(packed[offset + 16]).toBe(73)
+
+    const decoded = decodePackedVoice(packed).operators[1]
+    expect(decoded.keyboardScaling.rateScaling).toBe(6)
+    expect(decoded.amplitudeModulationSensitivity).toBe(3)
+    expect(decoded.keyVelocitySensitivity).toBe(5)
+    expect(decoded.outputLevel).toBe(87)
+    expect(decoded.oscillatorMode).toBe('fixed')
+    expect(decoded.frequencyCoarse).toBe(27)
+    expect(decoded.frequencyFine).toBe(73)
+    expect(decoded.detune).toBe(12)
+  })
+
+  it('normalizes reserved detune nibble 15 without corrupting rate scaling', () => {
+    const packed = encodePackedVoice(createInitializedVoice('DETUNE 15'))
+    const op6PackedOffset = 0
+    packed[op6PackedOffset + 12] = (15 << 3) | 5
+
+    const decoded = decodePackedVoice(packed)
+    const reencoded = encodePackedVoice(decoded)
+
+    expect(decoded.operators[5].detune).toBe(14)
+    expect(decoded.operators[5].keyboardScaling.rateScaling).toBe(5)
+    expect(reencoded[op6PackedOffset + 12]).toBe((14 << 3) | 5)
+
+    const invalidVoice = createInitializedVoice('INVALID 15')
+    invalidVoice.operators[5].detune = 15
+    expect(() => encodePackedVoice(invalidVoice)).toThrow(/detune.*0 to 14/i)
+    expect(() => encodeSingleVoiceMessage(invalidVoice)).toThrow(/detune.*0 to 14/i)
+  })
+
+  it('normalizes reserved breakpoint value 127 at the raw import boundary and rejects it in the voice model', () => {
+    const packed = encodePackedVoice(createInitializedVoice('BREAK 127'))
+    const op2BreakpointOffset = 4 * 17 + 8
+    packed[op2BreakpointOffset] = 127
+
+    const decoded = decodePackedVoice(packed)
+    const reencoded = encodePackedVoice(decoded)
+
+    expect(decoded.operators[1].keyboardScaling.breakPoint).toBe(99)
+    expect(reencoded[op2BreakpointOffset]).toBe(99)
+
+    const invalidVoice = createInitializedVoice('INVALID BP')
+    invalidVoice.operators[1].keyboardScaling.breakPoint = 127
+    expect(() => encodePackedVoice(invalidVoice)).toThrow(/breakpoint.*0 to 99/i)
+    expect(() => encodeSingleVoiceMessage(invalidVoice)).toThrow(/breakpoint.*0 to 99/i)
+
+    const voices = Array.from({ length: 32 }, (_, index) => createInitializedVoice(`VOICE ${index + 1}`))
+    const bankVoice = voices[3]
+    if (!bankVoice) throw new Error('Missing test bank voice.')
+    bankVoice.operators[1].keyboardScaling.breakPoint = 127
+    expect(() => encodeVoiceBankMessage(voices)).toThrow(/breakpoint.*0 to 99/i)
+  })
+})
+'''
+          text=text[:start]+replacement+text[end:]
+          test.write_text(text,encoding='utf-8')
+          PY
+      - name: Validate Yamaha mapping and real bank renderer
+        run: |
+          npm install --no-audit --no-fund
+          npm run typecheck
+          npm run lint
+          npm test -- src/sysex/dx7.test.ts src/sysex/dx7.property.test.ts src/audio/libraryVoiceRender.integration.test.ts
+          npm run test
+          npm run build
+      - name: Record repair
+        run: |
+          cat > docs/validation/dx7-packed-operator-layout-repair.md <<EOF
+          # DX7 packed operator layout repair
+
+          Trigger source commit: \`${GITHUB_SHA}\`
+
+          Software gate: **SUCCESS**
+
+          Root cause: the previous 128-byte bank decoder/encoder shifted the packed operator fields after byte 11. Yamaha bulk format uses byte 12 for detune/rate scaling, byte 13 for key velocity/AMS, byte 14 for output level, byte 15 for oscillator mode/coarse and byte 16 for fine frequency.
+
+          Validation before commit:
+          - canonical field-layout regression passed;
+          - packed/unpacked property tests passed;
+          - the tracked real `sysexFinal.zip` importable-bank MSFA renderer regression passed;
+          - full Vitest suite passed;
+          - typecheck, lint and production build passed.
+
+          This is software validation only. It does not claim physical FM-1 or DX7 hardware equivalence.
+          EOF
+          rm -f .github/workflows/fix-dx7-packed-operator-layout.yml
+      - name: Commit repair
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git commit -m 'fix(sysex): correct Yamaha packed operator layout'
+          git pull --rebase origin main
+          git push origin HEAD:main
