@@ -1,0 +1,114 @@
+name: Accept routed Virtual FM1 preview contract
+
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/upgrade-virtual-fm1-preview-route-v3.yml']
+
+permissions:
+  contents: write
+
+jobs:
+  integrate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - name: Execute staged routed-preview patch
+        shell: python
+        run: |
+          from pathlib import Path
+          workflow=Path('.github/workflows/upgrade-virtual-fm1-preview-route-v2.yml').read_text(encoding='utf-8').splitlines()
+          start=next(i for i,line in enumerate(workflow) if line.strip() == '- name: Apply routed preview upgrade with backwards-compatible props')
+          run=next(i for i in range(start+1,len(workflow)) if workflow[i].strip() == 'run: |')
+          lines=[]
+          for line in workflow[run+1:]:
+              if line.startswith('          '): lines.append(line[10:])
+              elif line.strip() == '': lines.append('')
+              else: break
+          exec(compile('\n'.join(lines),'staged-preview-patch','exec'),{})
+      - name: Replace stale static contract tests
+        run: |
+          cat > src/components/VirtualDx7PreviewPanel.test.tsx <<'EOF'
+          import { renderToStaticMarkup } from 'react-dom/server'
+          import { describe, expect, it, vi } from 'vitest'
+          import type { MsfaAudioWorkletController } from '../audio/msfaAudioWorklet'
+          import { createInitializedFxState } from '../domain/fx'
+          import { createInitializedVoice } from '../domain/voice'
+          import { VirtualDx7PreviewPanel } from './VirtualDx7PreviewPanel'
+
+          function unreachableController(): MsfaAudioWorkletController {
+            throw new Error('The local audio controller must not be created during render')
+          }
+
+          describe('VirtualDx7PreviewPanel / Virtual FM-1 target', () => {
+            it('keeps browser audio explicit and defaults to the dry limited route', () => {
+              const createController = vi.fn(unreachableController)
+              const markup = renderToStaticMarkup(
+                <VirtualDx7PreviewPanel
+                  createController={createController}
+                  fxState={createInitializedFxState()}
+                  voice={createInitializedVoice('LOCAL TEST')}
+                />,
+              )
+              expect(createController).not.toHaveBeenCalled()
+              expect(markup).toContain('Virtual FM-1 preview')
+              expect(markup).toContain('Enable local audio')
+              expect(markup).toContain('LOCAL AUDIO OFF')
+              expect(markup).toContain('Dry bypass')
+              expect(markup).toContain('Master gain')
+              expect(markup).toContain('-6 dB')
+              expect(markup).toContain('limiter -1 dB')
+              expect(markup).toContain('16 voices')
+              expect(markup).toContain('does not request Web MIDI')
+            })
+
+            it('retains local performance controls without activating hardware paths', () => {
+              const markup = renderToStaticMarkup(
+                <VirtualDx7PreviewPanel
+                  createController={unreachableController}
+                  fxState={createInitializedFxState()}
+                  voice={createInitializedVoice('NO MIDI')}
+                />,
+              )
+              expect(markup).toContain('Pitch-bend range')
+              expect(markup).toContain('Mod wheel range')
+              expect(markup).toContain('Aftertouch range')
+              expect(markup).toContain('Sustain')
+              expect(markup).toContain('Enable local audio to audition this voice without MIDI hardware.')
+              expect(markup).not.toContain('Connect and select a MIDI output to play.')
+            })
+          })
+          EOF
+      - run: npm install --no-audit --no-fund
+      - run: npm run audit:virtual-dx7
+      - run: npm run typecheck
+      - run: npm run lint
+      - run: npm test -- src/audio/msfaAudioWorklet.test.ts src/audio/virtualFm1OutputRoute.test.ts src/audio/fm1InspiredFxGraph.test.ts src/components/VirtualDx7PreviewPanel.test.tsx
+      - run: npm run test
+      - run: npm run build
+      - name: Persist accepted preview route
+        run: |
+          cat > docs/validation/virtual-fm1-preview-route-ui.md <<EOF
+          # Virtual FM-1 preview routed-output UI validation
+
+          Source commit: \`${GITHUB_SHA}\`
+
+          Overall software gate: **SUCCESS**
+
+          The existing local Voice preview now acts as the Virtual FM-1 target while retaining the audited DX7-compatible dry engine. Its default browser controller opts into the validated FM-1-inspired output route; injected/custom controllers remain unchanged.
+
+          Current semantic `Dx7Voice` and App `Fm1FxState` synchronize into the route. The panel exposes explicit dry/FX bypass, −48…+6 dB master gain and the accepted −1 dB/20:1 limiter; dry remains default. Catalog audition and sequencer local audio remain direct dry because they do not request the optional route.
+
+          Virtual-engine audit, typecheck, lint, focused preview/controller tests, full tests and production build passed. Measured diagnostics, browser offline WAV execution and shared-reference A/B still require integrated browser evidence before the overall preview item closes.
+          EOF
+          rm -f .github/workflows/upgrade-virtual-fm1-preview-route.yml .github/workflows/upgrade-virtual-fm1-preview-route-v2.yml .github/workflows/upgrade-virtual-fm1-preview-route-v3.yml
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add -A
+          git commit -m 'feat(audio): accept routed Virtual FM1 preview' || true
+          git pull --rebase origin main
+          git push origin HEAD:main
