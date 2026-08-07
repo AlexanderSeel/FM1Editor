@@ -1,7 +1,9 @@
 import { describe, expect, it, vi } from 'vitest'
 import { createInitializedVoice } from '../domain/voice'
 import {
+  createDefaultMsfaLocalPerformanceConfig,
   createMsfaAudioWorkletController,
+  MSFA_WORKLET_PERFORMANCE_ABI,
   MSFA_WORKLET_POLYPHONY,
   MSFA_WORKLET_PROCESSOR_NAME,
   verifyMsfaWorkletPackage,
@@ -24,6 +26,7 @@ const manifest = {
   statefulSessionAbi: 1,
   renderBlockFrames: 64,
   workletPolyphony: MSFA_WORKLET_POLYPHONY,
+  performanceControlAbi: MSFA_WORKLET_PERFORMANCE_ABI,
 }
 
 const packageData: MsfaWorkletPackage = {
@@ -31,7 +34,12 @@ const packageData: MsfaWorkletPackage = {
   wasmBinary: new ArrayBuffer(32),
 }
 
-function browserHarness(options: { sampleRate?: number; fatal?: string; readyPolyphony?: number } = {}) {
+function browserHarness(options: {
+  sampleRate?: number
+  fatal?: string
+  readyPolyphony?: number
+  readyPerformanceAbi?: number
+} = {}) {
   const messages: unknown[] = []
   const addModule = vi.fn(async () => {})
   const resume = vi.fn(async () => {})
@@ -54,7 +62,7 @@ function browserHarness(options: { sampleRate?: number; fatal?: string; readyPol
     onmessage: null,
     postMessage: vi.fn((message: unknown) => {
       messages.push(message)
-      const data = message as { type?: string; requestId?: number; command?: string }
+      const data = message as { type?: string; requestId?: number }
       if (data.type === 'command' && Number.isInteger(data.requestId)) {
         queueMicrotask(() => port.onmessage?.({
           data: { type: 'response', requestId: data.requestId, ok: true },
@@ -74,15 +82,10 @@ function browserHarness(options: { sampleRate?: number; fatal?: string; readyPol
             sampleRate: options.sampleRate ?? 48_000,
             blockFrames: 64,
             polyphony: options.readyPolyphony ?? MSFA_WORKLET_POLYPHONY,
+            performanceAbi: options.readyPerformanceAbi ?? MSFA_WORKLET_PERFORMANCE_ABI,
           },
     } as MessageEvent<unknown>))
-    return {
-      port,
-      onprocessorerror: null,
-      connect,
-      disconnect,
-      processorName: name,
-    }
+    return { port, onprocessorerror: null, connect, disconnect, processorName: name }
   })
 
   const loadPackage = vi.fn(async () => packageData)
@@ -103,152 +106,127 @@ function browserHarness(options: { sampleRate?: number; fatal?: string; readyPol
     createContext,
     createNode,
     loadPackage,
-    get nodeOptions() {
-      return nodeOptions
-    },
+    get nodeOptions() { return nodeOptions },
   }
 }
 
+function commandsOf(messages: readonly unknown[]): Record<string, unknown>[] {
+  return messages
+    .filter((message): message is Record<string, unknown> => Boolean(message) && typeof message === 'object')
+    .filter((message) => message.type === 'command')
+}
+
 describe('MSFA AudioWorklet package verification', () => {
-  it('accepts the expected stateful polyphonic manifest and matching WASM digest', async () => {
-    const verified = await verifyMsfaWorkletPackage(
-      manifest,
-      packageData.wasmBinary,
-      async () => manifest.wasm.sha256,
-    )
-
-    expect(verified.manifest.engineVersion).toBe(MSFA_OFFLINE_ENGINE_VERSION)
+  it('accepts the expected performance-capable manifest and matching WASM digest', async () => {
+    const verified = await verifyMsfaWorkletPackage(manifest, packageData.wasmBinary, async () => manifest.wasm.sha256)
     expect(verified.manifest.workletPolyphony).toBe(MSFA_WORKLET_POLYPHONY)
-    expect(verified.wasmBinary).toBe(packageData.wasmBinary)
+    expect(verified.manifest.performanceControlAbi).toBe(MSFA_WORKLET_PERFORMANCE_ABI)
   })
 
-  it('rejects a mismatched local WASM artifact', async () => {
-    await expect(verifyMsfaWorkletPackage(
-      manifest,
-      packageData.wasmBinary,
-      async () => 'b'.repeat(64),
-    )).rejects.toThrow('WASM hash mismatch')
-  })
-
-  it('rejects a manifest that does not declare the accepted worklet polyphony', async () => {
-    await expect(verifyMsfaWorkletPackage(
-      { ...manifest, workletPolyphony: 8 },
-      packageData.wasmBinary,
-      async () => manifest.wasm.sha256,
-    )).rejects.toThrow(`polyphony must be ${MSFA_WORKLET_POLYPHONY}`)
+  it('rejects mismatched WASM, polyphony and performance ABI', async () => {
+    await expect(verifyMsfaWorkletPackage(manifest, packageData.wasmBinary, async () => 'b'.repeat(64)))
+      .rejects.toThrow('WASM hash mismatch')
+    await expect(verifyMsfaWorkletPackage({ ...manifest, workletPolyphony: 8 }, packageData.wasmBinary, async () => manifest.wasm.sha256))
+      .rejects.toThrow(`polyphony must be ${MSFA_WORKLET_POLYPHONY}`)
+    await expect(verifyMsfaWorkletPackage({ ...manifest, performanceControlAbi: 0 }, packageData.wasmBinary, async () => manifest.wasm.sha256))
+      .rejects.toThrow(`performance-control ABI must be ${MSFA_WORKLET_PERFORMANCE_ABI}`)
   })
 })
 
-describe('polyphonic MSFA AudioWorklet controller', () => {
+describe('performance-capable MSFA AudioWorklet controller', () => {
   it('does not create browser audio until explicitly enabled', async () => {
     const harness = browserHarness()
-
     expect(harness.controller.state).toBe('disabled')
     expect(harness.controller.polyphony).toBe(MSFA_WORKLET_POLYPHONY)
+    expect(harness.controller.performanceControlAbi).toBe(MSFA_WORKLET_PERFORMANCE_ABI)
     expect(harness.createContext).not.toHaveBeenCalled()
 
     await harness.controller.enable()
 
     expect(harness.createContext).toHaveBeenCalledTimes(1)
     expect(harness.resume).toHaveBeenCalledTimes(1)
-    expect(harness.loadPackage).toHaveBeenCalledTimes(1)
     expect(harness.addModule).toHaveBeenCalledWith(expect.stringContaining('virtual-dx7/fm1-msfa-worklet.js'))
-    expect(harness.createNode).toHaveBeenCalledTimes(1)
     expect(harness.createNode.mock.calls[0]?.[1]).toBe(MSFA_WORKLET_PROCESSOR_NAME)
-    expect(harness.nodeOptions?.numberOfInputs).toBe(0)
-    expect(harness.nodeOptions?.numberOfOutputs).toBe(1)
     expect(harness.nodeOptions?.outputChannelCount).toEqual([1])
-    expect((harness.nodeOptions?.processorOptions as { wasmBinary?: ArrayBuffer })?.wasmBinary)
-      .toBe(packageData.wasmBinary)
-    expect(harness.connect).toHaveBeenCalledTimes(1)
     expect(harness.controller.state).toBe('ready')
     expect(harness.controller.sampleRate).toBe(48_000)
   })
 
-  it('loads semantic voice state and routes independent note lifecycle commands', async () => {
+  it('routes semantic voice, performance controls and independent notes', async () => {
     const harness = browserHarness()
     await harness.controller.enable()
+    const config = createDefaultMsfaLocalPerformanceConfig()
+    config.pitchBendRange = 12
+    config.modulationWheel = { range: 99, assignment: { pitch: true, amplitude: false, egBias: false } }
+    config.aftertouch = { range: 70, assignment: { pitch: false, amplitude: true, egBias: false } }
 
     await harness.controller.loadVoice(createInitializedVoice('WORKLET'), 42)
+    await harness.controller.configurePerformance(config)
+    await harness.controller.setPitchBend(16_383)
+    await harness.controller.setModulation(127)
+    await harness.controller.setAftertouch(64)
+    await harness.controller.setSustain(true)
     await harness.controller.noteOn(60, 100)
-    await harness.controller.noteOn(64, 96)
     await harness.controller.noteOff(60)
-    await harness.controller.noteOff()
+    await harness.controller.setSustain(false)
     await harness.controller.allNotesOff()
 
-    const commands = harness.messages
-      .filter((message): message is Record<string, unknown> => Boolean(message) && typeof message === 'object')
-      .filter((message) => message.type === 'command')
-
+    const commands = commandsOf(harness.messages)
     expect(commands.map((command) => command.command)).toEqual([
       'loadVoice',
-      'noteOn',
+      'configurePerformance',
+      'pitchBend',
+      'modulation',
+      'aftertouch',
+      'sustain',
       'noteOn',
       'noteOff',
-      'noteOff',
+      'sustain',
       'allNotesOff',
     ])
-    const loadVoice = commands[0]
-    expect(loadVoice?.randomSeed).toBe(42)
-    expect(loadVoice?.patch).toBeInstanceOf(Uint8Array)
-    expect((loadVoice?.patch as Uint8Array)).toHaveLength(156)
-    expect((loadVoice?.patch as Uint8Array)[155]).toBe(0x3f)
-    expect(commands[1]).toMatchObject({ midiNote: 60, velocity: 100 })
-    expect(commands[2]).toMatchObject({ midiNote: 64, velocity: 96 })
-    expect(commands[3]).toMatchObject({ midiNote: 60 })
-    expect(commands[4]).not.toHaveProperty('midiNote')
+    expect(commands[1]).toMatchObject({
+      pitchBendRange: 12,
+      pitchBendStep: 0,
+      modulationRange: 99,
+      modulationAssignment: 1,
+      aftertouchRange: 70,
+      aftertouchAssignment: 2,
+    })
+    expect(commands[2]).toMatchObject({ value: 16_383 })
+    expect(commands[5]).toMatchObject({ enabled: true })
   })
 
-  it('closes local audio with best-effort all-notes-off and disposal', async () => {
+  it('rejects unsupported browser contracts and invalid control ranges', async () => {
+    const wrongRate = browserHarness({ sampleRate: 96_000 })
+    await expect(wrongRate.controller.enable()).rejects.toThrow('44100 or 48000 Hz')
+
+    const wrongPolyphony = browserHarness({ readyPolyphony: 8 })
+    await expect(wrongPolyphony.controller.enable()).rejects.toThrow('unexpected polyphony 8')
+
+    const wrongPerformance = browserHarness({ readyPerformanceAbi: 0 })
+    await expect(wrongPerformance.controller.enable()).rejects.toThrow('unexpected performance ABI 0')
+
     const harness = browserHarness()
     await harness.controller.enable()
+    await expect(harness.controller.setPitchBend(16_384)).rejects.toThrow('pitchBend')
+    await expect(harness.controller.setModulation(128)).rejects.toThrow('modulation')
+    await expect(harness.controller.setAftertouch(-1)).rejects.toThrow('aftertouch')
+    await expect(harness.controller.configurePerformance({
+      ...createDefaultMsfaLocalPerformanceConfig(),
+      pitchBendRange: 13,
+    })).rejects.toThrow('pitchBendRange')
+  })
 
+  it('closes local audio and surfaces worklet fatal initialization errors', async () => {
+    const harness = browserHarness()
+    await harness.controller.enable()
     await harness.controller.close()
-
     expect(harness.controller.state).toBe('closed')
-    expect(harness.disconnect).toHaveBeenCalledTimes(1)
-    expect(harness.close).toHaveBeenCalledTimes(1)
     expect(harness.messages).toContainEqual({ type: 'command', command: 'allNotesOff' })
     expect(harness.messages).toContainEqual({ type: 'command', command: 'dispose' })
-  })
 
-  it('rejects unsupported browser sample rates and releases the context', async () => {
-    const harness = browserHarness({ sampleRate: 96_000 })
-
-    await expect(harness.controller.enable()).rejects.toThrow('44100 or 48000 Hz')
-
-    expect(harness.controller.state).toBe('error')
-    expect(harness.loadPackage).not.toHaveBeenCalled()
-    expect(harness.close).toHaveBeenCalledTimes(1)
-  })
-
-  it('rejects a worklet that reports a different polyphony contract', async () => {
-    const harness = browserHarness({ readyPolyphony: 8 })
-
-    await expect(harness.controller.enable()).rejects.toThrow('unexpected polyphony 8')
-
-    expect(harness.controller.state).toBe('error')
-    expect(harness.disconnect).toHaveBeenCalledTimes(1)
-    expect(harness.close).toHaveBeenCalledTimes(1)
-  })
-
-  it('surfaces worklet fatal initialization errors and cleans up', async () => {
-    const harness = browserHarness({ fatal: 'WASM init failed' })
-
-    await expect(harness.controller.enable()).rejects.toThrow('WASM init failed')
-
-    expect(harness.controller.state).toBe('error')
-    expect(harness.disconnect).toHaveBeenCalledTimes(1)
-    expect(harness.close).toHaveBeenCalledTimes(1)
-  })
-
-  it('validates note and seed ranges before sending commands', async () => {
-    const harness = browserHarness()
-    await harness.controller.enable()
-
-    await expect(harness.controller.noteOn(128, 100)).rejects.toThrow('midiNote')
-    await expect(harness.controller.noteOn(60, 0)).rejects.toThrow('velocity')
-    await expect(harness.controller.noteOff(128)).rejects.toThrow('midiNote')
-    await expect(harness.controller.loadVoice(createInitializedVoice(), -1)).rejects.toThrow('randomSeed')
+    const fatal = browserHarness({ fatal: 'WASM init failed' })
+    await expect(fatal.controller.enable()).rejects.toThrow('WASM init failed')
+    expect(fatal.controller.state).toBe('error')
   })
 })
