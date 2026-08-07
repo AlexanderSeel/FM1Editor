@@ -65,9 +65,9 @@ describe('legacy DX7 voice normalization', () => {
   it('records breakpoint 127 and detune 15 preserved in packed source bytes', () => {
     const packed = encodePackedVoice(createInitializedVoice('SOURCE RAW'))
     const op6BreakpointOffset = 8
-    const op6DetuneOffset = 16
+    const op6DetuneOffset = 12
     packed[op6BreakpointOffset] = 127
-    packed[op6DetuneOffset] = 0x3f
+    packed[op6DetuneOffset] = (15 << 3) | ((packed[op6DetuneOffset] ?? 0) & 0x07)
 
     const decoded = decodePackedVoice(packed)
     const result = normalizeLegacyVoiceWithReport(decoded)
