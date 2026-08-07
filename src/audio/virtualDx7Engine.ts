@@ -9,6 +9,7 @@ import type {
 export const VIRTUAL_DX7_RENDER_SCHEMA = 'fm1-editor.virtual-dx7-render-plan.v1' as const
 export const VIRTUAL_DX7_ENGINE_FAMILY = 'msfa-compatible' as const
 export const VIRTUAL_DX7_SAMPLE_RATES = [44_100, 48_000] as const
+export const VIRTUAL_DX7_RENDER_BLOCK_FRAMES = 64 as const
 
 export type VirtualDx7SampleRate = (typeof VIRTUAL_DX7_SAMPLE_RATES)[number]
 export type VirtualDx7SemanticVoice = Omit<Dx7Voice, 'name' | 'source'>
@@ -183,6 +184,12 @@ function fnv1a32(input: string): string {
   return (hash >>> 0).toString(16).padStart(8, '0')
 }
 
+function alignRenderFrames(seconds: number, sampleRate: VirtualDx7SampleRate): number {
+  if (seconds === 0) return 0
+  const requestedFrames = Math.ceil(seconds * sampleRate)
+  return Math.ceil(requestedFrames / VIRTUAL_DX7_RENDER_BLOCK_FRAMES) * VIRTUAL_DX7_RENDER_BLOCK_FRAMES
+}
+
 export function createVirtualDx7RenderPlan(request: VirtualDx7RenderRequest): VirtualDx7RenderPlan {
   if (!VIRTUAL_DX7_SAMPLE_RATES.some((sampleRate) => sampleRate === request.sampleRate)) {
     throw new RangeError('sampleRate must be 44100 or 48000')
@@ -194,8 +201,8 @@ export function createVirtualDx7RenderPlan(request: VirtualDx7RenderRequest): Vi
   const noteOnSeconds = secondsRange(request.noteOnSeconds, 0.01, 30, 'noteOnSeconds')
   const releaseSeconds = secondsRange(request.releaseSeconds, 0, 10, 'releaseSeconds')
   const voice = snapshotSemanticVoice(request.voice)
-  const noteOnFrames = Math.ceil(noteOnSeconds * request.sampleRate)
-  const releaseFrames = Math.ceil(releaseSeconds * request.sampleRate)
+  const noteOnFrames = alignRenderFrames(noteOnSeconds, request.sampleRate)
+  const releaseFrames = alignRenderFrames(releaseSeconds, request.sampleRate)
   const identity = {
     schema: VIRTUAL_DX7_RENDER_SCHEMA,
     engineFamily: VIRTUAL_DX7_ENGINE_FAMILY,
