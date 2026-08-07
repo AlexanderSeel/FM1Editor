@@ -42,7 +42,6 @@ export function LocalSequenceAudioPanel({
   const [status, setStatus] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
 
-  sequenceRef.current = sequence
   const internalClock = getSequenceClockMode(sequence) === 'internal'
 
   const noteTarget = useMemo<LocalSequenceNoteTarget>(() => ({

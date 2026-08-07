@@ -5,6 +5,7 @@ import { CollapsibleSection } from './components/CollapsibleSection'
 import { ConnectionPanel } from './components/ConnectionPanel'
 import { EffectsEditor } from './components/EffectsEditor'
 import { HistoryControls } from './components/HistoryControls'
+import { LocalSequenceAudioPanel } from './components/LocalSequenceAudioPanel'
 import { MidiMonitor } from './components/MidiMonitor'
 import { PatchCatalogBrowser } from './components/PatchCatalogBrowser'
 import { PatchLibrary } from './components/PatchLibrary'
@@ -419,7 +420,14 @@ export default function App() {
               ) : null}
               <PersistentWorkspace active={workspace === 'sequencer'}>
                 <CollapsibleSection
-                  description={`${sequence.length} steps · ${sequence.bpm} BPM · playback remains active across workspaces`}
+                  description="Explicit browser-local playback · semantic notes · no hardware MIDI transmission"
+                  storageKey="sequencer-local-audio"
+                  title="Local sequence audio"
+                >
+                  <LocalSequenceAudioPanel sequence={sequence} voice={voice} />
+                </CollapsibleSection>
+                <CollapsibleSection
+                  description={`${sequence.length} steps · ${sequence.bpm} BPM · hardware playback remains active across workspaces`}
                   storageKey="sequencer-editor"
                   title="Sequence editor"
                 >
