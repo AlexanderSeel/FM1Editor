@@ -1,5 +1,14 @@
 {
-  "ok": false,
+  "ok": true,
   "browserName": "chrome",
-  "error": "Timed out waiting for http://127.0.0.1:52879/json/version"
+  "browserProduct": "Chrome/151.0.7922.72",
+  "detectedPitchText": "441.00 Hzdetected pitch",
+  "baselineFetches": 0,
+  "errors": [],
+  "rejections": [],
+  "fetchesAfter": 0,
+  "privacy": true,
+  "shaVisible": true,
+  "manualPitchVisible": true,
+  "regionVisible": true
 }
