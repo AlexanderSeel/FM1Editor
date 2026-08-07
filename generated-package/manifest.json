@@ -1,0 +1,37 @@
+{
+  "schemaVersion": 1,
+  "engineId": "fm1-editor-msfa-compatible",
+  "engineVersion": "msfa-2e182b3-fm1-v3-stateful",
+  "label": "DX7-compatible dry renderer",
+  "licenseSpdx": "Apache-2.0",
+  "upstream": {
+    "repository": "https://github.com/asb2m10/dexed",
+    "commit": "2e182b3db85c09083ab13c8b9b00565ce7d9ff85"
+  },
+  "emscripten": {
+    "version": "4.0.7",
+    "imageDigest": "emscripten/emsdk@sha256:8acec700a48dbff5250afc1e3ee545b7c002b689043ee82c277de6481a237fd7"
+  },
+  "wasm": {
+    "path": "fm1-msfa.wasm",
+    "sha256": "5aa3d9ee7aae93ae6b8f95accd95c72339aa8c495147161659c5fa98a4b8b624"
+  },
+  "glue": {
+    "path": "fm1-msfa.mjs",
+    "sha256": "e695050a852735923a2387e0cb37f270795f8b3baf448602dc11d4d0751d14ef"
+  },
+  "acceptedReferencePcmSha256": "313be5ffcb29436e92ecce45b5e1002c72dd810c6999379844b82ce87a18cfc2",
+  "sourceManifestSha256": "e1ee6348bfadd41de6415a9fde80598deb978179055b75bf782d70d55473033c",
+  "apacheLicenseSha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30",
+  "limitations": [
+    "standard-12-TET only",
+    "dry engine only",
+    "polyphony is orchestrated in the AudioWorklet over validated stateful sessions",
+    "headless CI soak does not measure audible hardware dropouts",
+    "not physical-device validation"
+  ],
+  "statefulSessionAbi": 1,
+  "renderBlockFrames": 64,
+  "workletPolyphony": 16,
+  "performanceControlAbi": 1
+}

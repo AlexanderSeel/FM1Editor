@@ -1,0 +1,6 @@
+{
+  "wasmSha256": "5aa3d9ee7aae93ae6b8f95accd95c72339aa8c495147161659c5fa98a4b8b624",
+  "glueSha256": "e695050a852735923a2387e0cb37f270795f8b3baf448602dc11d4d0751d14ef",
+  "fixedPcmSha256": "313be5ffcb29436e92ecce45b5e1002c72dd810c6999379844b82ce87a18cfc2",
+  "performanceControlAbi": 1
+}
