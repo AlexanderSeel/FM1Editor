@@ -1,5 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
+  createExternalLocalSequencePlayer,
+  type ExternalLocalSequencePlayer,
+} from '../audio/externalLocalSequenceScheduler'
+import {
   createDefaultMsfaLocalPerformanceConfig,
   createMsfaAudioWorkletController,
   MSFA_WORKLET_POLYPHONY,
@@ -12,6 +16,7 @@ import {
 } from '../audio/localSequenceScheduler'
 import { getSequenceClockMode, type Fm1Sequence } from '../domain/sequence'
 import type { Dx7Voice } from '../domain/voice'
+import { subscribeMidiInputMessages } from '../midi/inputBus'
 
 interface LocalSequenceAudioPanelProps {
   sequence: Fm1Sequence
@@ -32,13 +37,17 @@ export function LocalSequenceAudioPanel({
 }: LocalSequenceAudioPanelProps) {
   const controllerRef = useRef<MsfaAudioWorkletController | null>(null)
   const playerRef = useRef<LocalSequencePlayer | null>(null)
+  const externalPlayerRef = useRef<ExternalLocalSequencePlayer | null>(null)
+  const externalUnsubscribeRef = useRef<(() => void) | null>(null)
   const loadedVoiceRef = useRef<Dx7Voice | null>(null)
   const sequenceRef = useRef(sequence)
   const [state, setState] = useState<LocalAudioState>('disabled')
   const [playing, setPlaying] = useState(false)
+  const [externalArmed, setExternalArmed] = useState(false)
   const [loop, setLoop] = useState(true)
   const [playhead, setPlayhead] = useState<number | null>(null)
   const [patternName, setPatternName] = useState<string | null>(null)
+  const [externalBpm, setExternalBpm] = useState<number | null>(null)
   const [status, setStatus] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
 
@@ -65,7 +74,13 @@ export function LocalSequenceAudioPanel({
   const stopLocalPlayback = useCallback((message?: string) => {
     playerRef.current?.stop()
     playerRef.current = null
+    externalUnsubscribeRef.current?.()
+    externalUnsubscribeRef.current = null
+    externalPlayerRef.current?.stop()
+    externalPlayerRef.current = null
     setPlaying(false)
+    setExternalArmed(false)
+    setExternalBpm(null)
     setPlayhead(null)
     setPatternName(null)
     if (message) setStatus(message)
@@ -133,28 +148,22 @@ export function LocalSequenceAudioPanel({
   useEffect(() => {
     if (sequenceRef.current === sequence) return
     sequenceRef.current = sequence
-    if (playing) stopLocalPlayback('Sequence changed; local playback stopped. Press Play local to use the updated sequence.')
-  }, [playing, sequence, stopLocalPlayback])
+    if (playing || externalArmed) stopLocalPlayback('Sequence changed; local playback stopped. Restart or re-arm local playback to use the updated sequence.')
+  }, [externalArmed, playing, sequence, stopLocalPlayback])
 
   useEffect(() => () => {
     playerRef.current?.stop()
     playerRef.current = null
+    externalUnsubscribeRef.current?.()
+    externalUnsubscribeRef.current = null
+    externalPlayerRef.current?.stop()
+    externalPlayerRef.current = null
     const controller = controllerRef.current
     controllerRef.current = null
     if (controller) void controller.close().catch(() => undefined)
   }, [])
 
-  const playLocal = () => {
-    setError(null)
-    if (state !== 'ready' || !controllerRef.current) {
-      setError('Enable local sequence audio before playback.')
-      return
-    }
-    if (!internalClock) {
-      setError('Local audio playback currently supports internal BPM clock only. Hardware external-clock playback remains separate.')
-      return
-    }
-
+  const playInternalLocal = () => {
     stopLocalPlayback()
     try {
       const player = createLocalSequencePlayer(noteTarget, sequence, {
@@ -190,6 +199,53 @@ export function LocalSequenceAudioPanel({
     }
   }
 
+  const armExternalLocal = () => {
+    stopLocalPlayback()
+    try {
+      const player = createExternalLocalSequencePlayer(noteTarget, sequence, {
+        onStep: (step) => {
+          setPlayhead(step.sourceStepIndex)
+          setPatternName(step.patternName)
+        },
+        onClock: (estimatedBpm) => setExternalBpm(estimatedBpm),
+        onTransport: (transport) => {
+          if (transport === 'started' || transport === 'continued') {
+            setPlaying(true)
+            setStatus(`External local clock ${transport}; sequence follows MIDI Clock.`)
+          } else {
+            setPlaying(false)
+            setPlayhead(null)
+            setPatternName(null)
+            setStatus('External MIDI Stop received; local notes released. Input-clock route remains armed.')
+          }
+        },
+        onError: (cause) => {
+          setPlaying(false)
+          setError(cause.message)
+        },
+      })
+      externalPlayerRef.current = player
+      externalUnsubscribeRef.current = subscribeMidiInputMessages((message) => {
+        player.handleMidiMessage(message.data, message.timestamp)
+      })
+      setExternalArmed(true)
+      setPlaying(false)
+      setStatus('External local clock armed. Waiting for MIDI Start/Continue and Clock from the selected input.')
+    } catch (cause) {
+      setError(messageOf(cause, 'External-clock local playback could not be armed.'))
+    }
+  }
+
+  const startLocal = () => {
+    setError(null)
+    if (state !== 'ready' || !controllerRef.current) {
+      setError('Enable local sequence audio before playback.')
+      return
+    }
+    if (internalClock) playInternalLocal()
+    else armExternalLocal()
+  }
+
   const ready = state === 'ready'
 
   return (
@@ -207,7 +263,13 @@ export function LocalSequenceAudioPanel({
             {ready ? 'LOCAL AUDIO READY' : state === 'enabling' ? 'STARTING…' : state === 'error' ? 'LOCAL AUDIO ERROR' : 'LOCAL AUDIO OFF'}
           </p>
           <p className="mt-1">{MSFA_WORKLET_POLYPHONY} voices · dry</p>
-          <p className={`mt-1 ${internalClock ? 'text-slate-500' : 'text-amber-200'}`}>{internalClock ? `Internal ${sequence.bpm} BPM` : 'External clock · hardware route only'}</p>
+          <p className="mt-1 text-slate-500">
+            {internalClock
+              ? `Internal ${sequence.bpm} BPM`
+              : externalArmed
+                ? `External input armed${externalBpm === null ? '' : ` · ${externalBpm.toFixed(1)} BPM`}`
+                : 'External MIDI input clock'}
+          </p>
         </div>
       </div>
 
@@ -219,12 +281,28 @@ export function LocalSequenceAudioPanel({
         ) : (
           <button className="rounded-xl border border-white/10 bg-white/5 px-4 py-2.5 text-sm font-bold text-slate-200" onClick={() => void disableLocalAudio()} type="button">Disable local audio</button>
         )}
-        <button className="rounded-xl bg-emerald-300 px-4 py-2.5 text-sm font-black text-slate-950 disabled:cursor-not-allowed disabled:opacity-40" disabled={!ready || !internalClock || playing} onClick={playLocal} type="button">▶ Play local</button>
-        <button className="rounded-xl bg-rose-300 px-4 py-2.5 text-sm font-black text-slate-950 disabled:cursor-not-allowed disabled:opacity-40" disabled={!ready || !playing} onClick={() => stopLocalPlayback('Local sequence playback stopped and all local notes released.')} type="button">■ Stop local</button>
-        <label className="ml-1 flex items-center gap-2 text-xs text-slate-400">
-          <input checked={loop} disabled={playing} onChange={(event) => setLoop(event.target.checked)} type="checkbox" />
-          Loop local playback
-        </label>
+        <button
+          className="rounded-xl bg-emerald-300 px-4 py-2.5 text-sm font-black text-slate-950 disabled:cursor-not-allowed disabled:opacity-40"
+          disabled={!ready || (internalClock ? playing : externalArmed)}
+          onClick={startLocal}
+          type="button"
+        >
+          {internalClock ? '▶ Play local' : '◎ Arm external local'}
+        </button>
+        <button
+          className="rounded-xl bg-rose-300 px-4 py-2.5 text-sm font-black text-slate-950 disabled:cursor-not-allowed disabled:opacity-40"
+          disabled={!ready || (!playing && !externalArmed)}
+          onClick={() => stopLocalPlayback('Local sequence playback stopped/disarmed and all local notes released.')}
+          type="button"
+        >
+          ■ Stop local
+        </button>
+        {internalClock && (
+          <label className="ml-1 flex items-center gap-2 text-xs text-slate-400">
+            <input checked={loop} disabled={playing} onChange={(event) => setLoop(event.target.checked)} type="checkbox" />
+            Loop local playback
+          </label>
+        )}
       </div>
 
       {(playhead !== null || patternName) && (
@@ -233,7 +311,7 @@ export function LocalSequenceAudioPanel({
       {(status || error) && <p aria-live="polite" className={`mt-3 text-xs ${error ? 'text-rose-300' : 'text-emerald-300'}`}>{error ?? status}</p>}
 
       <p className="mt-3 text-[11px] leading-5 text-slate-500">
-        Local scheduling uses semantic notes, chords, ties, gate, swing, direction and arrangement data. External MIDI clock remains on the hardware path until a separate local input-clock route is validated.
+        Local scheduling uses semantic notes, chords, ties, gate, swing, direction and arrangement data. In external mode only MIDI Start/Continue/Clock/Stop from the selected input drive the local scheduler; no sequence or transport data is sent to the hardware output.
       </p>
     </section>
   )
