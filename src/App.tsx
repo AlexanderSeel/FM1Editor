@@ -24,6 +24,7 @@ import {
 import { createInitializedFxState } from './domain/fx'
 import { createInitializedSequence } from './domain/sequence'
 import { createInitializedVoice, type Dx7Voice } from './domain/voice'
+import { useLocalVoiceAudition } from './hooks/useLocalVoiceAudition'
 import { useMidi } from './hooks/useMidi'
 import { usePatchLibrary } from './hooks/usePatchLibrary'
 import { useUndoableState } from './hooks/useUndoableState'
@@ -56,6 +57,7 @@ function browserStorage(): Storage | null {
 export default function App() {
   const [target, setTargetState] = useState<DeviceTarget>(() => readStoredDeviceTarget(browserStorage()))
   const midi = useMidi(target)
+  const { auditionVoice } = useLocalVoiceAudition()
   const patchLibrary = usePatchLibrary()
   const [workspace, setWorkspace] = useState<Workspace>('voice')
   const voiceHistory = useUndoableState(() => createInitializedVoice())
@@ -367,6 +369,7 @@ export default function App() {
                     title="Patch catalog"
                   >
                     <PatchCatalogBrowser
+                      onAuditionVoice={auditionVoice}
                       onImportToLibrary={patchLibrary.importVoices}
                       onLoadBank={loadCatalogBank}
                       onLoadVoice={loadCatalogVoice}
@@ -381,6 +384,7 @@ export default function App() {
                       currentVoice={voice}
                       error={patchLibrary.error}
                       loading={patchLibrary.loading}
+                      onAuditionVoice={auditionVoice}
                       onDelete={patchLibrary.remove}
                       onExportBackup={patchLibrary.exportBackup}
                       onLoad={loadCatalogVoice}
