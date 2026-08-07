@@ -40,10 +40,15 @@ enum SessionStatus {
     kSessionInvalidBlockAlignment = 6,
     kSessionInvalidVoiceByte = 7,
     kSessionInvalidOperatorMask = 8,
+    kSessionInvalidController = 9,
 };
 
 bool supportedSampleRate(int sampleRate) {
     return sampleRate == 44100 || sampleRate == 48000;
+}
+
+bool validRange(int value, int minimum, int maximum) {
+    return value >= minimum && value <= maximum;
 }
 
 void initializeMsfaTables(int sampleRate) {
@@ -54,6 +59,13 @@ void initializeMsfaTables(int sampleRate) {
     PitchEnv::init(sampleRate);
     Env::init_sr(sampleRate);
     Porta::init_sr(sampleRate);
+}
+
+void configureFmMod(FmMod &mod, int range, int assignment) {
+    mod.range = range;
+    mod.pitch = (assignment & 0x01) != 0;
+    mod.amp = (assignment & 0x02) != 0;
+    mod.eg = (assignment & 0x04) != 0;
 }
 
 void initializeControllers(Controllers &controllers, uint8_t operatorMask, FmCore *core) {
@@ -98,6 +110,7 @@ public:
         : sampleRate(requestedSampleRate), note(nullptr) {
         initializeMsfaTables(sampleRate);
         initializeControllers(controllers, 0x3f, &core);
+        applyPerformanceState();
         reconstructNote();
     }
 
@@ -116,10 +129,61 @@ public:
         std::memcpy(patch, source, kPatchLength);
         seed = randomSeed;
         initializeControllers(controllers, patch[kOperatorMaskOffset], &core);
+        applyPerformanceState();
         lfo.reset(patch + 137, seed);
         reconstructNote();
         hasPatch = true;
         noteActive = false;
+        return kSessionOk;
+    }
+
+    int configurePerformance(
+        int requestedPitchBendRange,
+        int requestedPitchBendStep,
+        int requestedModulationRange,
+        int requestedModulationAssignment,
+        int requestedAftertouchRange,
+        int requestedAftertouchAssignment
+    ) {
+        if (!validRange(requestedPitchBendRange, 0, 12)
+            || !validRange(requestedPitchBendStep, 0, 12)
+            || !validRange(requestedModulationRange, 0, 99)
+            || !validRange(requestedModulationAssignment, 0, 7)
+            || !validRange(requestedAftertouchRange, 0, 99)
+            || !validRange(requestedAftertouchAssignment, 0, 7)) {
+            return kSessionInvalidController;
+        }
+
+        pitchBendRange = requestedPitchBendRange;
+        pitchBendStep = requestedPitchBendStep;
+        modulationRange = requestedModulationRange;
+        modulationAssignment = requestedModulationAssignment;
+        aftertouchRange = requestedAftertouchRange;
+        aftertouchAssignment = requestedAftertouchAssignment;
+        applyPerformanceState();
+        return kSessionOk;
+    }
+
+    int setPitchBend(int value) {
+        if (!validRange(value, 0, 0x3fff)) return kSessionInvalidController;
+        pitchBendValue = value;
+        controllers.values_[kControllerPitch] = value;
+        return kSessionOk;
+    }
+
+    int setModulation(int value) {
+        if (!validRange(value, 0, 127)) return kSessionInvalidController;
+        modulationValue = value;
+        controllers.modwheel_cc = value;
+        controllers.refresh();
+        return kSessionOk;
+    }
+
+    int setAftertouch(int value) {
+        if (!validRange(value, 0, 127)) return kSessionInvalidController;
+        aftertouchValue = value;
+        controllers.aftertouch_cc = value;
+        controllers.refresh();
         return kSessionOk;
     }
 
@@ -156,8 +220,6 @@ public:
             return kSessionNoPatch;
         }
 
-        // Advance LFO state for every engine block, even while silent. This
-        // preserves a real free-running LFO when key sync is disabled.
         const int32_t lfoValue = lfo.getsample();
         const int32_t lfoDelay = lfo.getdelay();
         int32_t block[kBlockSize]{};
@@ -183,11 +245,32 @@ private:
     uint8_t patch[kPatchLength]{};
     bool hasPatch = false;
     bool noteActive = false;
+    int pitchBendValue = kPitchCenter;
+    int pitchBendRange = 3;
+    int pitchBendStep = 0;
+    int modulationValue = 0;
+    int modulationRange = 0;
+    int modulationAssignment = 0;
+    int aftertouchValue = 0;
+    int aftertouchRange = 0;
+    int aftertouchAssignment = 0;
     FmCore core;
     Controllers controllers;
     Lfo lfo;
     alignas(Dx7Note) unsigned char noteStorage[sizeof(Dx7Note)];
     Dx7Note *note;
+
+    void applyPerformanceState() {
+        controllers.values_[kControllerPitch] = pitchBendValue;
+        controllers.values_[kControllerPitchRangeUp] = pitchBendRange;
+        controllers.values_[kControllerPitchRangeDn] = pitchBendRange;
+        controllers.values_[kControllerPitchStep] = pitchBendStep;
+        configureFmMod(controllers.wheel, modulationRange, modulationAssignment);
+        configureFmMod(controllers.at, aftertouchRange, aftertouchAssignment);
+        controllers.modwheel_cc = modulationValue;
+        controllers.aftertouch_cc = aftertouchValue;
+        controllers.refresh();
+    }
 
     void destroyNote() {
         if (note != nullptr) {
@@ -282,6 +365,45 @@ FM1_EXPORT int fm1_msfa_session_load_patch(
     auto *session = sessionFromHandle(handle);
     if (session == nullptr) return kSessionInvalidPointer;
     return session->loadPatch(patch, patchLength, randomSeed);
+}
+
+FM1_EXPORT int fm1_msfa_session_configure_performance(
+    uintptr_t handle,
+    int pitchBendRange,
+    int pitchBendStep,
+    int modulationRange,
+    int modulationAssignment,
+    int aftertouchRange,
+    int aftertouchAssignment
+) {
+    auto *session = sessionFromHandle(handle);
+    if (session == nullptr) return kSessionInvalidPointer;
+    return session->configurePerformance(
+        pitchBendRange,
+        pitchBendStep,
+        modulationRange,
+        modulationAssignment,
+        aftertouchRange,
+        aftertouchAssignment
+    );
+}
+
+FM1_EXPORT int fm1_msfa_session_set_pitch_bend(uintptr_t handle, int value) {
+    auto *session = sessionFromHandle(handle);
+    if (session == nullptr) return kSessionInvalidPointer;
+    return session->setPitchBend(value);
+}
+
+FM1_EXPORT int fm1_msfa_session_set_modulation(uintptr_t handle, int value) {
+    auto *session = sessionFromHandle(handle);
+    if (session == nullptr) return kSessionInvalidPointer;
+    return session->setModulation(value);
+}
+
+FM1_EXPORT int fm1_msfa_session_set_aftertouch(uintptr_t handle, int value) {
+    auto *session = sessionFromHandle(handle);
+    if (session == nullptr) return kSessionInvalidPointer;
+    return session->setAftertouch(value);
 }
 
 FM1_EXPORT int fm1_msfa_session_note_on(uintptr_t handle, int midiNote, int velocity) {
