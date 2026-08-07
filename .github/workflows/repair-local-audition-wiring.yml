@@ -1,0 +1,74 @@
+name: Repair local audition app wiring
+
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/repair-local-audition-wiring.yml']
+
+permissions:
+  contents: write
+
+jobs:
+  repair:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Wire the shared local audition hook
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          app = Path('src/App.tsx')
+          text = app.read_text(encoding='utf-8')
+          midi_import = "import { useMidi } from './hooks/useMidi'\n"
+          audition_import = "import { useLocalVoiceAudition } from './hooks/useLocalVoiceAudition'\n"
+          if audition_import not in text:
+              text = text.replace(midi_import, midi_import + audition_import, 1)
+          midi_hook = "  const midi = useMidi(target)\n"
+          audition_hook = "  const { auditionVoice } = useLocalVoiceAudition()\n"
+          if audition_hook not in text:
+              text = text.replace(midi_hook, midi_hook + audition_hook, 1)
+          if 'onAuditionVoice={auditionVoice}' not in text:
+              text = text.replace(
+                  """                    <PatchCatalogBrowser
+                      onImportToLibrary={patchLibrary.importVoices}
+""",
+                  """                    <PatchCatalogBrowser
+                      onAuditionVoice={auditionVoice}
+                      onImportToLibrary={patchLibrary.importVoices}
+""",
+                  1,
+              )
+          if text.count('onAuditionVoice={auditionVoice}') < 2:
+              text = text.replace(
+                  """                    <PatchLibrary
+                      currentVoice={voice}
+""",
+                  """                    <PatchLibrary
+                      currentVoice={voice}
+                      onAuditionVoice={auditionVoice}
+""",
+                  1,
+              )
+          if text.count('onAuditionVoice={auditionVoice}') != 2:
+              raise SystemExit('Expected exactly two local audition callback bindings')
+          app.write_text(text, encoding='utf-8')
+          PY
+      - name: Typecheck repaired integration
+        run: |
+          npm install --no-audit --no-fund
+          npm run typecheck
+      - name: Commit repair and remove workflow
+        run: |
+          rm -f .github/workflows/repair-local-audition-wiring.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git commit -m 'fix(library): wire shared local audition in app'
+          git pull --rebase origin main
+          git push origin HEAD:main
