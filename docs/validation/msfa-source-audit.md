@@ -6,7 +6,9 @@ Pinned upstream: `asb2m10/dexed@2e182b3db85c09083ab13c8b9b00565ce7d9ff85`
 
 Machine-readable audit: [`../research/msfa-source-audit.json`](../research/msfa-source-audit.json)
 
-Verifier: [`../../scripts/verify-msfa-source-audit.mjs`](../../scripts/verify-msfa-source-audit.mjs)
+Local manifest/source verifier: [`../../scripts/verify-msfa-source-audit.mjs`](../../scripts/verify-msfa-source-audit.mjs)
+
+Pinned network audit: [`../../scripts/audit-msfa-upstream.mjs`](../../scripts/audit-msfa-upstream.mjs)
 
 ## Result
 
@@ -39,25 +41,46 @@ Three Apache-marked integration points require derived copies rather than blind 
 
 The audit currently records 23 candidate source/header files from `Source/msfa`, each pinned by its upstream Git blob SHA-1 and a file-level Apache-2.0 conclusion. The set contains the oscillator lookup tables, envelopes, LFO, FM operator kernel, FM core, pitch envelope, portamento and the narrowly patched note/controller integration needed by the feasibility renderer.
 
-SHA-256 fields intentionally remain empty while distribution status is `not-vendored`. The verifier can be pointed at an exact local checkout:
+SHA-256 fields intentionally remain empty while distribution status is `not-vendored`.
+
+A networked checkout can verify the exact pinned raw files and print SHA-256 values without retaining source:
+
+```bash
+npm run audit:virtual-dx7:upstream
+```
+
+After reviewing that output, the same command can explicitly update only the manifest hash fields:
+
+```bash
+npm run audit:virtual-dx7:upstream -- --write-hashes
+```
+
+The updater does not store MSFA source files. It fetches the exact commit paths, reconstructs and checks each Git blob SHA-1, checks the Apache header, computes SHA-256 and refuses mismatches before modifying the manifest.
+
+Once hashes are recorded, the verifier can be pointed at an exact local checkout:
 
 ```bash
 npm run audit:virtual-dx7 -- --source-root /path/to/dexed --require-hashes
 ```
 
-Before `--require-hashes` can pass, every candidate file must have its SHA-256 recorded from the exact pinned content. Any later derived file must retain its original Apache-2.0 header and separately record the derived-file hash.
+Any later derived file must retain its original Apache-2.0 header, document its modifications and separately record the derived-file hash.
 
 ## Automated guard
 
-`npm run audit:virtual-dx7` is part of the normal verification path and the read-only CI workflow. It currently checks the policy manifest itself. With `--source-root`, it additionally:
+`npm run audit:virtual-dx7` is part of the normal verification path and the read-only CI workflow. It checks the policy manifest without adding a network dependency to normal builds. With `--source-root`, it additionally:
 
 - reconstructs each Git blob identity and compares it with the pinned upstream blob SHA;
 - checks the Apache-2.0 header;
-- computes SHA-256 values;
+- computes and compares SHA-256 values;
+- rejects path traversal outside the supplied source root;
 - rejects undeclared forbidden dependency crossings;
 - refuses `copy-unmodified` status for files that contain forbidden GPL/JUCE/MTS/tuning includes.
 
-No workflow downloads or silently updates third-party synthesis source.
+`audit:virtual-dx7:upstream` is intentionally **not** part of normal CI or `release:verify`; it is an explicit provenance operation against a pinned external repository and cannot silently update hashes unless `--write-hashes` is supplied.
+
+## Execution evidence
+
+The connected execution container cannot resolve `github.com`, so the networked upstream audit was not run here and no SHA-256 values were invented. The connected GitHub API was used to inspect the pinned files and commit the policy/automation only. Full repository validation must come from GitHub Actions or a networked local checkout.
 
 ## Remaining gate before engine import
 
