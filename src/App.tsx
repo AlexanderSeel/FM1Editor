@@ -320,11 +320,11 @@ export default function App() {
                     </CollapsibleSection>
                   )}
                   <CollapsibleSection
-                    description="Audited dry DX7-compatible AudioWorklet · explicit browser-local enable · no MIDI hardware required"
+                    description="DX7-compatible AudioWorklet · FM-1-inspired FX/master/limiter · explicit browser-local enable · no MIDI hardware required"
                     storageKey="voice-local-virtual-preview"
-                    title="Local virtual preview"
+                    title="Virtual FM-1 preview"
                   >
-                    <VirtualDx7PreviewPanel voice={voice} />
+                    <VirtualDx7PreviewPanel fxState={effects} voice={voice} />
                   </CollapsibleSection>
                   <CollapsibleSection
                     defaultOpen={false}

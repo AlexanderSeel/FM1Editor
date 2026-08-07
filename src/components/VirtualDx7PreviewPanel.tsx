@@ -8,17 +8,21 @@ import {
   type MsfaLocalPerformanceConfig,
 } from '../audio/msfaAudioWorklet'
 import { MSFA_OFFLINE_ENGINE_VERSION } from '../audio/msfaOfflineEngine'
+import { createVirtualFm1OutputRoute, VIRTUAL_FM1_LIMITER, VIRTUAL_FM1_MASTER_GAIN_DEFAULT_DB, VIRTUAL_FM1_MASTER_GAIN_MAX_DB, VIRTUAL_FM1_MASTER_GAIN_MIN_DB, type VirtualFm1OutputRoute } from '../audio/virtualFm1OutputRoute'
 import type { Dx7ControllerAssignment } from '../domain/dx7FunctionState'
+import { createInitializedFxState, type Fm1FxState } from '../domain/fx'
 import type { Dx7Voice } from '../domain/voice'
 import { VirtualPiano, type VirtualPianoNoteTarget } from './VirtualPiano'
 
 interface VirtualDx7PreviewPanelProps {
   voice: Dx7Voice
+  fxState?: Fm1FxState
   createController?: () => MsfaAudioWorkletController
 }
 
 type PreviewState = 'disabled' | 'enabling' | 'ready' | 'error'
 type PerformanceController = 'modulationWheel' | 'aftertouch'
+const DEFAULT_VIRTUAL_FM1_FX_STATE = createInitializedFxState()
 
 function messageOf(cause: unknown, fallback: string): string {
   return cause instanceof Error ? cause.message : fallback
@@ -48,9 +52,14 @@ function assignmentLabel(mask: number): string {
 
 export function VirtualDx7PreviewPanel({
   voice,
-  createController = createMsfaAudioWorkletController,
+  fxState = DEFAULT_VIRTUAL_FM1_FX_STATE,
+  createController,
 }: VirtualDx7PreviewPanelProps) {
   const controllerRef = useRef<MsfaAudioWorkletController | null>(null)
+  const outputRouteRef = useRef<VirtualFm1OutputRoute | null>(null)
+  const fxStateRef = useRef(fxState)
+  const fxBypassedRef = useRef(true)
+  const masterGainDbRef = useRef<number>(VIRTUAL_FM1_MASTER_GAIN_DEFAULT_DB)
   const loadedVoiceRef = useRef<Dx7Voice | null>(null)
   const [state, setState] = useState<PreviewState>('disabled')
   const [velocity, setVelocity] = useState(105)
@@ -60,8 +69,25 @@ export function VirtualDx7PreviewPanel({
   const [modulation, setModulation] = useState(0)
   const [aftertouch, setAftertouch] = useState(0)
   const [sustain, setSustain] = useState(false)
+  const [fxBypassed, setFxBypassed] = useState(true)
+  const [masterGainDb, setMasterGainDb] = useState<number>(VIRTUAL_FM1_MASTER_GAIN_DEFAULT_DB)
   const [status, setStatus] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+
+  fxStateRef.current = fxState
+  fxBypassedRef.current = fxBypassed
+  masterGainDbRef.current = masterGainDb
+
+  const createPreviewController = useCallback(() => {
+    if (createController) return createController()
+    return createMsfaAudioWorkletController({
+      createOutputRoute: (context) => {
+        const route = createVirtualFm1OutputRoute(context, fxStateRef.current, { fxBypassed: fxBypassedRef.current, masterGainDb: masterGainDbRef.current })
+        outputRouteRef.current = route
+        return { destination: route.input, dispose() { if (outputRouteRef.current === route) outputRouteRef.current = null; route.dispose() } }
+      },
+    })
+  }, [createController])
 
   const closeController = useCallback(async () => {
     const controller = controllerRef.current
@@ -82,7 +108,7 @@ export function VirtualDx7PreviewPanel({
     setStatus(null)
     setError(null)
 
-    const controller = createController()
+    const controller = createPreviewController()
     controllerRef.current = controller
     try {
       await controller.enable()
@@ -94,13 +120,13 @@ export function VirtualDx7PreviewPanel({
       await controller.setSustain(sustain)
       loadedVoiceRef.current = voice
       setState('ready')
-      setStatus(`Local dry preview enabled at ${controller.sampleRate ?? 'browser'} Hz with ${controller.polyphony}-voice polyphony.`)
+      setStatus(`Virtual FM-1 preview enabled at ${controller.sampleRate ?? 'browser'} Hz · ${fxBypassedRef.current ? 'dry' : 'FM-1-inspired FX'} · ${controller.polyphony}-voice polyphony.`)
     } catch (cause) {
       await closeController()
       setState('error')
       setError(messageOf(cause, 'The local DX7-compatible preview could not be enabled.'))
     }
-  }, [aftertouch, closeController, createController, modulation, performance, pitchBend, state, sustain, voice])
+  }, [aftertouch, closeController, createPreviewController, modulation, performance, pitchBend, state, sustain, voice])
 
   const disableLocalAudio = useCallback(async () => {
     await closeController()
@@ -109,6 +135,10 @@ export function VirtualDx7PreviewPanel({
     setStatus('Local audio disabled.')
     setError(null)
   }, [closeController])
+
+  useEffect(() => { outputRouteRef.current?.setFxState(fxState) }, [fxState])
+  useEffect(() => { outputRouteRef.current?.setFxBypass(fxBypassed) }, [fxBypassed])
+  useEffect(() => { outputRouteRef.current?.setMasterGainDb(masterGainDb) }, [masterGainDb])
 
   useEffect(() => {
     const controller = controllerRef.current
@@ -149,7 +179,7 @@ export function VirtualDx7PreviewPanel({
   }, [])
 
   const noteTarget = useMemo<VirtualPianoNoteTarget>(() => ({
-    label: `local DX7-compatible dry audio · ${MSFA_WORKLET_POLYPHONY}-voice polyphony`,
+    label: `local ${fxBypassed ? 'DX7-compatible dry' : 'FM-1-inspired FX'} audio · ${MSFA_WORKLET_POLYPHONY}-voice polyphony`,
     async noteOn(note, noteVelocity) {
       const controller = controllerRef.current
       if (!controller || controller.state !== 'ready') {
@@ -167,7 +197,7 @@ export function VirtualDx7PreviewPanel({
       if (!controller || controller.state !== 'ready') return
       await controller.allNotesOff()
     },
-  }), [])
+  }), [fxBypassed])
 
   const runLiveControl = useCallback((action: (controller: MsfaAudioWorkletController) => Promise<void>) => {
     const controller = controllerRef.current
@@ -194,12 +224,12 @@ export function VirtualDx7PreviewPanel({
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
-            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-violet-300">Local DX7-compatible preview</p>
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-violet-300">Virtual FM-1 preview</p>
             <span className="rounded-full border border-emerald-300/20 bg-emerald-300/[0.07] px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.14em] text-emerald-200">Browser only</span>
           </div>
           <h3 className="mt-2 truncate text-lg font-bold text-white">{voice.name || 'UNTITLED'}</h3>
           <p className="mt-1 max-w-4xl text-xs leading-5 text-slate-400">
-            Audition the current semantic voice through the audited dry WebAssembly engine. Enabling this creates local browser audio only; it does not request Web MIDI, transmit SysEx or send anything to connected hardware.
+            Audition the current semantic voice through the audited DX7-compatible engine, optionally routed through the FM-1-inspired software FX approximation. Local audio never requests Web MIDI, transmits SysEx or sends anything to connected hardware.
           </p>
         </div>
         <div className="text-right text-xs text-slate-500">
@@ -207,7 +237,8 @@ export function VirtualDx7PreviewPanel({
             {ready ? 'LOCAL AUDIO READY' : state === 'enabling' ? 'STARTING AUDIO…' : state === 'error' ? 'LOCAL AUDIO ERROR' : 'LOCAL AUDIO OFF'}
           </p>
           <p className="mt-1">{MSFA_OFFLINE_ENGINE_VERSION}</p>
-          <p className="mt-1">Dry · 12-TET · {MSFA_WORKLET_POLYPHONY} voices · performance ABI {MSFA_WORKLET_PERFORMANCE_ABI}</p>
+          <p className="mt-1">{fxBypassed ? 'Dry' : 'FM-1-inspired FX'} · {masterGainDb} dB · limiter {VIRTUAL_FM1_LIMITER.thresholdDb} dB · {MSFA_WORKLET_POLYPHONY} voices</p>
+          <p className="mt-1">12-TET · performance ABI {MSFA_WORKLET_PERFORMANCE_ABI}</p>
         </div>
       </div>
 
@@ -224,6 +255,8 @@ export function VirtualDx7PreviewPanel({
             {[1, 2, 3, 4, 5, 6].map((octave) => <option key={octave} value={octave}>C{octave}</option>)}
           </select>
         </div>
+        <div className="grid gap-1.5 text-xs text-slate-400"><span className="font-semibold uppercase tracking-[0.12em]">Output</span><button className={`rounded-xl px-3 py-2.5 text-sm font-bold ${fxBypassed ? 'border border-white/10 bg-white/5 text-slate-200' : 'bg-cyan-300 text-slate-950'}`} onClick={() => setFxBypassed((current) => !current)} type="button">{fxBypassed ? 'Dry bypass' : 'FX enabled'}</button></div>
+        <div className="grid min-w-[190px] flex-1 gap-1.5 text-xs text-slate-400"><label className="flex justify-between font-semibold uppercase tracking-[0.12em]" htmlFor="virtual-fm1-master-gain"><span>Master gain</span><strong className="text-cyan-200">{masterGainDb} dB</strong></label><input id="virtual-fm1-master-gain" max={VIRTUAL_FM1_MASTER_GAIN_MAX_DB} min={VIRTUAL_FM1_MASTER_GAIN_MIN_DB} onChange={(event) => setMasterGainDb(Number(event.target.value))} step={1} type="range" value={masterGainDb} /></div>
         {!ready ? (
           <button className="rounded-xl bg-violet-300 px-4 py-2.5 text-sm font-black text-slate-950 hover:bg-violet-200 disabled:cursor-not-allowed disabled:opacity-40" disabled={state === 'enabling'} onClick={() => void enableLocalAudio()} type="button">
             {state === 'enabling' ? 'Enabling local audio…' : state === 'error' ? 'Retry local audio' : 'Enable local audio'}
