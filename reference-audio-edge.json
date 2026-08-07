@@ -1,5 +1,14 @@
 {
-  "ok": false,
+  "ok": true,
   "browserName": "edge",
-  "error": "Expected a resolved A4-range detected pitch, got 109.98 Hzdetected pitch"
+  "browserProduct": "Edg/151.0.4129.59",
+  "detectedPitchText": "441.00 Hzdetected pitch",
+  "baselineFetches": 0,
+  "errors": [],
+  "rejections": [],
+  "fetchesAfter": 0,
+  "privacy": true,
+  "shaVisible": true,
+  "manualPitchVisible": true,
+  "regionVisible": true
 }

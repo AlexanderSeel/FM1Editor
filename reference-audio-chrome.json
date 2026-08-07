@@ -1,5 +1,5 @@
 {
   "ok": false,
   "browserName": "chrome",
-  "error": "Expected a resolved A4-range detected pitch, got 109.98 Hzdetected pitch"
+  "error": "Timed out waiting for http://127.0.0.1:52879/json/version"
 }
