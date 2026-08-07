@@ -14,6 +14,10 @@
  * limitations under the License.
  */
 
+// Modified by the FM1 Editor project on 2026-08-07.
+// Initialize free-running phase/delay state deterministically and seed sample-and-hold from the render-plan seed.
+// See third_party/msfa/NOTICE.md for provenance and the complete modification record.
+
 // Low frequency oscillator, compatible with DX7
 
 #include "synth.h"
@@ -57,7 +61,15 @@ void Lfo::init(double sample_rate) {
     Lfo::lforatio_ = ratio / sample_rate;
 }
 
-void Lfo::reset(const uint8_t params[6]) {
+void Lfo::reset(const uint8_t params[6], uint32_t seed) {
+    // Offline rendering requires a defined lifecycle even when DX7 LFO key
+    // sync is disabled. Start free-running phase from a documented zero phase
+    // and seed only the sample-and-hold generator from the render-plan seed.
+    phase_ = 0;
+    delaystate_ = 0;
+    uint32_t mixedSeed = seed ^ (seed >> 8) ^ (seed >> 16) ^ (seed >> 24);
+    randstate_ = static_cast<uint8_t>(mixedSeed & 0xff);
+
     int rate = params[0];  // 0..99
     delta_ = lfoSource[rate] * lforatio_;
     int a = 99 - params[1];  // LFO delay

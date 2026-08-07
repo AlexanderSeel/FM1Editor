@@ -14,13 +14,17 @@
  * limitations under the License.
  */
 
+// Modified by the FM1 Editor project on 2026-08-07.
+// Extended the private reset contract with an explicit render-plan seed for deterministic offline lifecycle.
+// See third_party/msfa/NOTICE.md for provenance and the complete modification record.
+
 // Low frequency oscillator, compatible with DX7
 
 class Lfo {
 public:
     static void init(double sample_rate);
 
-    void reset(const uint8_t params[6]);
+    void reset(const uint8_t params[6], uint32_t seed);
 
     // result is 0..1 in Q24
     int32_t getsample();

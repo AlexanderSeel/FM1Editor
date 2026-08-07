@@ -191,20 +191,20 @@
       "upstreamPath": "Source/msfa/lfo.h",
       "upstreamBlobSha1": "288857dd1b0d82cc510679872055daa3a075e8a3",
       "upstreamSha256": "d21527675911a53f6d05b0c1ece3eeb08b906ae4513c36a8e2de02d628934ec4",
-      "derivedSha256": "d21527675911a53f6d05b0c1ece3eeb08b906ae4513c36a8e2de02d628934ec4",
+      "derivedSha256": "f4a917cd26bac77d6db09cdc76710b819f1c1eed71233ef0f469f20a51221f2b",
       "licenseSpdx": "Apache-2.0",
-      "modified": false,
-      "modification": null
+      "modified": true,
+      "modification": "Extended the private reset contract with an explicit render-plan seed for deterministic offline lifecycle."
     },
     {
       "path": "src/lfo.cc",
       "upstreamPath": "Source/msfa/lfo.cc",
       "upstreamBlobSha1": "1a4311c645b66fc7653378e2021ce455a1efc5bd",
       "upstreamSha256": "63a4da54b7a9d6161f355ac3a4a293e21c63e1295ca43c8fe1fcd586fe529729",
-      "derivedSha256": "63a4da54b7a9d6161f355ac3a4a293e21c63e1295ca43c8fe1fcd586fe529729",
+      "derivedSha256": "f6e4275ccb4c65b7af6fdc86a56ae05b40dacdfc41c7ad935c03d2b0ee95cc0c",
       "licenseSpdx": "Apache-2.0",
-      "modified": false,
-      "modification": null
+      "modified": true,
+      "modification": "Initialize free-running phase/delay state deterministically and seed sample-and-hold from the render-plan seed."
     },
     {
       "path": "src/porta.h",

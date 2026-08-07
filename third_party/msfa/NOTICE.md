@@ -2,7 +2,7 @@
 
 This package contains a narrowly selected and modified subset of the MSFA sound engine as present in `asb2m10/dexed` commit `2e182b3db85c09083ab13c8b9b00565ce7d9ff85`.
 
-The included MSFA source files retain their original copyright and Apache-2.0 headers. Five derived files carry prominent FM1 Editor modification notices. The exact upstream and derived hashes and modifications are recorded in `manifest.json`.
+The included MSFA source files retain their original copyright and Apache-2.0 headers. Seven derived files carry prominent FM1 Editor modification notices, including deterministic LFO phase and sample-and-hold seed initialization. The exact upstream and derived hashes and modifications are recorded in `manifest.json`.
 
 FM1 Editor excludes the complete Dexed GPL-3.0 application/plugin wrapper, JUCE, MTS-ESP, the external tuning library, Dexed effects/UI/assets/cartridges and third-party patch banks from this package. The browser engine is standard-12-TET only at this stage.
 
