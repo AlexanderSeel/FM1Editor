@@ -2,5 +2,5 @@
   "ok": false,
   "browserName": "chrome",
   "requestedSoakSeconds": 20,
-  "error": "Error: URL is not defined\n    at node.port.onmessage (http://127.0.0.1:50695/__msfa-worklet-smoke.html:80:23)"
+  "error": "Error: MSFA render64 failed with status 2\n    at node.port.onmessage (http://127.0.0.1:53013/__msfa-worklet-smoke.html:80:23)"
 }
