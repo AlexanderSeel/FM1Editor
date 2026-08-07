@@ -1,0 +1,81 @@
+name: Diagnose generated MSFA performance package software gate
+
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/diagnose-msfa-performance-software.yml']
+
+permissions:
+  contents: write
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Build generated overlay
+        run: |
+          mkdir -p .tmp/source/msfa .tmp/out
+          cp -R third_party/msfa/src/. .tmp/source/msfa/
+          docker run --rm -v "$PWD:/repo" -w /repo \
+            emscripten/emsdk@sha256:8acec700a48dbff5250afc1e3ee545b7c002b689043ee82c277de6481a237fd7 \
+            bash -lc 'bash scripts/build-msfa-spike.sh /repo/.tmp/source /repo/.tmp/out wasm'
+          cp .tmp/out/fm1-msfa.mjs public/virtual-dx7/fm1-msfa.mjs
+          cp .tmp/out/fm1-msfa.wasm public/virtual-dx7/fm1-msfa.wasm
+          python - <<'PY'
+          import hashlib,json
+          from pathlib import Path
+          p=Path('public/virtual-dx7/manifest.json'); d=json.loads(p.read_text())
+          d['wasm']['sha256']=hashlib.sha256(Path('public/virtual-dx7/fm1-msfa.wasm').read_bytes()).hexdigest()
+          d['glue']['sha256']=hashlib.sha256(Path('public/virtual-dx7/fm1-msfa.mjs').read_bytes()).hexdigest()
+          d['performanceControlAbi']=1
+          p.write_text(json.dumps(d,indent=2)+'\n')
+          PY
+      - name: Run diagnostic software stages
+        shell: bash
+        run: |
+          set +e
+          : > .tmp/software.log
+          run_stage() {
+            echo >> .tmp/software.log
+            echo "## $1" >> .tmp/software.log
+            shift
+            "$@" >> .tmp/software.log 2>&1
+            echo "RC=$?" >> .tmp/software.log
+          }
+          run_stage INSTALL npm install --no-audit --no-fund
+          run_stage AUDIT npm run audit:virtual-dx7
+          run_stage NODE_CHECK node --check scripts/test-msfa-audioworklet-browser.mjs
+          run_stage TYPECHECK npm run typecheck
+          run_stage LINT npm run lint
+          run_stage TEST npm run test
+          run_stage BUILD npm run build
+          cat .tmp/software.log
+      - name: Record diagnostic and self-clean
+        run: |
+          python - <<'PY'
+          import os
+          from pathlib import Path
+          log=Path('.tmp/software.log').read_text(encoding='utf-8',errors='replace')
+          Path('docs/validation/msfa-performance-software-diagnostic.md').write_text('\n'.join([
+            '# MSFA generated performance package software diagnostic','',
+            f"Diagnostic source commit: `{os.environ['GITHUB_SHA']}`",'',
+            '```text',log[-40000:],'```','',
+            'This diagnostic does not publish generated artifacts or establish browser acceptance.'
+          ])+'\n',encoding='utf-8')
+          Path('.github/workflows/diagnose-msfa-performance-software.yml').unlink(missing_ok=True)
+          PY
+      - name: Commit diagnostic and cleanup
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git diff --cached --quiet || git commit -m 'test(ci): record performance software diagnostic'
+          git pull --rebase origin main
+          git push origin HEAD:main
