@@ -1,0 +1,5 @@
+{
+  "ok": false,
+  "browserName": "chromium",
+  "error": "Timed out waiting for browser condition: document.body.textContent.includes('Loaded') && document.body.textContent.includes('ROM1A')"
+}
