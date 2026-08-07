@@ -1,0 +1,121 @@
+name: Validate MSFA AudioWorklet ten-minute soak
+
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/validate-msfa-worklet-soak.yml']
+
+permissions:
+  contents: write
+
+concurrency:
+  group: validate-msfa-worklet-soak
+  cancel-in-progress: false
+
+jobs:
+  software:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm install --no-audit --no-fund
+      - run: npm run audit:virtual-dx7
+      - run: npm run typecheck
+      - run: npm run lint
+      - run: npm run test
+      - run: npm run build
+
+  browser:
+    name: ${{ matrix.browser }} 600-second soak
+    runs-on: windows-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        browser: [chrome, edge]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Execute ten-minute real AudioWorklet soak
+        continue-on-error: true
+        shell: pwsh
+        env:
+          BROWSER_NAME: ${{ matrix.browser }}
+        run: |
+          if ($env:BROWSER_NAME -eq 'chrome') {
+            $candidates = @("$env:ProgramFiles\Google\Chrome\Application\chrome.exe", "${env:ProgramFiles(x86)}\Google\Chrome\Application\chrome.exe")
+          } else {
+            $candidates = @("$env:ProgramFiles\Microsoft\Edge\Application\msedge.exe", "${env:ProgramFiles(x86)}\Microsoft\Edge\Application\msedge.exe")
+          }
+          $browser = $candidates | Where-Object { Test-Path $_ } | Select-Object -First 1
+          $result = "browser-soak-$env:BROWSER_NAME.json"
+          if (-not $browser) {
+            @{ ok = $false; browserName = $env:BROWSER_NAME; requestedSoakSeconds = 600; error = 'Installed browser executable was not found on windows-latest' } | ConvertTo-Json | Set-Content -Encoding utf8 $result
+            exit 1
+          }
+          node scripts/test-msfa-audioworklet-browser.mjs --browser-executable "$browser" --browser-name "$env:BROWSER_NAME" --soak-seconds 600 --result "$result"
+      - name: Upload soak result
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: browser-soak-${{ matrix.browser }}
+          path: browser-soak-${{ matrix.browser }}.json
+          if-no-files-found: error
+
+  record:
+    if: always()
+    needs: [software, browser]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: browser-soak-*
+          path: browser-results
+          merge-multiple: true
+      - name: Record ten-minute receipt and self-clean
+        env:
+          SOFTWARE_RESULT: ${{ needs.software.result }}
+        shell: bash
+        run: |
+          python - <<'PY'
+          import json, os
+          from pathlib import Path
+          root=Path('browser-results'); results=[]
+          for name in ['chrome','edge']:
+              p=root/f'browser-soak-{name}.json'
+              if p.exists():
+                  try: d=json.loads(p.read_text(encoding='utf-8-sig'))
+                  except Exception as exc: d={'ok':False,'browserName':name,'error':f'invalid result: {exc}'}
+              else: d={'ok':False,'browserName':name,'error':'result artifact missing'}
+              duration=d.get('durationMs')
+              d['tenMinuteDurationSatisfied']=isinstance(duration,(int,float)) and duration >= 600000
+              results.append(d)
+          software_ok=os.environ.get('SOFTWARE_RESULT')=='success'
+          browser_ok=all(bool(d.get('ok')) and bool(d.get('tenMinuteDurationSatisfied')) for d in results)
+          ok=software_ok and browser_ok
+          lines=['# MSFA AudioWorklet ten-minute Chrome/Edge soak','',f"Validated source commit: `{os.environ['GITHUB_SHA']}`",'',f"Overall real-time gate: **{'SUCCESS' if ok else 'FAILED'}**",'',f"- Same-commit software suite: **{'SUCCESS' if software_ok else os.environ.get('SOFTWARE_RESULT','UNKNOWN').upper()}**",'', '| Browser | Result | Version | Sample rate | Duration | Cycles | Peak | Processor errors | Suspensions |','| --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: |']
+          for d in results:
+              success=bool(d.get('ok')) and bool(d.get('tenMinuteDurationSatisfied'))
+              lines.append(f"| {d.get('browserName','?')} | **{'SUCCESS' if success else 'FAILURE'}** | {d.get('browserProduct','n/a')} | {d.get('sampleRate','n/a')} | {d.get('durationMs','n/a')} ms | {d.get('cycles','n/a')} | {d.get('maxPeak','n/a')} | {d.get('processorErrors','n/a')} | {d.get('suspendedObservations','n/a')} |")
+          lines += ['', '## Acceptance scope','', '- Executes the actual packaged `msfa-2e182b3-fm1-v3-stateful` WASM in installed branded Chrome and Edge AudioWorklets on Windows GitHub-hosted runners for at least ten minutes per browser.', '- Continuously cycles note-on, release and all-notes-off through the repository-owned synthetic voice while checking analyser PCM for finite/non-silent output and clean return to silence.', '- Requires zero `onprocessorerror`, zero window errors, zero unhandled rejections and no unresolved AudioContext suspension.', '- The CI audio device is headless/muted. No browser API exposes a hardware underrun counter here, so dropout evidence is limited to processor errors, context suspension and graph-output observations; audible physical-device dropout quality is not claimed.', '- No Web MIDI, SysEx, FM-1 effects or physical Yamaha/M-VAVE hardware behavior is part of this gate.']
+          for d in results: lines += ['',f"## {d.get('browserName','browser')}",'```json',json.dumps(d,indent=2),'```']
+          Path('docs/validation/msfa-audioworklet-ten-minute-soak.md').write_text('\n'.join(lines)+'\n',encoding='utf-8')
+          Path('.github/workflows/validate-msfa-worklet-soak.yml').unlink(missing_ok=True)
+          PY
+      - name: Commit receipt and cleanup
+        shell: bash
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git diff --cached --quiet || git commit -m 'test(ci): record ten-minute AudioWorklet soak'
+          git pull --rebase origin main
+          git push origin HEAD:main
