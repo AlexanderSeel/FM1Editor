@@ -1,6 +1,6 @@
 # MSFA performance-control ABI validation
 
-Validated source/workflow commit: `3afdbbc82810a40a08d1b4e89d9999516512ade0`
+Validated source/workflow commit: `687a13a1fdaa27e6f1ef60615b99472cfd27cc3f`
 
 Overall performance-control gate: **FAILED**
 
