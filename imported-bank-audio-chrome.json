@@ -1,5 +1,14 @@
 {
-  "ok": false,
+  "ok": true,
   "browserName": "chrome",
-  "error": "Timed out waiting for http://127.0.0.1:56855/json/version: TypeError: fetch failed"
+  "browserProduct": "Chrome/151.0.7922.72",
+  "loadedVoiceTitle": "BRASS   1",
+  "loadedVoicePeak": 0.479583740234375,
+  "catalogAuditionPeak": 0.420928955078125,
+  "savedAuditionPeak": 0.478668212890625,
+  "errors": [],
+  "rejections": [],
+  "midiRequests": 0,
+  "workletNodeCount": 3,
+  "finalVoiceTitle": "BRASS   1"
 }

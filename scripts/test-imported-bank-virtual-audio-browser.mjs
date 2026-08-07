@@ -265,10 +265,10 @@ try {
     if (!button) return false; button.click(); return true;
   })()`)
   if (!loaded) throw new Error('Could not load the ROM1A-filtered bank')
-  await waitForExpression(cdp, `(document.querySelector('.fm1-lcd-title')?.textContent ?? '').replace(/\s+/g, ' ').includes('BRASS 1')`, 30_000)
+  await waitForExpression(cdp, `(document.querySelector('.fm1-lcd-title')?.textContent ?? '').split(' ').filter(Boolean).join(' ').includes('BRASS 1')`, 30_000)
 
   await clickButton(cdp, 'Voice')
-  await waitForExpression(cdp, `(document.querySelector('.fm1-lcd-title')?.textContent ?? '').replace(/\s+/g, ' ').includes('BRASS 1')`, 10_000)
+  await waitForExpression(cdp, `(document.querySelector('.fm1-lcd-title')?.textContent ?? '').split(' ').filter(Boolean).join(' ').includes('BRASS 1')`, 10_000)
   const loadedVoiceTitle = await evaluate(cdp, `document.querySelector('.fm1-lcd-title')?.textContent?.trim() ?? ''`)
 
   await clickButton(cdp, 'Enable local audio')
@@ -302,7 +302,7 @@ try {
   if (!catalogAuditionClicked) throw new Error('Could not start catalog audition')
   await waitForExpression(cdp, `window.__fm1ImportedBankNodes.length >= 2`, 15_000)
   await attachAnalyser(cdp, 1, '__fm1CatalogAuditionAnalyser')
-  await waitForExpression(cdp, `(document.body.textContent ?? '').replace(/\s+/g, ' ').includes('Auditioning BRASS 1') || (document.body.textContent ?? '').replace(/\s+/g, ' ').includes('Local audition: BRASS 1')`, 15_000)
+  await waitForExpression(cdp, `[...document.querySelectorAll('p')].some((node) => (node.textContent ?? '').includes('Auditioning') && (node.textContent ?? '').includes('BRASS') && (node.textContent ?? '').includes('1'))`, 15_000)
   const catalogAuditionPeak = await samplePeak(cdp, '__fm1CatalogAuditionAnalyser', 600)
   if (!(catalogAuditionPeak > 1e-5)) throw new Error(`Catalog audition produced no measurable PCM: ${catalogAuditionPeak}`)
   await sleep(2_100)

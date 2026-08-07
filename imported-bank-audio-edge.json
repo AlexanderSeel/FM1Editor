@@ -1,5 +1,14 @@
 {
-  "ok": false,
+  "ok": true,
   "browserName": "edge",
-  "error": "Timed out waiting for browser condition: (document.querySelector('.fm1-lcd-title')?.textContent ?? '').replace(/s+/g, ' ').includes('BRASS 1')"
+  "browserProduct": "Edg/151.0.4129.59",
+  "loadedVoiceTitle": "BRASS   1",
+  "loadedVoicePeak": 0.479400634765625,
+  "catalogAuditionPeak": 0.478668212890625,
+  "savedAuditionPeak": 0.472259521484375,
+  "errors": [],
+  "rejections": [],
+  "midiRequests": 0,
+  "workletNodeCount": 3,
+  "finalVoiceTitle": "BRASS   1"
 }
