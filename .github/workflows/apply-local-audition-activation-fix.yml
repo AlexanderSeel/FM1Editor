@@ -1,0 +1,155 @@
+name: Integrate local audition activation fix
+
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/apply-local-audition-activation-fix.yml']
+
+permissions:
+  contents: write
+
+concurrency:
+  group: integrate-local-audition-activation-fix
+  cancel-in-progress: false
+
+jobs:
+  integrate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Wire user-gesture preparation into catalog and library audition
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          app=Path('src/App.tsx')
+          text=app.read_text(encoding='utf-8')
+          text=text.replace(
+              'const { auditionVoice } = useLocalVoiceAudition()',
+              'const { auditionVoice, prepareAudition } = useLocalVoiceAudition()',
+              1,
+          )
+          text=text.replace(
+              '<PatchCatalogBrowser\n                      onAuditionVoice={auditionVoice}',
+              '<PatchCatalogBrowser\n                      onPrepareAudition={prepareAudition}\n                      onAuditionVoice={auditionVoice}',
+              1,
+          )
+          text=text.replace(
+              '<PatchLibrary\n                      currentVoice={voice}\n                      onAuditionVoice={auditionVoice}',
+              '<PatchLibrary\n                      currentVoice={voice}\n                      onPrepareAudition={prepareAudition}\n                      onAuditionVoice={auditionVoice}',
+              1,
+          )
+          if 'onPrepareAudition={prepareAudition}' not in text or text.count('onPrepareAudition={prepareAudition}') != 2:
+              raise SystemExit('App audition preparation wiring did not resolve exactly twice')
+          app.write_text(text,encoding='utf-8')
+
+          catalog=Path('src/components/PatchCatalogBrowser.tsx')
+          text=catalog.read_text(encoding='utf-8')
+          text=text.replace(
+              '  onAuditionVoice: (voice: Dx7Voice) => Promise<void>\n',
+              '  onPrepareAudition: () => Promise<void>\n  onAuditionVoice: (voice: Dx7Voice) => Promise<void>\n',
+              1,
+          )
+          text=text.replace(
+              '  onLoadVoice,\n  onAuditionVoice,\n',
+              '  onLoadVoice,\n  onPrepareAudition,\n  onAuditionVoice,\n',
+              1,
+          )
+          old='''  const auditionEntry = async (entry: PatchCatalogEntry) => {
+    setAuditioningEntryId(entry.id)
+    setStatus(null)
+    setError(null)
+    try {
+      const { voices } = await readEntryVoices(entry)
+'''
+          new='''  const auditionEntry = async (entry: PatchCatalogEntry) => {
+    // Start/resume local audio in the direct click call stack. Bank loading is
+    // asynchronous and must not consume the browser user-activation window.
+    const preparedAudio = onPrepareAudition()
+    setAuditioningEntryId(entry.id)
+    setStatus(null)
+    setError(null)
+    try {
+      await preparedAudio
+      const { voices } = await readEntryVoices(entry)
+'''
+          if old not in text: raise SystemExit('catalog audition function anchor missing')
+          text=text.replace(old,new,1)
+          catalog.write_text(text,encoding='utf-8')
+
+          library=Path('src/components/PatchLibrary.tsx')
+          text=library.read_text(encoding='utf-8')
+          text=text.replace(
+              '  onLoad: (voice: Dx7Voice) => void\n  onAuditionVoice: (voice: Dx7Voice) => Promise<void>\n',
+              '  onLoad: (voice: Dx7Voice) => void\n  onPrepareAudition: () => Promise<void>\n  onAuditionVoice: (voice: Dx7Voice) => Promise<void>\n',
+              1,
+          )
+          text=text.replace(
+              '  currentVoice,\n  onLoad,\n  onAuditionVoice,\n',
+              '  currentVoice,\n  onLoad,\n  onPrepareAudition,\n  onAuditionVoice,\n',
+              1,
+          )
+          old='''  const auditionVoice = async (record: PatchRecord) => {
+    setActionError(null)
+    setStatus(null)
+    setAuditioningId(record.id)
+    try {
+      await onAuditionVoice(record.voice)
+'''
+          new='''  const auditionVoice = async (record: PatchRecord) => {
+    // Preserve the direct button user gesture even if later audition setup
+    // becomes asynchronous.
+    const preparedAudio = onPrepareAudition()
+    setActionError(null)
+    setStatus(null)
+    setAuditioningId(record.id)
+    try {
+      await preparedAudio
+      await onAuditionVoice(record.voice)
+'''
+          if old not in text: raise SystemExit('library audition function anchor missing')
+          text=text.replace(old,new,1)
+          library.write_text(text,encoding='utf-8')
+
+          # The old acceptance workflow patches an obsolete audition UI in its
+          # workspace and could overwrite this fix if it finishes later.
+          Path('.github/workflows/validate-local-catalog-audition-final.yml').unlink(missing_ok=True)
+          PY
+      - name: Validate source
+        run: |
+          npm install --no-audit --no-fund
+          npm run typecheck
+          npm run lint
+          npm run test
+          npm run build
+      - name: Record software receipt
+        run: |
+          cat > docs/validation/local-audition-user-activation.md <<EOF
+          # Local audition user-activation repair
+
+          Source commit that triggered this integration: \`${GITHUB_SHA}\`
+
+          Software gate: **SUCCESS**
+
+          - Catalog audition now creates/resumes the local AudioContext in the direct audition click before asynchronous bank retrieval/parsing.
+          - Saved-library audition uses the same explicit preparation path.
+          - The shared audition manager reuses an already prepared controller instead of closing it and recreating browser audio after async work.
+          - Local audition remains browser-only and does not request Web MIDI or transmit hardware messages.
+          - Typecheck, lint, full Vitest suite and production build passed before this receipt was committed.
+          - Audible browser behavior for real imported voices is validated separately; this receipt does not make that claim.
+          EOF
+          rm -f .github/workflows/apply-local-audition-activation-fix.yml
+      - name: Commit repair
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git commit -m 'fix(audio): preserve local audition user activation'
+          git pull --rebase origin main
+          git push origin HEAD:main
