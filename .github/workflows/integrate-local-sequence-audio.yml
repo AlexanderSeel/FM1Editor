@@ -1,0 +1,88 @@
+name: Integrate local sequence audio transport
+
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/integrate-local-sequence-audio.yml']
+
+permissions:
+  contents: write
+
+concurrency:
+  group: integrate-local-sequence-audio
+  cancel-in-progress: false
+
+jobs:
+  integrate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Mount local transport and fix edit lifecycle
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          panel=Path('src/components/LocalSequenceAudioPanel.tsx')
+          text=panel.read_text(encoding='utf-8')
+          text=text.replace('\n  sequenceRef.current = sequence\n  const internalClock', '\n  const internalClock', 1)
+          panel.write_text(text,encoding='utf-8')
+
+          app=Path('src/App.tsx')
+          text=app.read_text(encoding='utf-8')
+          import_anchor="import { HistoryControls } from './components/HistoryControls'\n"
+          local_import="import { LocalSequenceAudioPanel } from './components/LocalSequenceAudioPanel'\n"
+          if local_import not in text:
+              if import_anchor not in text: raise SystemExit('App import anchor missing')
+              text=text.replace(import_anchor,import_anchor+local_import,1)
+
+          anchor='''              <PersistentWorkspace active={workspace === 'sequencer'}>\n                <CollapsibleSection\n                  description={`${sequence.length} steps · ${sequence.bpm} BPM · playback remains active across workspaces`}\n'''
+          replacement='''              <PersistentWorkspace active={workspace === 'sequencer'}>\n                <CollapsibleSection\n                  description="Explicit browser-local playback · semantic notes · no hardware MIDI transmission"\n                  storageKey="sequencer-local-audio"\n                  title="Local sequence audio"\n                >\n                  <LocalSequenceAudioPanel sequence={sequence} voice={voice} />\n                </CollapsibleSection>\n                <CollapsibleSection\n                  description={`${sequence.length} steps · ${sequence.bpm} BPM · hardware playback remains active across workspaces`}\n'''
+          if 'storageKey="sequencer-local-audio"' not in text:
+              if anchor not in text: raise SystemExit('Persistent sequencer anchor missing')
+              text=text.replace(anchor,replacement,1)
+          app.write_text(text,encoding='utf-8')
+          PY
+          git diff -- src/App.tsx src/components/LocalSequenceAudioPanel.tsx
+      - name: Validate full software integration
+        run: |
+          npm install --no-audit --no-fund
+          npm run audit:virtual-dx7
+          npm run typecheck
+          npm run lint
+          npm run test
+          npm run build
+      - name: Record receipt and self-clean
+        run: |
+          python - <<'PY'
+          import os
+          from pathlib import Path
+          Path('docs/validation/local-sequence-audio-integration.md').write_text('\n'.join([
+            '# Local sequence audio UI integration','',
+            f"Validated source/workflow commit: `{os.environ['GITHUB_SHA']}`",'',
+            'Overall software integration gate: **SUCCESS**','',
+            '## Boundary','',
+            '- The persistent sequencer workspace now exposes a separate **Local sequence audio** section above the existing hardware MIDI sequence editor.',
+            '- Local enable/play/stop actions use `createMsfaAudioWorkletController` plus the semantic local scheduler; they never adapt local audio into `MidiOutputTarget`.',
+            '- Existing hardware MIDI Play/Stop, MIDI clock and external-clock handling remain unchanged.',
+            '- Local sequence playback explicitly supports internal BPM clock only; external clock remains a hardware route until separately implemented.',
+            '- Sequence edits during local playback stop the local player and release local notes before a restart.',
+            '- Voice changes stop local playback, issue all-notes-off and synchronize the new semantic voice.',
+            '- Source audit, typecheck, lint, full tests and production build passed.',
+            '- Real browser end-to-end clicking of the new transport remains a separate validation step.'
+          ])+'\n',encoding='utf-8')
+          Path('.github/workflows/integrate-local-sequence-audio.yml').unlink(missing_ok=True)
+          PY
+      - name: Commit validated integration and cleanup
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git commit -m 'feat(audio): integrate local sequence audio transport'
+          git pull --rebase origin main
+          git push origin HEAD:main
