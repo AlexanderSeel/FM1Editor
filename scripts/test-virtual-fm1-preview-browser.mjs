@@ -190,25 +190,26 @@ try {
   })()`)
   await waitForExpression(cdp, `document.body.textContent.includes('preview-a4.wav') && document.body.textContent.includes('A 441.0 Hz')`, 25_000)
 
-  await clickButton(cdp, 'Play reference A')
+  const previewExtrasRoot = `document.querySelector('[aria-label=\"Virtual FM-1 A/B and WAV rendering\"]')`
+  await clickButton(cdp, 'Play reference A', previewExtrasRoot)
   await waitForExpression(cdp, `window.__fm1PreviewBufferAnalysers.length >= 1`, 10_000)
   const referencePeak = await samplePeak(cdp, 'window.__fm1PreviewBufferAnalysers[0]', 500)
   if (!(referencePeak > 1e-5)) throw new Error(`Reference A playback produced no measurable PCM: ${referencePeak}`)
-  await clickButton(cdp, 'Stop reference A')
+  await clickButton(cdp, 'Stop reference A', previewExtrasRoot)
 
-  await clickButton(cdp, 'Preview current B')
+  await clickButton(cdp, 'Preview current B', previewExtrasRoot)
   await waitForExpression(cdp, `window.__fm1PreviewBufferAnalysers.length >= 2 && document.body.textContent.includes('Stop current B')`, 30_000)
   const currentBPeak = await samplePeak(cdp, 'window.__fm1PreviewBufferAnalysers[1]', 600)
   if (!(currentBPeak > 1e-5)) throw new Error(`Offline-rendered current B produced no measurable PCM: ${currentBPeak}`)
-  await clickButton(cdp, 'Stop current B')
+  await clickButton(cdp, 'Stop current B', previewExtrasRoot)
 
   // Switch dry before downloads to keep browser validation bounded while still exercising OfflineAudioContext above with FX enabled.
   await clickButton(cdp, 'FX enabled')
   await waitForExpression(cdp, `document.body.textContent.includes('Dry bypass')`)
   const baselineDownloads = await evaluate(cdp, `window.__fm1PreviewDownloads.length`)
-  await clickButton(cdp, 'Download note WAV')
+  await clickButton(cdp, 'Download note WAV', previewExtrasRoot)
   await waitForExpression(cdp, `window.__fm1PreviewDownloads.length >= ${baselineDownloads + 1}`, 30_000)
-  await clickButton(cdp, 'Download chord WAV')
+  await clickButton(cdp, 'Download chord WAV', previewExtrasRoot)
   await waitForExpression(cdp, `window.__fm1PreviewDownloads.length >= ${baselineDownloads + 2}`, 30_000)
   const wavDetails = await evaluate(cdp, `(async () => Promise.all(window.__fm1PreviewBlobs.slice(-2).map(async (blob) => { const bytes=new Uint8Array(await blob.arrayBuffer()); return { size: bytes.length, riff: String.fromCharCode(...bytes.slice(0,4)), wave: String.fromCharCode(...bytes.slice(8,12)) }; })))()`, true)
   if (!Array.isArray(wavDetails) || wavDetails.length !== 2 || wavDetails.some((item) => item.size <= 44 || item.riff !== 'RIFF' || item.wave !== 'WAVE')) throw new Error(`Invalid preview WAV downloads: ${JSON.stringify(wavDetails)}`)
