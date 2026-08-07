@@ -14,11 +14,11 @@
   },
   "wasm": {
     "path": "fm1-msfa.wasm",
-    "sha256": "623cf6f5695184861fd5ca17e6f66723426b6d03cfc81d84c02cd734a00e097a"
+    "sha256": "5aa3d9ee7aae93ae6b8f95accd95c72339aa8c495147161659c5fa98a4b8b624"
   },
   "glue": {
     "path": "fm1-msfa.mjs",
-    "sha256": "96d0ac2e9299850463d932a513319ae20d3c7a87b9ddb31b4ef9649ccc7983e1"
+    "sha256": "e695050a852735923a2387e0cb37f270795f8b3baf448602dc11d4d0751d14ef"
   },
   "acceptedReferencePcmSha256": "313be5ffcb29436e92ecce45b5e1002c72dd810c6999379844b82ce87a18cfc2",
   "sourceManifestSha256": "e1ee6348bfadd41de6415a9fde80598deb978179055b75bf782d70d55473033c",
@@ -32,5 +32,6 @@
   ],
   "statefulSessionAbi": 1,
   "renderBlockFrames": 64,
-  "workletPolyphony": 16
+  "workletPolyphony": 16,
+  "performanceControlAbi": 1
 }
