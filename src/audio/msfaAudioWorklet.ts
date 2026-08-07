@@ -11,6 +11,7 @@ export const MSFA_WORKLET_PROCESSOR_NAME = 'fm1-msfa-one-voice' as const
 export const MSFA_WORKLET_SCRIPT_PATH = 'virtual-dx7/fm1-msfa-worklet.js' as const
 export const MSFA_WORKLET_MANIFEST_PATH = 'virtual-dx7/manifest.json' as const
 export const MSFA_WORKLET_WASM_PATH = 'virtual-dx7/fm1-msfa.wasm' as const
+export const MSFA_WORKLET_READY_TIMEOUT_MS = 5_000 as const
 
 export type MsfaAudioWorkletState = 'disabled' | 'enabling' | 'ready' | 'error' | 'closed'
 
@@ -60,6 +61,7 @@ export interface MsfaAudioWorkletDependencies {
     options: AudioWorkletNodeOptions,
   ) => AudioWorkletNodeLike
   loadPackage?: () => Promise<MsfaWorkletPackage>
+  readyTimeoutMs?: number
 }
 
 export interface MsfaAudioWorkletController {
@@ -162,14 +164,31 @@ export function createMsfaAudioWorkletController(
   const createContext = dependencies.createAudioContext ?? defaultAudioContext
   const createNode = dependencies.createAudioWorkletNode ?? defaultAudioWorkletNode
   const packageLoader = dependencies.loadPackage ?? loadMsfaWorkletPackage
+  const readyTimeoutMs = dependencies.readyTimeoutMs ?? MSFA_WORKLET_READY_TIMEOUT_MS
+  if (!Number.isFinite(readyTimeoutMs) || readyTimeoutMs <= 0) {
+    throw new RangeError('readyTimeoutMs must be a positive finite number')
+  }
+
   let state: MsfaAudioWorkletState = 'disabled'
   let context: AudioContextLike | null = null
   let node: AudioWorkletNodeLike | null = null
   let enablePromise: Promise<void> | null = null
   let readyResolve: (() => void) | null = null
   let readyReject: ((error: Error) => void) | null = null
+  let readyTimer: ReturnType<typeof setTimeout> | null = null
   let requestId = 0
   const pending = new Map<number, { resolve: () => void; reject: (error: Error) => void }>()
+
+  const clearReadyTimer = () => {
+    if (readyTimer !== null) clearTimeout(readyTimer)
+    readyTimer = null
+  }
+
+  const clearReadyWaiters = () => {
+    clearReadyTimer()
+    readyResolve = null
+    readyReject = null
+  }
 
   const rejectPending = (error: Error) => {
     for (const entry of pending.values()) entry.reject(error)
@@ -181,17 +200,17 @@ export function createMsfaAudioWorkletController(
     if (!message || typeof message !== 'object') return
     const data = message as { type?: unknown; requestId?: unknown; ok?: unknown; error?: unknown }
     if (data.type === 'ready') {
-      readyResolve?.()
-      readyResolve = null
-      readyReject = null
+      const resolve = readyResolve
+      clearReadyWaiters()
+      resolve?.()
       return
     }
     if (data.type === 'fatal') {
       const error = responseError(data.error)
       state = 'error'
-      readyReject?.(error)
-      readyResolve = null
-      readyReject = null
+      const reject = readyReject
+      clearReadyWaiters()
+      reject?.(error)
       rejectPending(error)
       return
     }
@@ -214,6 +233,7 @@ export function createMsfaAudioWorkletController(
   }
 
   const cleanup = async () => {
+    clearReadyWaiters()
     rejectPending(new Error('Virtual DX7 AudioWorklet was closed'))
     if (node) {
       try {
@@ -267,6 +287,11 @@ export function createMsfaAudioWorkletController(
           const ready = new Promise<void>((resolve, reject) => {
             readyResolve = resolve
             readyReject = reject
+            readyTimer = setTimeout(() => {
+              const timeoutReject = readyReject
+              clearReadyWaiters()
+              timeoutReject?.(new Error(`Virtual DX7 AudioWorklet did not become ready within ${readyTimeoutMs} ms`))
+            }, readyTimeoutMs)
           })
           node = createNode(context, MSFA_WORKLET_PROCESSOR_NAME, {
             numberOfInputs: 0,
@@ -278,9 +303,9 @@ export function createMsfaAudioWorkletController(
           node.onprocessorerror = () => {
             const error = new Error('Virtual DX7 AudioWorklet processor error')
             state = 'error'
-            readyReject?.(error)
-            readyResolve = null
-            readyReject = null
+            const reject = readyReject
+            clearReadyWaiters()
+            reject?.(error)
             rejectPending(error)
           }
           node.connect(context.destination)
@@ -313,10 +338,12 @@ export function createMsfaAudioWorkletController(
       const bridge = createMsfaCompatibleVoiceBridge(plan)
       await sendCommand('loadVoice', { patch: bridge.patchBuffer, randomSeed: seed })
     },
-    noteOn(midiNote, velocity) {
-      return sendCommand('noteOn', {
-        midiNote: integerRange(midiNote, 0, 127, 'midiNote'),
-        velocity: integerRange(velocity, 1, 127, 'velocity'),
+    async noteOn(midiNote, velocity) {
+      const validatedNote = integerRange(midiNote, 0, 127, 'midiNote')
+      const validatedVelocity = integerRange(velocity, 1, 127, 'velocity')
+      await sendCommand('noteOn', {
+        midiNote: validatedNote,
+        velocity: validatedVelocity,
       })
     },
     noteOff() {
