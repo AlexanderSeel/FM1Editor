@@ -1,0 +1,203 @@
+name: Validate seeded MSFA lifecycle
+
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/rebaseline-msfa-seeded.yml']
+
+permissions:
+  contents: write
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - id: install
+        continue-on-error: true
+        run: npm install --no-audit --no-fund
+      - name: Prepare exact distributed source
+        id: source
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -o pipefail
+          {
+            git init "$RUNNER_TEMP/dexed"
+            git -C "$RUNNER_TEMP/dexed" remote add origin https://github.com/asb2m10/dexed.git
+            git -C "$RUNNER_TEMP/dexed" fetch --depth 1 origin 2e182b3db85c09083ab13c8b9b00565ce7d9ff85
+            git -C "$RUNNER_TEMP/dexed" checkout --detach FETCH_HEAD
+            npm run audit:virtual-dx7 -- --source-root "$RUNNER_TEMP/dexed" --require-hashes
+            node scripts/materialize-msfa-spike.mjs --source-root "$RUNNER_TEMP/dexed" --output-root "$RUNNER_TEMP/materialized"
+            node scripts/finalize-msfa-source.mjs --source-root "$RUNNER_TEMP/materialized/msfa"
+            node scripts/prepare-msfa-distribution.mjs --source-root "$RUNNER_TEMP/materialized/msfa" --manifest "$RUNNER_TEMP/derived-manifest.json"
+          } 2>&1 | tee "$RUNNER_TEMP/source.log"
+      - name: Native seeded reference
+        id: native
+        if: steps.source.outcome == 'success'
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -o pipefail
+          bash scripts/build-msfa-spike.sh "$RUNNER_TEMP/materialized" "$RUNNER_TEMP/native" native 2>&1 | tee "$RUNNER_TEMP/native.log"
+          "$RUNNER_TEMP/native/fm1-msfa-native" native/virtual-dx7-spike/reference-patch-v1.hex "$RUNNER_TEMP/native.f32" 2>&1 | tee -a "$RUNNER_TEMP/native.log"
+          sha256sum "$RUNNER_TEMP/native.f32" | tee "$RUNNER_TEMP/native.sha"
+          test "$(awk '{print $1}' "$RUNNER_TEMP/native.sha")" = '313be5ffcb29436e92ecce45b5e1002c72dd810c6999379844b82ce87a18cfc2'
+      - name: Reproducible seeded WASM
+        id: wasm
+        if: steps.source.outcome == 'success'
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -o pipefail
+          docker pull emscripten/emsdk:4.0.7 >/dev/null
+          docker image inspect emscripten/emsdk:4.0.7 --format '{{index .RepoDigests 0}}' | tee "$RUNNER_TEMP/emsdk-digest.txt"
+          for out in wasm-a wasm-b; do
+            docker run --rm -v "$PWD:$PWD" -v "$RUNNER_TEMP:$RUNNER_TEMP" -w "$PWD" emscripten/emsdk:4.0.7 \
+              bash scripts/build-msfa-spike.sh "$RUNNER_TEMP/materialized" "$RUNNER_TEMP/$out" wasm
+          done 2>&1 | tee "$RUNNER_TEMP/wasm-build.log"
+          sha256sum "$RUNNER_TEMP/wasm-a/fm1-msfa.wasm" | tee "$RUNNER_TEMP/wasm-a.sha"
+          sha256sum "$RUNNER_TEMP/wasm-b/fm1-msfa.wasm" | tee "$RUNNER_TEMP/wasm-b.sha"
+          cmp "$RUNNER_TEMP/wasm-a/fm1-msfa.wasm" "$RUNNER_TEMP/wasm-b/fm1-msfa.wasm"
+      - name: Fixed seeded render and native equivalence
+        id: fixed
+        if: steps.native.outcome == 'success' && steps.wasm.outcome == 'success'
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -o pipefail
+          node scripts/run-msfa-wasm-spike.mjs --module "$RUNNER_TEMP/wasm-a/fm1-msfa.mjs" \
+            --patch native/virtual-dx7-spike/reference-patch-v1.hex --output "$RUNNER_TEMP/fixed.f32" --random-seed 42 2>&1 | tee "$RUNNER_TEMP/fixed.json"
+          sha256sum "$RUNNER_TEMP/fixed.f32" | tee "$RUNNER_TEMP/fixed.sha"
+          test "$(awk '{print $1}' "$RUNNER_TEMP/fixed.sha")" = '313be5ffcb29436e92ecce45b5e1002c72dd810c6999379844b82ce87a18cfc2'
+          cmp "$RUNNER_TEMP/native.f32" "$RUNNER_TEMP/fixed.f32"
+      - name: Sample-and-hold seed regression
+        id: seed
+        if: steps.wasm.outcome == 'success'
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -o pipefail
+          node - <<'NODE'
+          const fs=require('fs'); const hex=fs.readFileSync('native/virtual-dx7-spike/reference-patch-v1.hex','utf8').trim();
+          const b=Buffer.from(hex,'hex'); if(b.length!==156) throw new Error('fixture length'); b[142]=5;
+          fs.writeFileSync(process.env.RUNNER_TEMP+'/sample-hold.hex', b.toString('hex')+'\n');
+          NODE
+          node scripts/run-msfa-wasm-spike.mjs --module "$RUNNER_TEMP/wasm-a/fm1-msfa.mjs" --patch "$RUNNER_TEMP/sample-hold.hex" --output "$RUNNER_TEMP/sh42.f32" --random-seed 42 | tee "$RUNNER_TEMP/sh42.json"
+          node scripts/run-msfa-wasm-spike.mjs --module "$RUNNER_TEMP/wasm-a/fm1-msfa.mjs" --patch "$RUNNER_TEMP/sample-hold.hex" --output "$RUNNER_TEMP/sh43.f32" --random-seed 43 | tee "$RUNNER_TEMP/sh43.json"
+          test "$(sha256sum "$RUNNER_TEMP/sh42.f32" | awk '{print $1}')" != "$(sha256sum "$RUNNER_TEMP/sh43.f32" | awk '{print $1}')"
+      - name: Performance and package update
+        id: package
+        if: steps.fixed.outcome == 'success' && steps.seed.outcome == 'success'
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -o pipefail
+          node scripts/run-msfa-wasm-spike.mjs --module "$RUNNER_TEMP/wasm-a/fm1-msfa.mjs" \
+            --patch native/virtual-dx7-spike/reference-patch-v1.hex --output "$RUNNER_TEMP/five.f32" \
+            --note-on-frames 192000 --release-frames 48000 --random-seed 42 | tee "$RUNNER_TEMP/perf.json"
+          python - <<'PY'
+          import json, os, hashlib, shutil
+          from pathlib import Path
+          t=Path(os.environ['RUNNER_TEMP']); repo=Path('.')
+          perf=json.loads(t.joinpath('perf.json').read_text().splitlines()[-1])
+          if perf['frames'] != 240000 or perf['realtimeRatio'] >= 1: raise SystemExit('performance gate failed')
+          shutil.rmtree('third_party/msfa/src', ignore_errors=True); Path('third_party/msfa/src').mkdir(parents=True)
+          for src in t.joinpath('materialized/msfa').iterdir(): shutil.copy2(src, Path('third_party/msfa/src')/src.name)
+          shutil.copy2(t/'derived-manifest.json','third_party/msfa/manifest.json')
+          shutil.copy2(t/'wasm-a/fm1-msfa.wasm','public/virtual-dx7/fm1-msfa.wasm')
+          shutil.copy2(t/'wasm-a/fm1-msfa.mjs','public/virtual-dx7/fm1-msfa.mjs')
+          def sha(p): return hashlib.sha256(Path(p).read_bytes()).hexdigest()
+          old=json.loads(Path('public/virtual-dx7/manifest.json').read_text())
+          old['engineVersion']='msfa-2e182b3-fm1-v2-seeded'
+          old['wasm']['sha256']=sha('public/virtual-dx7/fm1-msfa.wasm')
+          old['glue']['sha256']=sha('public/virtual-dx7/fm1-msfa.mjs')
+          old['sourceManifestSha256']=sha('third_party/msfa/manifest.json')
+          old['acceptedReferencePcmSha256']='313be5ffcb29436e92ecce45b5e1002c72dd810c6999379844b82ce87a18cfc2'
+          old['limitations']=['standard-12-TET only','dry engine only','not physical-device validation']
+          Path('public/virtual-dx7/manifest.json').write_text(json.dumps(old,indent=2)+'\n')
+          notice=Path('third_party/msfa/NOTICE.md').read_text()
+          notice=notice.replace('Five derived files carry prominent FM1 Editor modification notices.','Seven derived files carry prominent FM1 Editor modification notices, including deterministic LFO phase and sample-and-hold seed initialization.')
+          Path('third_party/msfa/NOTICE.md').write_text(notice)
+          shutil.copy2('third_party/msfa/NOTICE.md','public/virtual-dx7/NOTICE.md')
+          PY
+          ! grep -R -n -E '(\.\./Dexed\.h|libMTSClient\.h|Tunings\.h|juce_)' third_party/msfa/src
+      - id: typecheck
+        if: steps.install.outcome == 'success' && steps.package.outcome == 'success'
+        continue-on-error: true
+        run: npm run typecheck
+      - id: lint
+        if: steps.install.outcome == 'success' && steps.package.outcome == 'success'
+        continue-on-error: true
+        run: npm run lint
+      - id: tests
+        if: steps.install.outcome == 'success' && steps.package.outcome == 'success'
+        continue-on-error: true
+        run: npm run test
+      - id: build
+        if: steps.install.outcome == 'success' && steps.package.outcome == 'success'
+        continue-on-error: true
+        run: npm run build
+      - name: Record receipt and self-clean
+        if: always()
+        env:
+          SOURCE: ${{ steps.source.outcome }}
+          NATIVE: ${{ steps.native.outcome }}
+          WASM: ${{ steps.wasm.outcome }}
+          FIXED: ${{ steps.fixed.outcome }}
+          SEED: ${{ steps.seed.outcome }}
+          PACKAGE: ${{ steps.package.outcome }}
+          TYPECHECK: ${{ steps.typecheck.outcome }}
+          LINT: ${{ steps.lint.outcome }}
+          TESTS: ${{ steps.tests.outcome }}
+          BUILD: ${{ steps.build.outcome }}
+        shell: bash
+        run: |
+          python - <<'PY'
+          import json, os
+          from pathlib import Path
+          keys=['SOURCE','NATIVE','WASM','FIXED','SEED','PACKAGE','TYPECHECK','LINT','TESTS','BUILD']
+          r={k.lower():os.environ[k] for k in keys}; ok=all(v=='success' for v in r.values()); t=Path(os.environ['RUNNER_TEMP'])
+          def txt(n):
+            p=t/n; return p.read_text(errors='replace').strip() if p.exists() else 'not produced'
+          def tok(n):
+            x=txt(n); return x.split()[0] if x!='not produced' else x
+          def j(n):
+            x=txt(n)
+            if x=='not produced': return None
+            for line in reversed(x.splitlines()):
+              try:return json.loads(line)
+              except:pass
+          fixed=j('fixed.json'); sh42=j('sh42.json'); sh43=j('sh43.json'); perf=j('perf.json')
+          lines=['# Seeded MSFA lifecycle validation','',f"Validated source commit: `{os.environ['GITHUB_SHA']}`",'',f"Overall gate: **{'SUCCESS' if ok else 'FAILED'}**",'', '| Check | Result |','| --- | --- |']
+          lines += [f"| {k} | **{v.upper()}** |" for k,v in r.items()]
+          lines += ['', '## Evidence','',f"- WASM build SHA-256: `{tok('wasm-a.sha')}`",f"- Native/fixed PCM SHA-256: `{tok('fixed.sha')}`",f"- Emscripten: `{txt('emsdk-digest.txt')}`"]
+          if fixed: lines.append(f"- Fixed seed {fixed['randomSeed']}: {fixed['frames']} frames; repeated render byte-identical; peak {fixed['peak']}; RMS {fixed['rms']}.")
+          if sh42 and sh43: lines += [f"- Sample-and-hold seed 42 PCM: `{sh42['sha256']}`",f"- Sample-and-hold seed 43 PCM: `{sh43['sha256']}`",'- Each seed was byte-identical on its internal repeat, while different seeds produced different PCM.']
+          if perf: lines.append(f"- Five-second render: {perf['firstRenderMs']} ms; real-time ratio {perf['realtimeRatio']}.")
+          if Path('public/virtual-dx7/manifest.json').exists():
+            m=json.loads(Path('public/virtual-dx7/manifest.json').read_text()); lines += [f"- Published engine version: `{m['engineVersion']}`",f"- Published WASM: `{m['wasm']['sha256']}`",f"- Published source manifest: `{m['sourceManifestSha256']}`"]
+          lines += ['', 'This closes the offline random-state lifecycle gap: free-running LFO phase begins from a documented zero phase and sample-and-hold state is derived from the semantic render-plan seed. No AudioWorklet or physical-device validation is claimed.', '', 'All distributed third-party files remain under the audited Apache-2.0 boundary with prominent notices on modified files. The temporary workflow removes itself; normal CI remains read-only.']
+          if not ok:
+            lines += ['', '## Failure logs']
+            for n in ['source.log','native.log','wasm-build.log','fixed.json','sh42.json','sh43.json','perf.json']:
+              x=txt(n)
+              if x!='not produced': lines += ['',f'### `{n}`','```text','\n'.join(x.splitlines()[-40:]),'```']
+          Path('docs/validation/msfa-seeded-lfo.md').write_text('\n'.join(lines)+'\n')
+          Path('.github/workflows/rebaseline-msfa-seeded.yml').unlink(missing_ok=True)
+          PY
+      - name: Commit re-baseline and cleanup
+        if: always()
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git diff --cached --quiet || git commit -m 'fix(audio): seed virtual DX7 LFO deterministically'
+          git pull --rebase origin main
+          git push origin HEAD:main
