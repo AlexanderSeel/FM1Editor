@@ -1,0 +1,54 @@
+name: Validate external local sequence scheduler
+
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/validate-external-local-sequence-scheduler.yml']
+
+permissions:
+  contents: write
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Software gate
+        run: |
+          npm install --no-audit --no-fund
+          npm run audit:virtual-dx7
+          npm run typecheck
+          npm run lint
+          npm run test
+          npm run build
+      - name: Record success and clean workflow
+        if: success()
+        run: |
+          mkdir -p docs/validation
+          cat > docs/validation/external-local-sequence-scheduler.md <<EOF
+          # External MIDI-clock local sequence scheduler validation
+
+          Validated source/workflow commit: \`${GITHUB_SHA}\`
+
+          Overall software gate: **SUCCESS**
+
+          - MIDI Start/Continue/Clock/Stop are accepted only as timing/transport input.
+          - The local target receives semantic note-on, note-off and all-notes-off calls; no MIDI output or SysEx path is used.
+          - Polyphonic steps, ties, gate release, clock-derived tempo estimation, transport reset and fail-closed target errors are covered by focused tests.
+          - The scheduler rejects non-external sequence clock mode rather than silently substituting timing behavior.
+          - Source audit, typecheck, lint, full tests and production build passed on this commit.
+          - This receipt validates scheduler software only. Mounted Chrome/Edge input-clock-to-AudioWorklet routing remains a separate acceptance step.
+          EOF
+          rm -f .github/workflows/validate-external-local-sequence-scheduler.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git commit -m 'test(ci): record external local sequence scheduler validation'
+          git pull --rebase origin main
+          git push origin HEAD:main
