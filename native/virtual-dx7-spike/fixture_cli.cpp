@@ -14,12 +14,14 @@ extern "C" int fm1_msfa_render(
     int sampleRate,
     int noteOnFrames,
     int releaseFrames,
+    uint32_t randomSeed,
     float *output,
     int outputFrames
 );
 
 namespace {
 constexpr int kPatchLength = 156;
+constexpr uint32_t kReferenceSeed = 42;
 
 int hexNibble(char value) {
     if (value >= '0' && value <= '9') return value - '0';
@@ -74,14 +76,14 @@ int main(int argc, char **argv) {
 
         const int result = fm1_msfa_render(
             patch.data(), static_cast<int>(patch.size()), 60, 100, sampleRate,
-            noteOnFrames, releaseFrames, samples.data(), outputFrames
+            noteOnFrames, releaseFrames, kReferenceSeed, samples.data(), outputFrames
         );
         if (result != 0) {
             std::cerr << "fm1_msfa_render failed with status " << result << "\n";
             return result;
         }
         writeFloat32(argv[2], samples);
-        std::cout << "rendered " << outputFrames << " dry mono Float32 frames\n";
+        std::cout << "rendered " << outputFrames << " dry mono Float32 frames with seed " << kReferenceSeed << "\n";
         return 0;
     } catch (const std::exception &error) {
         std::cerr << error.what() << "\n";
