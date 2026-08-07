@@ -9,7 +9,7 @@ export interface BundledCatalogCandidateEntry {
   readonly filename: string
   readonly source: PatchCatalogEntry['source']
   readonly status: PatchCatalogEntry['status']
-  readonly archivePath?: string
+  readonly archivePath: string | null
 }
 
 export interface CatalogPresetCandidateProgress {
