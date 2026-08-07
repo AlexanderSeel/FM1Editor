@@ -26,10 +26,11 @@
   "limitations": [
     "standard-12-TET only",
     "dry engine only",
-    "validated real-time browser path is one voice only",
+    "polyphony is orchestrated in the AudioWorklet over validated stateful sessions",
     "headless CI soak does not measure audible hardware dropouts",
     "not physical-device validation"
   ],
   "statefulSessionAbi": 1,
-  "renderBlockFrames": 64
+  "renderBlockFrames": 64,
+  "workletPolyphony": 16
 }
