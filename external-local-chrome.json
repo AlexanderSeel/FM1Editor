@@ -1,0 +1,15 @@
+{
+  "ok": true,
+  "browserName": "chrome",
+  "browserProduct": "Chrome/150.0.7871.187",
+  "browserUserAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/150.0.0.0 Safari/537.36",
+  "workletNodeCount": 1,
+  "activePeak": 0.125,
+  "silencePeak": 0,
+  "errors": [],
+  "rejections": [],
+  "midiPermissionRequests": 1,
+  "midiOutputSendCount": 0,
+  "externalArmed": true,
+  "ready": true
+}
