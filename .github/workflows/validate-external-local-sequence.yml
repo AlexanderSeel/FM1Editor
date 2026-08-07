@@ -1,0 +1,121 @@
+name: Validate external clock local sequence route
+
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/validate-external-local-sequence.yml']
+
+permissions:
+  contents: write
+
+jobs:
+  software:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm install
+      - run: npm run typecheck
+      - run: npm run lint
+      - run: npm run test
+      - run: npm run build
+
+  browser:
+    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        browser: [chrome, edge]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm install
+      - run: npm run build
+      - name: Run mounted external-clock local-audio route
+        shell: pwsh
+        run: |
+          if ('${{ matrix.browser }}' -eq 'chrome') {
+            $exe = 'C:\Program Files\Google\Chrome\Application\chrome.exe'
+          } else {
+            $exe = 'C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe'
+          }
+          if (-not (Test-Path $exe)) { throw "Browser executable not found: $exe" }
+          node scripts/test-external-local-sequence-ui-browser.mjs --browser-executable $exe --browser-name '${{ matrix.browser }}' --result "external-local-${{ matrix.browser }}.json"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: external-local-${{ matrix.browser }}
+          path: external-local-${{ matrix.browser }}.json
+
+  finalize:
+    needs: [software, browser]
+    if: ${{ needs.software.result == 'success' && needs.browser.result == 'success' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: external-local-*
+          merge-multiple: true
+          path: validation-results
+      - name: Record evidence and close roadmap item
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          results = {}
+          for name in ('chrome', 'edge'):
+              path = Path('validation-results') / f'external-local-{name}.json'
+              data = json.loads(path.read_text())
+              if not data.get('ok'):
+                  raise SystemExit(f'{name} browser result was not successful: {data}')
+              results[name] = data
+
+          lines = [
+              '# External MIDI clock → local audio acceptance',
+              '',
+              f'Validated source/workflow commit: `${{ github.sha }}`',
+              '',
+              'Overall gate: **SUCCESS**',
+              '',
+              '- Same-source typecheck, lint, full tests and production build: **SUCCESS**',
+              '- Mounted branded Chrome/Edge route with a virtual MIDI **input only**: **SUCCESS**',
+              '- The UI requires explicit MIDI connect, explicit local-audio enable and explicit **Arm external local**.',
+              '- MIDI Start/Continue/Clock/Stop are consumed from the selected input bus and drive semantic local notes.',
+              '- No MIDI output port exists in the browser fixture; output-send count remains zero.',
+              '- MIDI Stop returns the local AudioWorklet graph to analyser silence.',
+              '- This is software/browser validation of the input-clock route, not physical FM-1/DX7 clock verification.',
+              '',
+              '| Browser | Version | Active peak | Silence peak | MIDI output sends |',
+              '| --- | --- | ---: | ---: | ---: |',
+          ]
+          for name, data in results.items():
+              lines.append(f"| {name} | {data.get('browserProduct')} | {data.get('activePeak')} | {data.get('silencePeak')} | {data.get('midiOutputSendCount')} |")
+          lines += ['', '## Raw results', '']
+          for name, data in results.items():
+              lines += [f'### {name}', '```json', json.dumps(data, indent=2), '```', '']
+          Path('docs/validation/external-local-sequence-browser.md').write_text('\n'.join(lines), encoding='utf-8')
+
+          plan = Path('PLAN.md')
+          text = plan.read_text(encoding='utf-8')
+          old = '- [ ] Add an external-MIDI-clock-to-local-audio route only through a separately validated input-clock scheduler; current local sequence playback intentionally supports internal BPM clock only.'
+          new = '- [x] Add an external-MIDI-clock-to-local-audio route through the separately validated input-clock scheduler; local playback consumes MIDI Start/Continue/Clock/Stop from the selected input while hardware output remains separate. Evidence: [`docs/validation/external-local-sequence-browser.md`](./docs/validation/external-local-sequence-browser.md).'
+          if old not in text:
+              raise SystemExit('Expected unresolved external-clock roadmap item was not found.')
+          plan.write_text(text.replace(old, new), encoding='utf-8')
+          PY
+          rm .github/workflows/validate-external-local-sequence.yml
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add PLAN.md docs/validation/external-local-sequence-browser.md .github/workflows/validate-external-local-sequence.yml
+          git commit -m "test(audio): accept external clock local sequence route"
+          git pull --rebase origin main
+          git push origin main
