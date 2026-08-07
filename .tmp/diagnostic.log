@@ -1,0 +1,30 @@
+## Docker/version
+Docker version 28.0.4, build b8034c0
+
+## Build
+Unable to find image 'emscripten/emsdk@sha256:8acec700a48dbff5250afc1e3ee545b7c002b689043ee82c277de6481a237fd7' locally
+docker.io/emscripten/emsdk@sha256:8acec700a48dbff5250afc1e3ee545b7c002b689043ee82c277de6481a237fd7: Pulling from emscripten/emsdk
+30a9c22ae099: Pulling fs layer
+0d1f76ed51cd: Pulling fs layer
+54aa9d04435b: Pulling fs layer
+aa83562ad891: Pulling fs layer
+86a4a0209194: Pulling fs layer
+aa83562ad891: Waiting
+86a4a0209194: Waiting
+54aa9d04435b: Download complete
+30a9c22ae099: Verifying Checksum
+30a9c22ae099: Download complete
+86a4a0209194: Verifying Checksum
+86a4a0209194: Download complete
+aa83562ad891: Verifying Checksum
+aa83562ad891: Download complete
+30a9c22ae099: Pull complete
+0d1f76ed51cd: Download complete
+0d1f76ed51cd: Pull complete
+54aa9d04435b: Pull complete
+aa83562ad891: Pull complete
+86a4a0209194: Pull complete
+Digest: sha256:8acec700a48dbff5250afc1e3ee545b7c002b689043ee82c277de6481a237fd7
+Status: Downloaded newer image for emscripten/emsdk@sha256:8acec700a48dbff5250afc1e3ee545b7c002b689043ee82c277de6481a237fd7
+bash: line 1: scripts/build-msfa-spike.sh: Permission denied
+BUILD_RC=126
