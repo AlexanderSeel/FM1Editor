@@ -1,5 +1,5 @@
 name: Validate external clock local sequence route
-# retriggered after shared local audition App wiring was repaired
+# retriggered after App wiring and FM1-inspired FX strict-validation repairs
 
 on:
   push:
