@@ -11,6 +11,7 @@ class Fm1MsfaOneVoiceProcessor extends AudioWorkletProcessor {
     this.session = 0
     this.outputPointer = 0
     this.ready = false
+    this.voiceLoaded = false
     this.disposed = false
     this.reportedFatal = false
     this.pendingCommands = []
@@ -142,6 +143,7 @@ class Fm1MsfaOneVoiceProcessor extends AudioWorkletProcessor {
         this.module._fm1_msfa_session_load_patch(this.session, pointer, PATCH_LENGTH, command.randomSeed >>> 0),
         'loadVoice',
       )
+      this.voiceLoaded = true
     } finally {
       this.module._free(pointer)
     }
@@ -177,6 +179,7 @@ class Fm1MsfaOneVoiceProcessor extends AudioWorkletProcessor {
     if (this.disposed) return
     this.disposed = true
     this.ready = false
+    this.voiceLoaded = false
     this.pendingCommands = []
     if (this.module && this.session) this.module._fm1_msfa_session_destroy(this.session)
     if (this.module && this.outputPointer) this.module._free(this.outputPointer)
@@ -193,7 +196,7 @@ class Fm1MsfaOneVoiceProcessor extends AudioWorkletProcessor {
   process(_inputs, outputs) {
     this.clearOutputs(outputs)
     if (this.disposed) return false
-    if (!this.ready || !this.module || !this.session || !this.outputPointer) return true
+    if (!this.ready || !this.voiceLoaded || !this.module || !this.session || !this.outputPointer) return true
 
     try {
       const channels = outputs[0]
