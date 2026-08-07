@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { cpSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { dirname, relative, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { spawnSync } from 'node:child_process'
@@ -49,7 +49,9 @@ for (const file of manifest.files) {
 }
 
 function read(name) {
-  return readFileSync(resolve(msfaRoot, name), 'utf8')
+  // Pinned MSFA contains CRLF files. Normalize line endings only in the
+  // temporary derived copy so exact patch assertions remain deterministic.
+  return readFileSync(resolve(msfaRoot, name), 'utf8').replace(/\r\n/g, '\n')
 }
 
 function write(name, content) {
