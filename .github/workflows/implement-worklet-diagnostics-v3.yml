@@ -1,0 +1,72 @@
+name: Accept measured AudioWorklet diagnostics
+
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/implement-worklet-diagnostics-v3.yml']
+
+permissions:
+  contents: write
+
+jobs:
+  accept:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - name: Apply staged diagnostics and update typed audition mock
+        shell: python
+        run: |
+          from pathlib import Path
+          workflow=Path('.github/workflows/implement-worklet-diagnostics-v2.yml').read_text(encoding='utf-8').splitlines()
+          start=next(i for i,line in enumerate(workflow) if line.strip() == '- name: Instrument worklet and controller')
+          run=next(i for i in range(start+1,len(workflow)) if workflow[i].strip() == 'run: |')
+          body=[]
+          for line in workflow[run+1:]:
+              if line.startswith('          '): body.append(line[10:])
+              elif line.strip() == '': body.append('')
+              else: break
+          exec(compile('\n'.join(body),'staged-diagnostics-patch','exec'),{})
+
+          test=Path('src/audio/localVoiceAudition.test.ts')
+          text=test.read_text(encoding='utf-8')
+          anchor="""    sampleRate: 48_000,\n    enable: vi.fn(async () => { state = 'ready' }),\n"""
+          replacement="""    sampleRate: 48_000,\n    diagnostics: null,\n    enable: vi.fn(async () => { state = 'ready' }),\n"""
+          if anchor in text:
+              text=text.replace(anchor,replacement,1)
+          elif 'diagnostics: null' not in text:
+              raise SystemExit('local audition mock anchor missing')
+          test.write_text(text,encoding='utf-8')
+      - run: node --check public/virtual-dx7/fm1-msfa-worklet.js
+      - run: npm install --no-audit --no-fund
+      - run: npm run audit:virtual-dx7
+      - run: npm run typecheck
+      - run: npm run lint
+      - run: npm test -- src/audio/msfaAudioWorklet.test.ts src/audio/localVoiceAudition.test.ts
+      - run: npm run test
+      - run: npm run build
+      - name: Persist accepted diagnostics
+        run: |
+          cat > docs/validation/msfa-worklet-diagnostics.md <<EOF
+          # MSFA AudioWorklet measured diagnostics
+
+          Source commit: \`${GITHUB_SHA}\`
+
+          Overall software gate: **SUCCESS**
+
+          The AudioWorklet measures render callback duration using `performance.now()` when available. Every 128 rendered callbacks it reports mean/max render milliseconds, audio-quantum budget, mean/max utilization, callbacks exceeding the budget, active voices and configured polyphony. If the high-resolution clock is unavailable, no diagnostic sample is emitted rather than fabricating CPU data.
+
+          The main-thread controller validates these messages, exposes only the latest accepted sample read-only, and clears it on shutdown. The local-audition typed mock was updated to the expanded controller contract. Worklet syntax check, virtual-engine audit, typecheck, lint, focused diagnostics/audition tests, the full test suite and production build all passed.
+
+          Branded-browser performance evidence is still required before the expanded renderer regression/performance PLAN item can close.
+          EOF
+          rm -f .github/workflows/implement-worklet-diagnostics.yml .github/workflows/implement-worklet-diagnostics-v2.yml .github/workflows/implement-worklet-diagnostics-v3.yml
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add -A
+          git commit -m 'feat(audio): accept measured worklet diagnostics' || true
+          git pull --rebase origin main
+          git push origin HEAD:main
