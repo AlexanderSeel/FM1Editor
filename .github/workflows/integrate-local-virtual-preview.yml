@@ -1,4 +1,4 @@
-name: Integrate local virtual preview
+name: Validate mounted local virtual preview
 
 on:
   push:
@@ -23,39 +23,21 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - name: Insert local preview into voice workspace
+      - name: Verify local preview is mounted in voice workspace
         id: patch
         shell: bash
         run: |
           python - <<'PY'
           from pathlib import Path
-          path=Path('src/App.tsx')
-          text=path.read_text(encoding='utf-8')
-          import_anchor="import { TargetVoiceAuditionPanel } from './components/TargetVoiceAuditionPanel'\n"
-          preview_import="import { VirtualDx7PreviewPanel } from './components/VirtualDx7PreviewPanel'\n"
-          if preview_import not in text:
-              if import_anchor not in text: raise SystemExit('TargetVoiceAuditionPanel import anchor not found')
-              text=text.replace(import_anchor, import_anchor+preview_import, 1)
-          audition_anchor="""                  <CollapsibleSection
-                    description={fm1Mode ? 'Whole-bank transfer, preset recall and virtual piano' : 'Yamaha single-voice and 32-voice bulk transfer, plus virtual piano'}
-                    storageKey=\"voice-bank-audition\"
-                    title={fm1Mode ? 'FM-1 bank audition' : 'DX7 audition and bulk transfer'}
-                  >
-"""
-          preview="""                  <CollapsibleSection
-                    description=\"Audited dry DX7-compatible AudioWorklet · explicit browser-local enable · no MIDI hardware required\"
-                    storageKey=\"voice-local-virtual-preview\"
-                    title=\"Local virtual preview\"
-                  >
-                    <VirtualDx7PreviewPanel voice={voice} />
-                  </CollapsibleSection>
-"""
-          if 'storageKey="voice-local-virtual-preview"' not in text:
-              if audition_anchor not in text: raise SystemExit('voice audition insertion anchor not found')
-              text=text.replace(audition_anchor, preview+audition_anchor, 1)
-          path.write_text(text, encoding='utf-8')
+          text=Path('src/App.tsx').read_text(encoding='utf-8')
+          required=[
+            "import { VirtualDx7PreviewPanel } from './components/VirtualDx7PreviewPanel'",
+            'storageKey="voice-local-virtual-preview"',
+            '<VirtualDx7PreviewPanel voice={voice} />',
+          ]
+          missing=[item for item in required if item not in text]
+          if missing: raise SystemExit('Mounted local preview boundary missing: '+repr(missing))
           PY
-          git diff -- src/App.tsx
       - id: install
         continue-on-error: true
         run: npm install --no-audit --no-fund
@@ -82,7 +64,7 @@ jobs:
       - name: Record result and self-clean
         if: always()
         env:
-          PATCH: ${{ steps.patch.outcome }}
+          MOUNT: ${{ steps.patch.outcome }}
           INSTALL: ${{ steps.install.outcome }}
           AUDIT: ${{ steps.audit.outcome }}
           TYPECHECK: ${{ steps.typecheck.outcome }}
@@ -92,24 +74,23 @@ jobs:
         shell: bash
         run: |
           python - <<'PY'
-          import os, subprocess
+          import os
           from pathlib import Path
-          results={name.lower():os.environ.get(name,'skipped') for name in ['PATCH','INSTALL','AUDIT','TYPECHECK','LINT','TESTS','BUILD']}
+          results={name.lower():os.environ.get(name,'skipped') for name in ['MOUNT','INSTALL','AUDIT','TYPECHECK','LINT','TESTS','BUILD']}
           success=all(value=='success' for value in results.values())
-          if not success: subprocess.run(['git','restore','src/App.tsx'],check=False)
           lines=['# Local virtual preview integration','',f"Validated source/workflow commit: `{os.environ['GITHUB_SHA']}`",'',f"Overall integration gate: **{'SUCCESS' if success else 'FAILED'}**",'', '| Check | Result |','| --- | --- |']
           lines += [f"| {name} | **{value.upper()}** |" for name,value in results.items()]
-          lines += ['', '## Boundary', '', '- The preview is a separate browser-local section in the voice workspace and does not impersonate a `MidiOutputTarget`.', '- No `AudioContext` is created during render; the user must explicitly choose **Enable local audio**.', '- After activation, only the current semantic `Dx7Voice` is mapped into the audited v3-stateful worklet.', '- Voice changes use local all-notes-off before semantic resynchronization.', '- Blur/visibility/unmount cleanup remains centralized in `VirtualPiano`; the local preview additionally closes its AudioWorklet controller on unmount/disable.', '- The accepted renderer remains monophonic here; no polyphony claim is made.', '- Hardware MIDI/SysEx audition remains a separate panel and action path.']
+          lines += ['', '## Boundary', '', '- `App.tsx` mounts a separate local-preview section above hardware audition.', '- The preview does not impersonate a `MidiOutputTarget`.', '- No `AudioContext` is created during render; the user must explicitly choose **Enable local audio**.', '- After activation, only the current semantic `Dx7Voice` is mapped into the audited v3-stateful worklet.', '- Voice changes use local all-notes-off before semantic resynchronization.', '- Blur/visibility/unmount cleanup remains centralized in `VirtualPiano`; the preview additionally closes its AudioWorklet controller on unmount/disable.', '- The exposed renderer remains explicitly monophonic; no polyphony claim is made.', '- Hardware MIDI/SysEx audition remains a separate panel and action path.']
           Path('docs/validation/local-virtual-preview-integration.md').write_text('\n'.join(lines)+'\n',encoding='utf-8')
           Path('.github/workflows/integrate-local-virtual-preview.yml').unlink(missing_ok=True)
           PY
-      - name: Commit validated integration or failure receipt
+      - name: Commit receipt and cleanup
         if: always()
         shell: bash
         run: |
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add -A
-          git diff --cached --quiet || git commit -m 'feat(audio): integrate local virtual preview'
+          git diff --cached --quiet || git commit -m 'test(ci): validate mounted local virtual preview'
           git pull --rebase origin main
           git push origin HEAD:main
