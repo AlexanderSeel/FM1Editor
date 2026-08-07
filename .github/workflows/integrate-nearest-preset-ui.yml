@@ -1,0 +1,82 @@
+name: Integrate nearest preset reconstruction UI
+
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/integrate-nearest-preset-ui.yml']
+
+permissions:
+  contents: write
+
+jobs:
+  integrate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - name: Mount reconstruction panel in Voice workspace
+        shell: python
+        run: |
+          from pathlib import Path
+          path=Path('src/App.tsx')
+          text=path.read_text(encoding='utf-8')
+          old_import="import { ReferenceAudioInputPanel } from './components/ReferenceAudioInputPanel'\n"
+          new_import="import { AudioToFmReferencePanel } from './components/AudioToFmReferencePanel'\n"
+          if old_import in text:
+              text=text.replace(old_import,new_import,1)
+          elif new_import not in text:
+              raise SystemExit('Reference panel import anchor missing')
+          old_hook="const { auditionVoice } = useLocalVoiceAudition()"
+          new_hook="const { auditionVoice, stopAudition } = useLocalVoiceAudition()"
+          if old_hook in text:
+              text=text.replace(old_hook,new_hook,1)
+          elif new_hook not in text:
+              raise SystemExit('Local audition hook anchor missing')
+          old_panel='''                    <ReferenceAudioInputPanel />\n'''
+          new_panel='''                    <AudioToFmReferencePanel\n                      onAuditionVoice={auditionVoice}\n                      onLoadVoice={loadCatalogVoice}\n                      onStopAudition={stopAudition}\n                    />\n'''
+          if old_panel in text:
+              text=text.replace(old_panel,new_panel,1)
+          elif '<AudioToFmReferencePanel' not in text:
+              raise SystemExit('Mounted reference panel anchor missing')
+          path.write_text(text,encoding='utf-8')
+      - run: npm install --no-audit --no-fund
+      - run: npm run audit:virtual-dx7
+      - run: npm run typecheck
+      - run: npm run lint
+      - run: npm test -- src/audio/catalogPresetCandidates.test.ts src/audio/compactPresetIndex.test.ts src/components/NearestPresetPanel.test.tsx src/audio/nearestPreset.test.ts src/audio/referenceAudio.test.ts
+      - run: npm run test
+      - run: npm run build
+      - name: Persist software receipt
+        run: |
+          cat > docs/validation/nearest-preset-ui-software.md <<EOF
+          # Nearest-preset reconstruction UI software validation
+
+          Source commit: \`${GITHUB_SHA}\`
+
+          Overall software gate: **SUCCESS**
+
+          ## Mounted behavior
+
+          - The Voice workspace Audio → FM reference section now combines local reference preparation and nearest-preset retrieval.
+          - Search is explicit; no catalog indexing starts merely by selecting a WAV/MP3.
+          - Quick scan caps local parsing/indexing at 256 checksum-valid bundled voices; Full local bundled catalog remains available explicitly.
+          - Only checksum-valid archive-backed catalog voices are eligible. Website-only/remote and diagnostic banks are excluded from this local index path.
+          - Matching uses the compact fingerprint index, one standardized C3/C4/C5 probe chosen nearest the analyzed reference pitch, the deterministic offline MSFA engine and persistent local fingerprint cache.
+          - Indexing is chunked, progressive and cancellable between renders; cache hits are surfaced.
+          - Up to eight ranked semantic voices expose similarity and envelope/mel/MFCC/centroid/rolloff/flatness breakdowns.
+          - **Play reference A** uses the prepared local PCM. **Audition B** uses the existing dry local DX7-compatible audition manager. **Load into editor** is a separate explicit action.
+          - Nothing is auto-loaded, sent through Web MIDI or uploaded to a server by the matcher.
+          - Virtual-DX7 source audit, typecheck, lint, focused reconstruction tests, full tests and production build passed.
+
+          Browser acceptance is still required before the nearest-preset PLAN item is marked complete.
+          EOF
+          rm .github/workflows/integrate-nearest-preset-ui.yml
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add -A
+          git commit -m 'feat(audio): mount nearest preset reconstruction' || true
+          git pull --rebase origin main
+          git push origin HEAD:main
