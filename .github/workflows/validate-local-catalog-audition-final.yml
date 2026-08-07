@@ -1,4 +1,5 @@
 name: Validate final local catalog audition
+# retriggered after restoring the mounted browser runner
 
 on:
   push:
