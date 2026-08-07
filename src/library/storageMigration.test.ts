@@ -65,21 +65,22 @@ describe('IndexedDB record migration', () => {
   })
 
   it('repairs every field produced by the shifted pre-v4 packed operator decoder', () => {
-    const canonical = createInitializedVoice('CACHED PAD')
-    canonical.operators[1] = {
-      ...canonical.operators[1],
+    const initialized = createInitializedVoice('CACHED PAD')
+    const operators = initialized.operators.map((operator, index) => index === 1 ? {
+      ...operator,
       keyboardScaling: {
-        ...canonical.operators[1].keyboardScaling,
+        ...operator.keyboardScaling,
         rateScaling: 6,
       },
       amplitudeModulationSensitivity: 3,
       keyVelocitySensitivity: 5,
       outputLevel: 87,
-      oscillatorMode: 'fixed',
+      oscillatorMode: 'fixed' as const,
       frequencyCoarse: 27,
       frequencyFine: 73,
       detune: 12,
-    }
+    } : operator) as unknown as Dx7Voice['operators']
+    const canonical: Dx7Voice = { ...initialized, operators }
 
     const packed = encodePackedVoice(canonical)
     const correctlyDecoded = decodePackedVoice(packed)
@@ -100,9 +101,13 @@ describe('IndexedDB record migration', () => {
   })
 
   it('preserves an explicit semantic edit while repairing untouched legacy fields', () => {
-    const canonical = createInitializedVoice('EDIT KEPT')
-    canonical.operators[2].outputLevel = 91
-    canonical.operators[2].frequencyCoarse = 19
+    const initialized = createInitializedVoice('EDIT KEPT')
+    const operators = initialized.operators.map((operator, index) => index === 2 ? {
+      ...operator,
+      outputLevel: 91,
+      frequencyCoarse: 19,
+    } : operator) as unknown as Dx7Voice['operators']
+    const canonical: Dx7Voice = { ...initialized, operators }
 
     const legacy = legacyCorruptFromPacked(decodePackedVoice(encodePackedVoice(canonical)))
     const edited: Dx7Voice = {
