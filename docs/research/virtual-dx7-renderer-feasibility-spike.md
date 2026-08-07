@@ -2,178 +2,149 @@
 
 Last reviewed: 2026-08-07
 
-Status: **semantic boundary, source-admission manifest and private MSFA voice bridge implemented; upstream engine not yet vendored, compiled or approved for distribution**.
+Status: **offline MSFA-compatible WebAssembly feasibility accepted; distribution and AudioWorklet integration remain unresolved**.
 
-This document is a technical feasibility and license-boundary record, not legal advice. It deliberately stops before copying, compiling or distributing an upstream synthesis engine.
+This document records a technical/license boundary, not legal advice. The complete Dexed application remains outside the FM1 Editor dependency boundary.
 
 ## Decision
 
-Proceed only with a narrowly isolated, MSFA-compatible engine core after file-by-file admission. Do not copy the complete Dexed application, plugin wrapper, JUCE integration, UI, assets, cartridges or patch banks into the MIT FM1 Editor.
+Proceed with the narrow audited MSFA-compatible core. The offline spike now proves that the selected Apache-2.0 source boundary can be transformed outside the repository into a deterministic native and WebAssembly renderer without compiling Dexed's GPL-3.0 application/plugin wrapper, JUCE, MTS-ESP or the external tuning library.
 
-The dependency-free TypeScript boundary now consists of:
+Do not distribute the temporary engine source or generated binaries until the repository contains the required Apache-2.0 license/attribution package and a derived-source modification manifest.
 
-- `src/audio/virtualDx7Engine.ts` — deterministic semantic render plan, range validation, cache identity, cancellation contract and dry PCM validation;
-- `src/audio/msfaVoiceBridge.ts` — private semantic-to-engine mapping through the repository's existing Yamaha-compatible voice encoder;
-- `docs/research/msfa-source-audit.json` — pinned source-admission policy and candidate/exclusion manifest;
-- `scripts/verify-msfa-source-audit.mjs` — manifest and optional pinned-source verifier.
+## Repository-owned boundary
 
-The public render contract provides:
+The application-side contract remains semantic:
 
-- a deterministic render-plan schema;
-- strict Yamaha-compatible semantic range checks;
-- a deep semantic snapshot of `Dx7Voice`;
-- exclusion of display name and imported packed/unpacked source bytes from render identity;
-- fixed 44.1 kHz and 48 kHz feasibility sample rates;
-- explicit note, velocity, note-on duration, release duration and random seed;
-- deterministic render keys;
-- a cancellable offline-engine interface;
-- validation of dry mono normalized PCM returned by a future engine.
+- `src/audio/virtualDx7Engine.ts` validates and snapshots legal `Dx7Voice` fields and defines deterministic render plans;
+- `src/audio/msfaVoiceBridge.ts` maps that semantic snapshot through the existing Yamaha encoder into a private 155-byte voice representation plus separate parameter-155 operator state;
+- names and imported `source.packed` / `source.unpacked` bytes are excluded from render identity;
+- no public arbitrary-byte render API or hardware-send path exists;
+- `src/audio/virtualDx7ReferenceFixture.ts` defines the repository-owned synthetic reference voice and fixed 48 kHz render request.
 
-The private MSFA bridge:
+The private 156-byte bridge buffer is an engine implementation detail only. It must never be exposed as SysEx or sent to hardware.
 
-- starts from the validated semantic render-plan snapshot, not user-supplied raw bytes;
-- uses `encodeSingleVoiceData()` to produce the canonical Yamaha 155-byte voice representation;
-- canonicalizes the ten-byte voice name so display metadata cannot affect engine input;
-- keeps Yamaha parameter `155` separate from the 155-byte voice payload and derives its initial all-operators-enabled value from the existing `Dx7EditSession` model;
-- creates a 156-byte buffer only as a private compatibility boundary for the future audited C/C++ adapter;
-- must also map the operator mask into the renderer's controller/operator state rather than assuming the pinned `Dx7Note::init()` consumes byte 155;
-- must never expose that buffer as SysEx, accept arbitrary raw byte writes, or transmit it to hardware.
+## Pinned upstream boundary
 
-None of this code renders audio, loads WebAssembly, creates an `AudioWorklet`, accesses Web MIDI or transmits anything to hardware.
-
-## Pinned upstream review target
-
-The source audit is pinned to:
+Audit target:
 
 - repository: `https://github.com/asb2m10/dexed`
 - commit: `2e182b3db85c09083ab13c8b9b00565ce7d9ff85`
-- reviewed on: 2026-08-07
+- complete application license: GPL-3.0
+- admitted low-level candidate files: 23 file-level Apache-2.0 MSFA sources/headers recorded in `msfa-source-audit.json`
 
-The pinned Dexed repository is GPL-3.0 at the complete-application level. The low-level candidate MSFA files admitted by `msfa-source-audit.json` carry Apache-2.0 headers. Directory membership or the project-level statement that MSFA remains Apache-2.0 is not treated as sufficient by itself; every candidate file is pinned separately.
+The machine-readable audit records exact upstream Git blob identities and SHA-256 values. A networked execution verified all 23 files, their Apache headers and the local include closure. See `docs/validation/msfa-source-hash-execution.md`.
 
-The pinned Dexed `Source/CMakeLists.txt` currently builds MSFA code together with tuning/MTS-ESP integration. Deeper review found additional license/dependency edges:
+The feasibility boundary excludes:
 
-- `Source/msfa/tuning.cc` directly includes JUCE GUI code and uses the external tuning library;
-- `Source/msfa/tuning.h` requires `Tunings.h` and has no file-level Apache header in the reviewed content;
-- `Source/msfa/dx7note.h/.cc` reach tuning and MTS-ESP APIs;
-- Apache-marked `Source/msfa/controllers.h` and `Source/msfa/env.cc` include GPL-licensed `Source/Dexed.h`.
+- `Source/Dexed.h` and all Dexed plugin/UI/application code;
+- `Source/msfa/tuning.h` and `tuning.cc`;
+- JUCE;
+- MTS-ESP;
+- `surge-synthesizer/tuning-library`;
+- plugin formats, effects, artwork, cartridges, patch banks and third-party reference audio.
 
-The feasibility spike therefore does **not** compile these dependencies through unchanged. The machine-readable audit excludes `Source/Dexed.h`, `tuning.h`, `tuning.cc`, JUCE, MTS-ESP and the tuning library from the initial browser renderer. FM1 Editor will own a small standard-12-TET adapter. Microtuning remains outside the feasibility gate.
+## Derived-source changes used by the spike
 
-## Approved candidate boundary before vendoring
+`scripts/materialize-msfa-spike.mjs` works only against an exact pinned checkout and refuses to write the derived source inside the FM1 Editor repository. It verifies source hashes before applying these narrow changes in a temporary directory:
 
-A future source integration may contain only:
+1. remove `../Dexed.h` dependencies from Apache-marked `env.cc` and `controllers.h` and use standard-library `min/max` support;
+2. remove the unused controller include from `fm_core.h`;
+3. remove tuning/MTS-ESP state and includes from `dx7note.h/.cc`;
+4. replace optional tuning with the same standard-12-TET integer log-frequency relation used by the pinned standard-tuning path;
+5. reset the two-sample `Dx7Note` feedback history to zero on construction.
 
-1. the candidate MSFA implementation/header set admitted by `docs/research/msfa-source-audit.json` after exact content hashes are recorded;
-2. derived Apache-2.0 files only where the manifest explicitly records the required removal of GPL/JUCE/MTS/tuning edges, with original copyright/license headers retained and modifications documented;
-3. a small FM1 Editor-owned standard-12-TET adapter and C/C++ bridge;
-4. build scripts, an Emscripten toolchain pin and generated WebAssembly/glue artifacts;
-5. required Apache-2.0 license and NOTICE/attribution material.
+The feedback reset is required for an offline renderer lifecycle: the pinned constructor leaves `fb_buf_` uninitialized. A fresh native process and the first fresh WASM render happened to start with zero memory, but a second render in the same module retained old feedback state. The explicit reset makes repeated renders deterministic without changing the voice semantics.
 
-The boundary must exclude:
+Microtuning remains outside this feasibility scope.
 
-- Dexed `Plugin*`, editor, UI, cartridge manager, SysEx UI and JUCE wrapper code;
-- GPL-3.0 application code unless the project makes an explicit compatible licensing/distribution decision;
-- VST3, CLAP, AU and standalone plugin plumbing;
-- upstream artwork, factory cartridges, third-party patch banks and reference audio without verified redistribution rights;
-- microtuning/MTS dependencies for the initial feasibility renderer.
-
-## Expected architecture
+## Offline architecture proved
 
 ```text
 Dx7Voice
   -> createVirtualDx7RenderPlan()
-     - semantic range validation
-     - immutable semantic snapshot
-     - deterministic identity
   -> createMsfaCompatibleVoiceBridge()
-     - existing Yamaha semantic encoder
-     - canonical 155-byte voice data
-     - separate parameter-155 all-operators-on edit state
-     - private 156-byte compatibility buffer only
-  -> FM1 Editor-owned C/C++ bridge
-     - standard 12-TET adapter
-     - explicit controller/operator defaults
-     - no public arbitrary-byte API
-  -> audited MSFA-compatible WebAssembly core
-     -> offline dry mono Float32 PCM
-     -> AudioWorklet render blocks
-  -> separate master gain / limiter
-  -> later, separate FM-1-inspired effects graph with dry bypass
+  -> FM1 Editor-owned C++ dry-render bridge
+  -> temporary audited/derived MSFA source closure
+  -> Emscripten WebAssembly
+  -> dry mono normalized Float32 PCM
 ```
 
-Raw packed or unpacked DX7 bytes may exist only inside reviewed codec/bridge internals required by the engine. Optimization, UI and public render APIs continue to operate on legal semantic fields. The bridge must not expose arbitrary memory writes or an unvalidated raw-byte render entry point.
+The C++ spike uses the pinned MSFA 64-sample synthesis block, explicit controller defaults, standard 12-TET, note on/release, oscillator key sync and the dry integer-to-float conversion observed at the Dexed/MSFA boundary. Effects are not part of the dry engine.
 
-The offline renderer and real-time renderer must use the same voice mapping, standard-tuning adapter, controller defaults, sample-rate configuration, random-seed policy and synthesis core. Effects remain outside the dry renderer.
+## Accepted offline evidence
 
-## Feasibility acceptance criteria
+Permanent receipt: `docs/validation/msfa-deterministic-reset.md`.
 
-The MSFA/WASM spike is accepted only when all criteria below have permanent evidence.
+Validated source commit: `b32f8363bcac03a87ee483c0e880a0e28900a1e8`.
 
-### License and provenance
+Pinned toolchain:
 
-- Pin the exact upstream commit and every copied/derived source revision.
-- Record every copied or compiled source/header path, SHA-256, copyright header and license conclusion in the machine-readable manifest.
-- Run `npm run audit:virtual-dx7 -- --source-root <exact-pinned-checkout> --require-hashes` before vendoring.
-- Confirm that no complete Dexed GPL wrapper source is compiled into or copied into the MIT application.
-- Add the exact Apache-2.0 license text and all required NOTICE/attribution material before distributing source or binaries.
-- Record licenses and redistribution rights for the known voice fixture and reference PCM.
+- Emscripten image: `emscripten/emsdk:4.0.7`
+- resolved image digest: `sha256:8acec700a48dbff5250afc1e3ee545b7c002b689043ee82c277de6481a237fd7`
 
-### Reproducible build
+Reproducibility and output:
 
-- Pin Emscripten and the container/toolchain image by immutable version or digest.
-- Build from a clean checkout with one documented command.
-- Produce the same WebAssembly SHA-256 in two clean builds on the recorded build image, or document and remove the source of nondeterminism before acceptance.
-- Keep the minimal compressed engine plus glue at or below 1 MiB for the feasibility target; record uncompressed and compressed sizes.
+- two clean WASM builds: identical SHA-256 `2f39f43d45fc4be075e0bc7ca4be76fb662372da1690c5db067cb565bb65b331`;
+- native fixed PCM SHA-256: `313be5ffcb29436e92ecce45b5e1002c72dd810c6999379844b82ce87a18cfc2`;
+- WASM fixed PCM SHA-256: the same `313be5ffcb29436e92ecce45b5e1002c72dd810c6999379844b82ce87a18cfc2`;
+- repeated 72,000-frame WASM render: byte-identical;
+- fixed output: peak `0.125518799`, RMS `0.00961926`, first render `4.187 ms` on the recorded runner;
+- five-second render: `8.111 ms`, real-time ratio `0.001622`;
+- generated size: 27,557-byte WASM + 8,783-byte glue; combined gzip 20,032 bytes;
+- native/WASM fixed PCM byte-identical, therefore waveform correlation `1.0`, zero-frame alignment and log-magnitude error `0 dB` for this fixture.
 
-### Deterministic offline render
+The same execution also passed typecheck, lint, the full Vitest suite and production build. The generated engine source/binaries remained runner-temporary and were not committed.
 
-Use a repository-owned synthetic DX7 voice fixture with this fixed request:
+These measurements establish **DX7-compatible dry-render feasibility only**. They are not physical Yamaha DX7 or M-VAVE FM-1 validation.
 
-- MIDI note: 60;
-- velocity: 100;
-- sample rate: 48,000 Hz;
-- note on: 1.0 second;
-- release render window: 0.5 second;
-- random seed: 42;
-- dry mono output: exactly 72,000 normalized Float32 frames.
+## Fixed synthetic fixture
 
-Two renders from the same WebAssembly artifact must be byte-identical and produce the same SHA-256. No sample may be NaN, infinite or outside `[-1, 1]`.
+The repository-owned reference uses:
 
-A five-second dry render must complete faster than real time on the recorded CI baseline. The receipt must include CPU, operating system, browser or Node runtime, elapsed time and peak memory rather than general performance claims.
+- MIDI note 60;
+- velocity 100;
+- 48,000 Hz;
+- 1.0 s note-on;
+- 0.5 s release window;
+- 72,000 mono frames;
+- render-plan seed 42;
+- dry output only.
 
-### Trusted reference comparison
+The seed is part of the public deterministic plan identity. The current triangle-LFO fixture does not exercise MSFA sample-and-hold randomness; explicit seeded S&H behavior remains required before claiming deterministic coverage for every legal LFO waveform.
 
-Generate a dry reference from the same pinned and audited MSFA source using a documented trusted native/Dexed path, with no effects, resampling, limiter or undocumented controller state.
+## Remaining distribution gate
 
-After at most one documented constant gain alignment and no time shift:
+Before checking an engine source tree or WASM artifact into FM1 Editor:
 
-- peak cross-correlation must occur at zero-frame lag;
-- normalized waveform correlation must be at least `0.999`;
-- mean absolute multi-resolution log-magnitude error must be at most `0.25 dB`.
+- add the Apache-2.0 license text;
+- add required attribution/NOTICE material and state the pinned upstream revision;
+- mark every modified Apache source file prominently as modified;
+- record upstream and derived SHA-256 values in a machine-readable derived-source manifest;
+- verify that the committed set contains no GPL/JUCE/MTS/tuning-library source;
+- verify the committed/generated WASM against the accepted build hash or intentionally re-baseline it with a new receipt.
 
-A failed threshold is a failed feasibility result, not permission to silently alter the reference or claim approximate equivalence. Store the comparison script, metric output and reference provenance.
+## Remaining real-time gate
 
-### Real-time minimum
+The next minimum is deliberately smaller than the later full virtual instrument:
 
-- Load one known semantic voice.
-- Start and release one note through an `AudioWorklet`.
-- Implement all-notes-off and lifecycle cleanup.
-- Render standard 128-frame worklet blocks without NaN/Infinity output or uncaught processor errors.
-- Run a ten-minute Chrome and Edge soak at the recorded sample rate with zero uncaught worklet errors; record underrun/dropout observations and browser versions.
+- load one known semantic voice through the same mapping/core;
+- render through an `AudioWorklet` using standard 128-frame worklet callbacks while internally respecting the 64-frame MSFA block;
+- note on, note off and all-notes-off;
+- explicit audio enable/resume and lifecycle cleanup;
+- no NaN/Infinity output or uncaught processor errors;
+- ten-minute Chrome and Edge soak with recorded versions and dropout/underrun observations.
 
-Polyphony, pitch bend, modulation, sustain, aftertouch and FM-1-inspired effects are explicitly outside this minimum acceptance gate.
+Only after that gate should the app add polyphony, velocity variation, pitch bend, modulation, sustain, aftertouch, piano/sequencer routing and FM-1-inspired effects.
 
 ## Current blockers
 
-1. Candidate upstream files have Git blob identities recorded, but their SHA-256 values have not yet been materialized into the manifest and no third-party source is vendored.
-2. The Apache-2.0 license/NOTICE package and derived-file modification record have not yet been added because distribution has not begun.
-3. The standard-12-TET C/C++ adapter and patched MSFA candidate source set have not been compiled together.
-4. No Emscripten toolchain, generated WebAssembly artifact or AudioWorklet code is present in FM1 Editor.
-5. No trusted reference PCM and comparison receipt exists for the selected synthetic voice.
-6. No Chrome/Edge audio execution receipt exists for the renderer.
-7. No physical FM-1 or stock Yamaha DX7 recording is part of this spike, and virtual results must not be described as physical-device validation.
+1. Apache-2.0 license/NOTICE and derived-source distribution metadata have not yet been committed.
+2. The accepted WASM artifact is not yet distributed or wired to the TypeScript `VirtualDx7Engine` interface.
+3. Sample-and-hold LFO needs an explicit seed/reset policy before all-voice deterministic coverage is claimed.
+4. No `AudioWorklet` implementation or Chrome/Edge audio soak receipt exists.
+5. No physical FM-1 or stock Yamaha DX7 recording is part of this work.
 
 ## Next implementation step
 
-Materialize the exact pinned candidate source set outside the application UI, fill the SHA-256 fields, add Apache-2.0/NOTICE material and prove the source-root audit. Then add only the documented derived files plus the FM1 Editor-owned standard-tuning/C++ bridge and a pinned Emscripten build for deterministic offline PCM. Do not connect an `AudioWorklet` or the application UI until that offline build passes the deterministic and trusted-reference gates.
+Create the distributable audited engine package: generate only the accepted derived source set, add Apache-2.0 license/attribution and a derived-source manifest, build the pinned WASM artifact reproducibly, and make the dry offline renderer available through the existing semantic `VirtualDx7Engine` interface. Then implement the one-voice AudioWorklet gate. Do not add FM-1-inspired effects or AI reconstruction until the dry real-time renderer is stable.
