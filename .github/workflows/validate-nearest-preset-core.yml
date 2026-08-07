@@ -1,0 +1,57 @@
+name: Validate nearest preset retrieval core
+
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/validate-nearest-preset-core.yml']
+
+permissions:
+  contents: write
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Full software gate
+        run: |
+          npm install --no-audit --no-fund
+          npm run audit:virtual-dx7
+          npm run typecheck
+          npm run lint
+          npm run test
+          npm run build
+      - name: Record core validation
+        run: |
+          cat > docs/validation/nearest-preset-core-software.md <<EOF
+          # Nearest-preset retrieval core software validation
+
+          Validated source/workflow commit: \`${GITHUB_SHA}\`
+
+          Overall software gate: **SUCCESS**
+
+          ## Validated foundation
+
+          - Catalog candidates can be rendered sequentially through an injected \`VirtualDx7OfflineEngine\` at explicit standardized note/velocity probes.
+          - Index construction is cancellable, reports deterministic progress, rejects duplicate ids and records renderer identity/render keys.
+          - Render PCM is converted through the same deterministic descriptor pipeline used for uploaded references.
+          - Descriptor comparison reports separate envelope, mel, MFCC, centroid, rolloff and flatness distances plus a deterministic weighted total.
+          - Reference pitch selects the nearest standardized probe; final candidate ordering is still based on descriptor distance with deterministic id tie-breaking.
+          - Ranked results retain the semantic \`Dx7Voice\`, source metadata, score, matched probe and metric breakdown required for later UI load/A-B actions.
+          - Focused tests plus source audit, typecheck, lint, full tests and production build passed.
+
+          The roadmap nearest-preset item remains open until catalog enumeration/index persistence and the product UI expose several ranked candidates with dry A/B audition and explicit load actions.
+          EOF
+          rm -f .github/workflows/validate-nearest-preset-core.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git commit -m 'test(audio): record nearest preset core validation'
+          git pull --rebase origin main
+          git push origin HEAD:main
