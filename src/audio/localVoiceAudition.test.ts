@@ -33,6 +33,24 @@ afterEach(() => {
 })
 
 describe('createLocalVoiceAuditionManager', () => {
+  it('prepares browser audio before an asynchronously supplied voice and reuses that controller', async () => {
+    const controller = controllerHarness()
+    const createController = vi.fn(() => controller)
+    const manager = createLocalVoiceAuditionManager(createController)
+    const voice = createInitializedVoice('PREPARED')
+
+    const preparation = manager.prepare()
+    expect(createController).toHaveBeenCalledTimes(1)
+    expect(controller.enable).toHaveBeenCalledTimes(1)
+    await preparation
+
+    await manager.audition(voice)
+
+    expect(createController).toHaveBeenCalledTimes(1)
+    expect(controller.loadVoice).toHaveBeenCalledWith(voice, 42)
+    expect(controller.noteOn).toHaveBeenCalledWith(60, 105)
+  })
+
   it('starts one semantic C4 audition and auto-releases/closes it', async () => {
     vi.useFakeTimers()
     const controller = controllerHarness()
@@ -45,6 +63,7 @@ describe('createLocalVoiceAuditionManager', () => {
     await manager.audition(voice)
 
     expect(controller.enable).toHaveBeenCalledTimes(1)
+    expect(controller.allNotesOff).toHaveBeenCalledTimes(1)
     expect(controller.loadVoice).toHaveBeenCalledWith(voice, 42)
     expect(controller.configurePerformance).toHaveBeenCalledTimes(1)
     expect(controller.noteOn).toHaveBeenCalledWith(60, 105)
@@ -56,33 +75,33 @@ describe('createLocalVoiceAuditionManager', () => {
     expect(onRelease).toHaveBeenCalledWith(voice)
 
     await vi.advanceTimersByTimeAsync(900)
-    expect(controller.allNotesOff).toHaveBeenCalledTimes(1)
+    expect(controller.allNotesOff).toHaveBeenCalledTimes(2)
     expect(controller.close).toHaveBeenCalledTimes(1)
     expect(onStop).toHaveBeenCalledWith(voice)
     expect(manager.active).toBe(false)
   })
 
-  it('cancels and closes the previous audition before starting another voice', async () => {
+  it('cancels the previous audition and reuses the already-enabled controller', async () => {
     vi.useFakeTimers()
-    const first = controllerHarness()
-    const second = controllerHarness()
-    const controllers = [first, second]
-    const manager = createLocalVoiceAuditionManager(() => controllers.shift()!)
+    const controller = controllerHarness()
+    const createController = vi.fn(() => controller)
+    const manager = createLocalVoiceAuditionManager(createController)
     const voiceA = createInitializedVoice('A')
     const voiceB = createInitializedVoice('B')
 
     await manager.audition(voiceA, { noteOnMs: 500, releaseTailMs: 500 })
     await manager.audition(voiceB, { noteOnMs: 500, releaseTailMs: 500 })
 
-    expect(first.allNotesOff).toHaveBeenCalledTimes(1)
-    expect(first.close).toHaveBeenCalledTimes(1)
-    expect(second.noteOn).toHaveBeenCalledWith(60, 105)
+    expect(createController).toHaveBeenCalledTimes(1)
+    expect(controller.allNotesOff).toHaveBeenCalledTimes(2)
+    expect(controller.loadVoice).toHaveBeenNthCalledWith(1, voiceA, 42)
+    expect(controller.loadVoice).toHaveBeenNthCalledWith(2, voiceB, 42)
+    expect(controller.noteOn).toHaveBeenCalledTimes(2)
     expect(manager.activeVoice).toBe(voiceB)
 
     await vi.advanceTimersByTimeAsync(1_000)
-    expect(first.noteOff).not.toHaveBeenCalled()
-    expect(second.noteOff).toHaveBeenCalledTimes(1)
-    expect(second.close).toHaveBeenCalledTimes(1)
+    expect(controller.noteOff).toHaveBeenCalledTimes(1)
+    expect(controller.close).toHaveBeenCalledTimes(1)
   })
 
   it('stop cancels pending release timers and releases the active controller immediately', async () => {
@@ -96,7 +115,7 @@ describe('createLocalVoiceAuditionManager', () => {
     await manager.stop()
     await vi.advanceTimersByTimeAsync(5_000)
 
-    expect(controller.allNotesOff).toHaveBeenCalledTimes(1)
+    expect(controller.allNotesOff).toHaveBeenCalledTimes(2)
     expect(controller.close).toHaveBeenCalledTimes(1)
     expect(controller.noteOff).not.toHaveBeenCalled()
     expect(onStop).toHaveBeenCalledWith(voice)
