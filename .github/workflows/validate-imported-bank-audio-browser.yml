@@ -1,0 +1,108 @@
+name: Validate imported-bank audio in Chrome and Edge
+
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/validate-imported-bank-audio-browser.yml']
+
+permissions:
+  contents: write
+
+jobs:
+  browser:
+    runs-on: windows-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - run: npm install --no-audit --no-fund
+      - run: npm run build
+
+      - name: Locate browsers and execute exact imported-bank flow
+        id: browsers
+        shell: pwsh
+        run: |
+          $chromeCandidates = @(
+            "$env:PROGRAMFILES\Google\Chrome\Application\chrome.exe",
+            "$env:ProgramFiles(x86)\Google\Chrome\Application\chrome.exe"
+          )
+          $edgeCandidates = @(
+            "$env:PROGRAMFILES\Microsoft\Edge\Application\msedge.exe",
+            "$env:ProgramFiles(x86)\Microsoft\Edge\Application\msedge.exe"
+          )
+          $chrome = $chromeCandidates | Where-Object { Test-Path $_ } | Select-Object -First 1
+          $edge = $edgeCandidates | Where-Object { Test-Path $_ } | Select-Object -First 1
+          if (-not $chrome) { throw 'Chrome executable not found on windows-latest' }
+          if (-not $edge) { throw 'Edge executable not found on windows-latest' }
+
+          $chromeResult = Join-Path $PWD 'imported-bank-audio-chrome.json'
+          $edgeResult = Join-Path $PWD 'imported-bank-audio-edge.json'
+          node scripts/test-imported-bank-virtual-audio-browser.mjs --browser-executable $chrome --browser-name chrome --result $chromeResult
+          $chromeExit = $LASTEXITCODE
+          node scripts/test-imported-bank-virtual-audio-browser.mjs --browser-executable $edge --browser-name edge --result $edgeResult
+          $edgeExit = $LASTEXITCODE
+          "chrome_exit=$chromeExit" >> $env:GITHUB_OUTPUT
+          "edge_exit=$edgeExit" >> $env:GITHUB_OUTPUT
+          if (($chromeExit -eq 0) -and ($edgeExit -eq 0)) { "ok=true" >> $env:GITHUB_OUTPUT } else { "ok=false" >> $env:GITHUB_OUTPUT }
+          exit 0
+
+      - name: Record browser receipt and reconcile PLAN
+        shell: pwsh
+        env:
+          OK: ${{ steps.browsers.outputs.ok }}
+          CHROME_EXIT: ${{ steps.browsers.outputs.chrome_exit }}
+          EDGE_EXIT: ${{ steps.browsers.outputs.edge_exit }}
+        run: |
+          @'
+          import json, os
+          from pathlib import Path
+
+          ok = os.environ.get('OK') == 'true'
+          def load(name):
+              path=Path(name)
+              if not path.exists(): return {'ok':False,'error':'result file missing'}
+              return json.loads(path.read_text(encoding='utf-8'))
+          chrome=load('imported-bank-audio-chrome.json')
+          edge=load('imported-bank-audio-edge.json')
+          def summary(label,data):
+              if not data.get('ok'):
+                  return f"- {label}: FAILED — {data.get('error','unknown error')}"
+              return (f"- {label}: {data.get('browserProduct')} · loaded ROM1A peak {data.get('loadedVoicePeak'):.8f} · "
+                      f"catalog audition peak {data.get('catalogAuditionPeak'):.8f} · saved-library audition peak {data.get('savedAuditionPeak'):.8f} · "
+                      f"Web MIDI requests {data.get('midiRequests')}")
+          lines=[
+              '# Imported-bank virtual audio browser acceptance','',
+              f"Source commit: `{os.environ['GITHUB_SHA']}`",'',
+              f"Overall browser gate: **{'SUCCESS' if ok else 'FAILED'}**",'',
+              summary('Chrome',chrome), summary('Edge',edge),'',
+              'Acceptance flow: Library → search/load real ROM1A bank → Voice → Enable local audio → play BRASS 1; then direct catalog Audition first voice; then saved-library Audition local. Each route must produce measurable AudioWorklet PCM and must not request Web MIDI.','',
+              'This is browser/software evidence only; it does not claim physical FM-1 or DX7 audio equivalence.',''
+          ]
+          Path('docs/validation/imported-bank-virtual-audio-browser.md').write_text('\n'.join(lines),encoding='utf-8')
+
+          if ok:
+              plan=Path('PLAN.md')
+              text=plan.read_text(encoding='utf-8')
+              old='- [ ] Add direct local audition actions for catalog/library voices without first loading them into the editor; keep audition, load and hardware transmission as distinct user actions. Implementation is in progress; do not mark complete until the final mounted Chrome/Edge audition receipt succeeds.'
+              new='- [x] Add direct local audition actions for catalog/library voices without first loading them into the editor; keep audition, load and hardware transmission as distinct user actions. Imported-bank and audition PCM are validated in Chrome/Edge. Evidence: [`docs/validation/imported-bank-virtual-audio-browser.md`](./docs/validation/imported-bank-virtual-audio-browser.md).'
+              if old in text:
+                  text=text.replace(old,new,1)
+              preview='- [x] Expose an explicit local DX7-compatible preview in the voice workspace without requiring MIDI hardware or automatically sending Web MIDI/SysEx; synchronize only the semantic voice and preserve note-off/all-notes-off cleanup. Evidence: [`docs/validation/local-virtual-preview-combined-acceptance.md`](./docs/validation/local-virtual-preview-combined-acceptance.md).'
+              if preview in text:
+                  text=text.replace(preview,preview[:-1] + ' Imported packed-bank playback repair: [`docs/validation/imported-bank-virtual-audio-browser.md`](./docs/validation/imported-bank-virtual-audio-browser.md).',1)
+              plan.write_text(text,encoding='utf-8')
+
+          Path('.github/workflows/validate-imported-bank-audio-browser.yml').unlink(missing_ok=True)
+          '@ | python
+
+      - name: Commit browser receipt
+        shell: bash
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git commit -m 'test(browser): record imported-bank audio acceptance' || true
+          git pull --rebase origin main
+          git push origin HEAD:main
