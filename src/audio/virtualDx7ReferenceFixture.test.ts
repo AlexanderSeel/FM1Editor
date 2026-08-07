@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto'
 import { describe, expect, it } from 'vitest'
 import { decodeSingleVoiceMessage, DX7_SINGLE_MESSAGE_LENGTH } from '../sysex/dx7'
 import { createMsfaCompatibleVoiceBridge } from './msfaVoiceBridge'
@@ -6,7 +7,14 @@ import {
   createVirtualDx7ReferenceRenderRequest,
   createVirtualDx7ReferenceSysex,
   createVirtualDx7ReferenceVoice,
+  VIRTUAL_DX7_REFERENCE_BRIDGE_SHA256,
+  VIRTUAL_DX7_REFERENCE_SYSEX_SHA256,
+  VIRTUAL_DX7_REFERENCE_VOICE_DATA_SHA256,
 } from './virtualDx7ReferenceFixture'
+
+function sha256(bytes: Uint8Array): string {
+  return createHash('sha256').update(bytes).digest('hex')
+}
 
 describe('virtual DX7 synthetic reference fixture', () => {
   it('generates one deterministic checksum-valid Yamaha single-voice SysEx message', () => {
@@ -16,6 +24,8 @@ describe('virtual DX7 synthetic reference fixture', () => {
 
     expect(first).toHaveLength(DX7_SINGLE_MESSAGE_LENGTH)
     expect(Array.from(second)).toEqual(Array.from(first))
+    expect(sha256(first)).toBe(VIRTUAL_DX7_REFERENCE_SYSEX_SHA256)
+    expect(sha256(first.slice(6, 161))).toBe(VIRTUAL_DX7_REFERENCE_VOICE_DATA_SHA256)
     expect(decoded.channel).toBe(0)
     expect(decoded.voice.name).toBe('FM1 REF V1')
     expect(decoded.voice.algorithm).toBe(5)
@@ -46,6 +56,7 @@ describe('virtual DX7 synthetic reference fixture', () => {
     expect(Array.from(bridge.voiceData.slice(0, 145)))
       .toEqual(Array.from(sysex.slice(6, 6 + 145)))
     expect(Array.from(bridge.voiceData.slice(145))).not.toEqual(Array.from(sysex.slice(151, 161)))
+    expect(sha256(bridge.patchBuffer)).toBe(VIRTUAL_DX7_REFERENCE_BRIDGE_SHA256)
   })
 
   it('is repository-defined semantic data without imported source bytes', () => {
