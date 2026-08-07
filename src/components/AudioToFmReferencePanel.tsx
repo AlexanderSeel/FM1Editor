@@ -1,6 +1,7 @@
-import { useCallback, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import type { Dx7Voice } from '../domain/voice'
 import type { PreparedReferenceAudio } from '../audio/referenceAudio'
+import { setPreparedReferenceAudio } from '../audio/preparedReferenceStore'
 import { NearestPresetPanel } from './NearestPresetPanel'
 import { ReferenceAudioInputPanel } from './ReferenceAudioInputPanel'
 
@@ -21,8 +22,13 @@ export function AudioToFmReferencePanel({
 
   const handlePrepared = useCallback((nextReference: PreparedReferenceAudio | null) => {
     setReference(nextReference)
+    setPreparedReferenceAudio(nextReference)
     onReferenceChange?.(nextReference)
   }, [onReferenceChange])
+
+  useEffect(() => () => {
+    setPreparedReferenceAudio(null)
+  }, [])
 
   return (
     <div className="grid gap-4">
