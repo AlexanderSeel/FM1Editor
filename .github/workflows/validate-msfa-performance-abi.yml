@@ -1,0 +1,269 @@
+name: Validate MSFA performance ABI
+
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/validate-msfa-performance-abi.yml']
+
+permissions:
+  contents: write
+
+concurrency:
+  group: validate-msfa-performance-abi
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Prepare audited source tree
+        run: |
+          mkdir -p .tmp/source/msfa .tmp/out-a .tmp/out-b
+          cp -R third_party/msfa/src/. .tmp/source/msfa/
+      - name: Rebuild twice with pinned Emscripten
+        run: |
+          docker run --rm -v "$PWD:/repo" -w /repo \
+            emscripten/emsdk@sha256:8acec700a48dbff5250afc1e3ee545b7c002b689043ee82c277de6481a237fd7 \
+            bash -lc 'bash scripts/build-msfa-spike.sh /repo/.tmp/source /repo/.tmp/out-a wasm && bash scripts/build-msfa-spike.sh /repo/.tmp/source /repo/.tmp/out-b wasm'
+          test "$(sha256sum .tmp/out-a/fm1-msfa.wasm | cut -d' ' -f1)" = "$(sha256sum .tmp/out-b/fm1-msfa.wasm | cut -d' ' -f1)"
+          test "$(sha256sum .tmp/out-a/fm1-msfa.mjs | cut -d' ' -f1)" = "$(sha256sum .tmp/out-b/fm1-msfa.mjs | cut -d' ' -f1)"
+      - name: Verify offline regression and performance exports
+        run: |
+          node --input-type=module <<'NODE'
+          import { createHash } from 'node:crypto'
+          import { readFile } from 'node:fs/promises'
+          import { pathToFileURL } from 'node:url'
+          import { resolve } from 'node:path'
+
+          const factory = (await import(pathToFileURL(resolve('.tmp/out-a/fm1-msfa.mjs')).href)).default
+          const wasmBinary = new Uint8Array(await readFile('.tmp/out-a/fm1-msfa.wasm'))
+          const module = await factory({ wasmBinary, locateFile: (path) => path })
+          const hex = (await readFile('native/virtual-dx7-spike/reference-patch-v1.hex', 'utf8')).replace(/\s/g, '')
+          const patch = Uint8Array.from(hex.match(/../g), (value) => Number.parseInt(value, 16))
+          if (patch.length !== 156) throw new Error('Reference patch length mismatch')
+
+          const patchPointer = module._malloc(156)
+          const outputFrames = 72_000
+          const outputPointer = module._malloc(outputFrames * Float32Array.BYTES_PER_ELEMENT)
+          try {
+            module.HEAPU8.set(patch, patchPointer)
+            const status = module._fm1_msfa_render(patchPointer, 156, 60, 100, 48_000, 48_000, 24_000, 42, outputPointer, outputFrames)
+            if (status !== 0) throw new Error(`Offline regression render failed with ${status}`)
+            const start = outputPointer / Float32Array.BYTES_PER_ELEMENT
+            const pcm = new Float32Array(module.HEAPF32.slice(start, start + outputFrames))
+            const hash = createHash('sha256').update(Buffer.from(pcm.buffer)).digest('hex')
+            if (hash !== '313be5ffcb29436e92ecce45b5e1002c72dd810c6999379844b82ce87a18cfc2') {
+              throw new Error(`Offline PCM regression changed: ${hash}`)
+            }
+
+            const session = module._fm1_msfa_session_create(48_000)
+            if (!session) throw new Error('Unable to create performance session')
+            try {
+              if (module._fm1_msfa_session_load_patch(session, patchPointer, 156, 42) !== 0) throw new Error('Session patch load failed')
+              if (module._fm1_msfa_session_configure_performance(session, 12, 0, 99, 1, 99, 2) !== 0) throw new Error('Performance configure failed')
+              if (module._fm1_msfa_session_set_pitch_bend(session, 16_383) !== 0) throw new Error('Pitch bend setter failed')
+              if (module._fm1_msfa_session_set_modulation(session, 127) !== 0) throw new Error('Modulation setter failed')
+              if (module._fm1_msfa_session_set_aftertouch(session, 127) !== 0) throw new Error('Aftertouch setter failed')
+              if (module._fm1_msfa_session_set_pitch_bend(session, 20_000) !== 9) throw new Error('Invalid controller value was not rejected')
+            } finally {
+              module._fm1_msfa_session_destroy(session)
+            }
+            console.log(JSON.stringify({ fixedPcmSha256: hash, performanceAbi: 1 }))
+          } finally {
+            module._free(outputPointer)
+            module._free(patchPointer)
+          }
+          NODE
+      - name: Assemble generated browser package
+        run: |
+          cp .tmp/out-a/fm1-msfa.mjs public/virtual-dx7/fm1-msfa.mjs
+          cp .tmp/out-a/fm1-msfa.wasm public/virtual-dx7/fm1-msfa.wasm
+          python - <<'PY'
+          import hashlib, json
+          from pathlib import Path
+          path=Path('public/virtual-dx7/manifest.json')
+          data=json.loads(path.read_text(encoding='utf-8'))
+          data['wasm']['sha256']=hashlib.sha256(Path('public/virtual-dx7/fm1-msfa.wasm').read_bytes()).hexdigest()
+          data['glue']['sha256']=hashlib.sha256(Path('public/virtual-dx7/fm1-msfa.mjs').read_bytes()).hexdigest()
+          data['performanceControlAbi']=1
+          path.write_text(json.dumps(data, indent=2)+'\n', encoding='utf-8')
+          Path('.tmp/build-result.json').write_text(json.dumps({
+            'ok': True,
+            'wasmSha256': data['wasm']['sha256'],
+            'glueSha256': data['glue']['sha256'],
+            'fixedPcmSha256': data['acceptedReferencePcmSha256'],
+            'performanceControlAbi': 1,
+          }, indent=2)+'\n', encoding='utf-8')
+          PY
+      - name: Full software gate on generated package
+        run: |
+          npm install --no-audit --no-fund
+          npm run audit:virtual-dx7
+          node --check scripts/test-msfa-audioworklet-browser.mjs
+          npm run typecheck
+          npm run lint
+          npm run test
+          npm run build
+      - uses: actions/upload-artifact@v4
+        with:
+          name: performance-package
+          path: |
+            public/virtual-dx7/fm1-msfa.mjs
+            public/virtual-dx7/fm1-msfa.wasm
+            public/virtual-dx7/manifest.json
+            .tmp/build-result.json
+          if-no-files-found: error
+
+  browser:
+    if: needs.build.result == 'success'
+    needs: build
+    name: ${{ matrix.browser }} performance smoke
+    runs-on: windows-latest
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        browser: [chrome, edge]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: actions/download-artifact@v4
+        with:
+          name: performance-package
+          path: generated
+      - name: Install generated package
+        shell: pwsh
+        run: |
+          Copy-Item generated\fm1-msfa.mjs public\virtual-dx7\fm1-msfa.mjs -Force
+          Copy-Item generated\fm1-msfa.wasm public\virtual-dx7\fm1-msfa.wasm -Force
+          Copy-Item generated\manifest.json public\virtual-dx7\manifest.json -Force
+      - name: Execute real performance AudioWorklet smoke
+        continue-on-error: true
+        shell: pwsh
+        env:
+          BROWSER_NAME: ${{ matrix.browser }}
+        run: |
+          if ($env:BROWSER_NAME -eq 'chrome') {
+            $candidates = @("$env:ProgramFiles\Google\Chrome\Application\chrome.exe", "${env:ProgramFiles(x86)}\Google\Chrome\Application\chrome.exe")
+          } else {
+            $candidates = @("$env:ProgramFiles\Microsoft\Edge\Application\msedge.exe", "${env:ProgramFiles(x86)}\Microsoft\Edge\Application\msedge.exe")
+          }
+          $browser = $candidates | Where-Object { Test-Path $_ } | Select-Object -First 1
+          $result = "performance-$env:BROWSER_NAME.json"
+          if (-not $browser) {
+            @{ ok = $false; browserName = $env:BROWSER_NAME; requestedSoakSeconds = 20; error = 'Installed browser executable was not found' } | ConvertTo-Json | Set-Content -Encoding utf8 $result
+            exit 1
+          }
+          node scripts/test-msfa-audioworklet-browser.mjs --browser-executable "$browser" --browser-name "$env:BROWSER_NAME" --soak-seconds 20 --result "$result"
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: performance-${{ matrix.browser }}
+          path: performance-${{ matrix.browser }}.json
+          if-no-files-found: error
+
+  record:
+    if: always()
+    needs: [build, browser]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Download generated package
+        continue-on-error: true
+        uses: actions/download-artifact@v4
+        with:
+          name: performance-package
+          path: generated
+      - name: Download browser results
+        continue-on-error: true
+        uses: actions/download-artifact@v4
+        with:
+          pattern: performance-*
+          path: browser-results
+          merge-multiple: true
+      - name: Record result and self-clean
+        env:
+          BUILD_RESULT: ${{ needs.build.result }}
+        run: |
+          python - <<'PY'
+          import json, os, shutil
+          from pathlib import Path
+
+          build_ok=os.environ.get('BUILD_RESULT') == 'success'
+          generated=Path('generated')
+          if build_ok:
+              for name in ['fm1-msfa.mjs','fm1-msfa.wasm','manifest.json']:
+                  source=generated/name
+                  if not source.exists():
+                      build_ok=False
+                      break
+                  shutil.copy2(source, Path('public/virtual-dx7')/name)
+
+          results=[]
+          for name in ['chrome','edge']:
+              path=Path('browser-results')/f'performance-{name}.json'
+              if path.exists():
+                  try: data=json.loads(path.read_text(encoding='utf-8-sig'))
+                  except Exception as exc: data={'ok':False,'browserName':name,'error':f'invalid result: {exc}'}
+              else: data={'ok':False,'browserName':name,'error':'result artifact missing'}
+              results.append(data)
+
+          browser_ok=all(
+              bool(data.get('ok'))
+              and data.get('performanceControlAbi') == 1
+              and bool(data.get('performanceCommandsVerified'))
+              and isinstance(data.get('sustainedPeak'), (int,float))
+              and data.get('sustainedPeak') > 1e-6
+              and data.get('processorErrors') == 0
+              and data.get('suspendedObservations') == 0
+              for data in results
+          )
+          ok=build_ok and browser_ok
+          build_data={}
+          build_path=generated/'build-result.json'
+          if build_path.exists():
+              build_data=json.loads(build_path.read_text(encoding='utf-8-sig'))
+
+          lines=[
+              '# MSFA performance-control ABI validation','',
+              f"Validated source/workflow commit: `{os.environ['GITHUB_SHA']}`",'',
+              f"Overall performance-control gate: **{'SUCCESS' if ok else 'FAILED'}**",'',
+              f"- Reproducible rebuild/software gate: **{'SUCCESS' if build_ok else 'FAILED'}**",
+              f"- WASM SHA-256: `{build_data.get('wasmSha256','n/a')}`",
+              f"- Glue SHA-256: `{build_data.get('glueSha256','n/a')}`",
+              f"- Fixed offline PCM SHA-256: `{build_data.get('fixedPcmSha256','n/a')}`",'',
+              '| Browser | Result | Version | Performance ABI | Sustain peak | Processor errors | Suspensions |',
+              '| --- | --- | --- | ---: | ---: | ---: | ---: |',
+          ]
+          for data in results:
+              lines.append(f"| {data.get('browserName','?')} | **{'SUCCESS' if data.get('ok') else 'FAILURE'}** | {data.get('browserProduct','n/a')} | {data.get('performanceControlAbi','n/a')} | {data.get('sustainedPeak','n/a')} | {data.get('processorErrors','n/a')} | {data.get('suspendedObservations','n/a')} |")
+          lines += ['', '## Scope','',
+              '- Keeps the audited Apache MSFA source package unchanged; only the FM1-owned bridge, exported C ABI and generated Emscripten package change.',
+              '- Preserves the accepted fixed offline PCM hash exactly while adding live pitch bend, modulation and aftertouch setters.',
+              '- Uses documented DX7 function ranges/assignment masks; performance state remains separate from the 155-byte voice.',
+              '- Sustain is implemented in the repository-owned worklet note lifecycle and verified to keep a released note active until pedal release.',
+              '- Re-runs deterministic 16-voice allocation/stealing and Chrome/Edge processor stability on the rebuilt WASM.',
+              '- This does not claim physical Yamaha DX7 or M-VAVE FM-1 controller scaling/headroom equivalence.',
+          ]
+          for data in results:
+              lines += ['', f"## {data.get('browserName','browser')}", '```json', json.dumps(data,indent=2), '```']
+          Path('docs/validation/msfa-performance-control-abi.md').write_text('\n'.join(lines)+'\n', encoding='utf-8')
+          Path('.github/workflows/validate-msfa-performance-abi.yml').unlink(missing_ok=True)
+          PY
+      - name: Commit generated package, receipt and cleanup
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git diff --cached --quiet || git commit -m 'test(ci): record MSFA performance ABI validation rerun'
+          git pull --rebase origin main
+          git push origin HEAD:main
