@@ -1,0 +1,87 @@
+name: Integrate complete Virtual FM1 preview UI
+
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/integrate-virtual-fm1-preview-complete.yml']
+
+permissions:
+  contents: write
+
+jobs:
+  integrate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - name: Mount A-B/WAV extras and measured diagnostics
+        shell: python
+        run: |
+          from pathlib import Path
+          path=Path('src/components/VirtualDx7PreviewPanel.tsx')
+          text=path.read_text(encoding='utf-8')
+          text=text.replace('''  type MsfaAudioWorkletController,\n  type MsfaLocalPerformanceConfig,\n''','''  type MsfaAudioWorkletController,\n  type MsfaAudioWorkletDiagnostics,\n  type MsfaLocalPerformanceConfig,\n''',1)
+          import_anchor="import { VirtualPiano, type VirtualPianoNoteTarget } from './VirtualPiano'\n"
+          if "import { VirtualFm1PreviewExtras }" not in text:
+              if import_anchor not in text: raise SystemExit('VirtualPiano import anchor missing')
+              text=text.replace(import_anchor,import_anchor+"import { VirtualFm1PreviewExtras } from './VirtualFm1PreviewExtras'\n",1)
+          state_anchor='''  const [masterGainDb, setMasterGainDb] = useState<number>(VIRTUAL_FM1_MASTER_GAIN_DEFAULT_DB)\n  const [status, setStatus] = useState<string | null>(null)\n'''
+          state_new='''  const [masterGainDb, setMasterGainDb] = useState<number>(VIRTUAL_FM1_MASTER_GAIN_DEFAULT_DB)\n  const [diagnostics, setDiagnostics] = useState<MsfaAudioWorkletDiagnostics | null>(null)\n  const [status, setStatus] = useState<string | null>(null)\n'''
+          if 'const [diagnostics, setDiagnostics]' not in text:
+              if state_anchor not in text: raise SystemExit('diagnostic state anchor missing')
+              text=text.replace(state_anchor,state_new,1)
+          close_anchor='''    controllerRef.current = null\n    loadedVoiceRef.current = null\n'''
+          close_new='''    controllerRef.current = null\n    loadedVoiceRef.current = null\n    setDiagnostics(null)\n'''
+          if close_new not in text:
+              if close_anchor not in text: raise SystemExit('close diagnostic anchor missing')
+              text=text.replace(close_anchor,close_new,1)
+          effect_anchor='''  useEffect(() => { outputRouteRef.current?.setMasterGainDb(masterGainDb) }, [masterGainDb])\n\n  useEffect(() => {\n    const controller = controllerRef.current\n'''
+          effect_new='''  useEffect(() => { outputRouteRef.current?.setMasterGainDb(masterGainDb) }, [masterGainDb])\n\n  useEffect(() => {\n    if (state !== 'ready') {\n      setDiagnostics(null)\n      return\n    }\n    const update = () => setDiagnostics(controllerRef.current?.diagnostics ?? null)\n    update()\n    const timer = window.setInterval(update, 500)\n    return () => window.clearInterval(timer)\n  }, [state])\n\n  useEffect(() => {\n    const controller = controllerRef.current\n'''
+          if 'const timer = window.setInterval(update, 500)' not in text:
+              if effect_anchor not in text: raise SystemExit('diagnostic polling anchor missing')
+              text=text.replace(effect_anchor,effect_new,1)
+          mount_anchor='''      {(status || error) && <p aria-live="polite" className={`mt-3 text-xs ${error ? 'text-rose-300' : 'text-emerald-300'}`}>{error ?? status}</p>}\n\n      <div className="mt-4">\n        <VirtualPiano'''
+          diagnostics_ui='''      <div className="mt-4 grid gap-3 rounded-xl border border-white/10 bg-black/15 p-3 sm:grid-cols-2 lg:grid-cols-4" aria-label="Virtual FM-1 render diagnostics">\n        <div><p className="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500">Voices</p><p className="mt-1 text-sm font-black text-white">{diagnostics ? `${diagnostics.activeVoices}/${diagnostics.polyphony}` : `0/${MSFA_WORKLET_POLYPHONY}`}</p></div>\n        <div><p className="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500">Mean render</p><p className="mt-1 text-sm font-black text-white">{diagnostics ? `${diagnostics.meanRenderMs.toFixed(3)} ms · ${(diagnostics.meanUtilization * 100).toFixed(1)}%` : 'measurement pending'}</p></div>\n        <div><p className="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500">Max render</p><p className="mt-1 text-sm font-black text-white">{diagnostics ? `${diagnostics.maxRenderMs.toFixed(3)} ms · ${(diagnostics.maxUtilization * 100).toFixed(1)}%` : 'measurement pending'}</p></div>\n        <div><p className="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500">Over budget</p><p className={`mt-1 text-sm font-black ${diagnostics?.overBudgetCallbacks ? 'text-amber-200' : 'text-emerald-200'}`}>{diagnostics ? `${diagnostics.overBudgetCallbacks}/${diagnostics.callbacks}` : '—'}</p></div>\n      </div>\n\n      <div className="mt-4">\n        <VirtualFm1PreviewExtras fxEnabled={!fxBypassed} fxState={fxState} masterGainDb={masterGainDb} voice={voice} />\n      </div>\n\n      {(status || error) && <p aria-live="polite" className={`mt-3 text-xs ${error ? 'text-rose-300' : 'text-emerald-300'}`}>{error ?? status}</p>}\n\n      <div className="mt-4">\n        <VirtualPiano'''
+          if '<VirtualFm1PreviewExtras' not in text:
+              if mount_anchor not in text: raise SystemExit('final preview mount anchor missing')
+              text=text.replace(mount_anchor,diagnostics_ui,1)
+          path.write_text(text,encoding='utf-8')
+
+          test=Path('src/components/VirtualDx7PreviewPanel.test.tsx')
+          content=test.read_text(encoding='utf-8')
+          marker="""              expect(markup).toContain('Master gain')\n"""
+          if marker in content and "Reference A/B · offline render" not in content:
+              content=content.replace(marker,marker+"              expect(markup).toContain('Virtual FM-1 render diagnostics')\n              expect(markup).toContain('Reference A/B · offline render')\n              expect(markup).toContain('Download note WAV')\n              expect(markup).toContain('Download chord WAV')\n",1)
+          test.write_text(content,encoding='utf-8')
+      - run: npm install --no-audit --no-fund
+      - run: npm run audit:virtual-dx7
+      - run: npm run typecheck
+      - run: npm run lint
+      - run: npm test -- src/components/VirtualDx7PreviewPanel.test.tsx src/components/VirtualFm1PreviewExtras.test.tsx src/audio/virtualFm1WavRenderer.test.ts src/audio/msfaAudioWorklet.test.ts
+      - run: npm run test
+      - run: npm run build
+      - name: Persist complete-panel software receipt
+        run: |
+          cat > docs/validation/virtual-fm1-preview-complete-software.md <<EOF
+          # Complete Virtual FM-1 preview software validation
+
+          Source commit: \`${GITHUB_SHA}\`
+
+          Overall software gate: **SUCCESS**
+
+          The mounted Virtual FM-1 preview now combines the audited DX7-compatible live AudioWorklet, optional FM-1-inspired FX state, explicit dry/FX toggle, −48…+6 dB master control, conservative limiter, current semantic voice synchronization, measured worklet render diagnostics, prepared-reference A/B playback, and deterministic note/chord WAV export through the same preview output architecture.
+
+          Diagnostics are measured in the worklet and polled read-only in the UI; unavailable measurement remains explicit rather than guessed. Reference audio comes only from the in-memory prepared-reference store. WAV rendering is offline and local. Catalog audition and sequencer remain separate dry routes. No preview action requests Web MIDI, sends SysEx or uploads audio.
+
+          Virtual-engine audit, typecheck, lint, focused complete-preview tests, the full test suite and production build passed. Branded Chrome/Edge execution remains the final gate before the Virtual FM-1 preview PLAN item can close.
+          EOF
+          rm -f .github/workflows/mount-virtual-fm1-preview-extras.yml .github/workflows/integrate-virtual-fm1-preview-complete.yml
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add -A
+          git commit -m 'feat(audio): complete Virtual FM1 preview software UI' || true
+          git pull --rebase origin main
+          git push origin HEAD:main
