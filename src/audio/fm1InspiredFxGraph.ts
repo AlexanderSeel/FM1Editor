@@ -69,7 +69,7 @@ function value(state: Fm1FxState, id: string): number {
   const definition = FM1_FX_PARAMETERS.find((candidate) => candidate.id === id)
   if (!definition) throw new Error(`Unknown FM-1-inspired FX parameter ${id}`)
   const candidate = state.values[id]
-  if (!Number.isInteger(candidate) || candidate < definition.minimum || candidate > definition.maximum) {
+  if (candidate === undefined || !Number.isInteger(candidate) || candidate < definition.minimum || candidate > definition.maximum) {
     throw new RangeError(`${id} must be an integer from ${definition.minimum} through ${definition.maximum}`)
   }
   return candidate
@@ -317,8 +317,8 @@ export function createFm1InspiredFxGraph(context: BaseAudioContext, initialState
     setState: applyState,
     setBypass: applyBypass,
     dispose() {
-      try { chorusLfo.stop() } catch {}
-      try { phaserLfo.stop() } catch {}
+      try { chorusLfo.stop() } catch { /* already stopped */ }
+      try { phaserLfo.stop() } catch { /* already stopped */ }
       input.disconnect()
       bypassGain.disconnect()
       processedGain.disconnect()
