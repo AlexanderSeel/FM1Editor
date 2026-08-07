@@ -57,7 +57,7 @@ Known limitations, current evidence and conservative recovery procedures are mai
 
 The staged technical decision and reviewed libraries/research are documented in [`docs/research/audio-to-fm-and-virtual-synth.md`](./docs/research/audio-to-fm-and-virtual-synth.md).
 
-- [ ] Add local WAV/MP3 upload with region selection, duration/size limits, silence trimming, mono analysis, pitch detection with manual override, normalization controls, content hashes and explicit privacy status.
+- [x] Add local WAV/MP3 reference input with region selection, duration/size limits, silence trimming, mono analysis, pitch detection with manual override, normalization controls, content hashes and explicit local-browser-only privacy status. Evidence: [`docs/validation/reference-audio-input-software.md`](./docs/validation/reference-audio-input-software.md).
 - [ ] Implement reproducible audio descriptors for both references and virtual renders: amplitude envelope, multi-resolution STFT/mel spectrum, MFCCs, spectral centroid, rolloff and flatness.
 - [ ] Implement nearest-preset retrieval by rendering and indexing eligible voices from the existing DX7 catalog at standardized notes/velocities, then return several ranked candidates with dry A/B playback and explicit load actions.
 - [ ] Add a descriptor cache and standardized render-index workflow around the validated deterministic local renderer so matching does not depend on physical FM-1 hardware or real-time playback timing.

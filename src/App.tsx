@@ -10,6 +10,7 @@ import { MidiMonitor } from './components/MidiMonitor'
 import { PatchCatalogBrowser } from './components/PatchCatalogBrowser'
 import { PatchLibrary } from './components/PatchLibrary'
 import { PersistentWorkspace } from './components/PersistentWorkspace'
+import { ReferenceAudioInputPanel } from './components/ReferenceAudioInputPanel'
 import { SequenceEditor } from './components/SequenceEditor'
 import { SysexToolbar } from './components/SysexToolbar'
 import { TargetVoiceAuditionPanel } from './components/TargetVoiceAuditionPanel'
@@ -324,6 +325,14 @@ export default function App() {
                     title="Local virtual preview"
                   >
                     <VirtualDx7PreviewPanel voice={voice} />
+                  </CollapsibleSection>
+                  <CollapsibleSection
+                    defaultOpen={false}
+                    description="Local WAV/MP3 · region, trim, mono, pitch, normalization and SHA-256 · no server upload"
+                    storageKey="voice-audio-to-fm-reference"
+                    title="Audio → FM reference"
+                  >
+                    <ReferenceAudioInputPanel />
                   </CollapsibleSection>
                   <CollapsibleSection
                     description={fm1Mode ? 'Whole-bank transfer, preset recall and virtual piano' : 'Yamaha single-voice and 32-voice bulk transfer, plus virtual piano'}
