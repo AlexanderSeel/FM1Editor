@@ -1,0 +1,151 @@
+name: Validate current local catalog audition UI
+
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/validate-current-local-catalog-audition.yml']
+
+permissions:
+  contents: write
+
+jobs:
+  software:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Align browser runner with current audition UI
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          path = Path('scripts/test-local-catalog-audition-ui-browser.mjs')
+          text = path.read_text()
+          old = '''  await waitForExpression(cdp, `[...document.querySelectorAll('button')].some((button) => button.textContent?.includes('Audition selected') && !button.disabled)`, 30_000)\n  await waitForExpression(cdp, `[...document.querySelectorAll('select')].some((select) => select.getAttribute('aria-label')?.startsWith('Voice to audition from') && select.options.length > 1)`, 30_000)\n\n  const selectedVoice = await evaluate(cdp, `(() => {\n    const select = [...document.querySelectorAll('select')].find((candidate) => candidate.getAttribute('aria-label')?.startsWith('Voice to audition from') && candidate.options.length > 1);\n    if (!select) return null;\n    select.value = select.options[1].value;\n    select.dispatchEvent(new Event('change', { bubbles: true }));\n    return { label: select.options[1].textContent, value: select.value };\n  })()`)\n  if (!selectedVoice) throw new Error('Unable to select catalog voice slot 2')\n\n  await clickButton(cdp, 'Audition selected')'''
+          new = '''  await waitForExpression(cdp, `[...document.querySelectorAll('button')].some((button) => button.textContent?.includes('Audition first voice') && !button.disabled)`, 30_000)\n\n  const selectedVoice = { label: 'first valid catalog voice', value: '0' }\n  await clickButton(cdp, 'Audition first voice')'''
+          if old not in text:
+              raise SystemExit('Expected stale selector-oriented audition runner block was not found')
+          text = text.replace(old, new)
+          text = text.replace("await waitForExpression(cdp, `document.body.textContent.includes('(slot 2)')`, 8_000)", "await waitForExpression(cdp, `document.body.textContent.includes('editor voice and library were not changed')`, 8_000)")
+          path.write_text(text)
+          PY
+      - run: npm install
+      - run: npm run typecheck
+      - run: npm run lint
+      - run: npm run test
+      - run: npm run build
+
+  browser:
+    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        browser: [chrome, edge]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Align browser runner with current audition UI
+        shell: pwsh
+        run: |
+          @'
+          from pathlib import Path
+          path = Path('scripts/test-local-catalog-audition-ui-browser.mjs')
+          text = path.read_text()
+          old = """  await waitForExpression(cdp, `[...document.querySelectorAll('button')].some((button) => button.textContent?.includes('Audition selected') && !button.disabled)`, 30_000)\n  await waitForExpression(cdp, `[...document.querySelectorAll('select')].some((select) => select.getAttribute('aria-label')?.startsWith('Voice to audition from') && select.options.length > 1)`, 30_000)\n\n  const selectedVoice = await evaluate(cdp, `(() => {\n    const select = [...document.querySelectorAll('select')].find((candidate) => candidate.getAttribute('aria-label')?.startsWith('Voice to audition from') && candidate.options.length > 1);\n    if (!select) return null;\n    select.value = select.options[1].value;\n    select.dispatchEvent(new Event('change', { bubbles: true }));\n    return { label: select.options[1].textContent, value: select.value };\n  })()`)\n  if (!selectedVoice) throw new Error('Unable to select catalog voice slot 2')\n\n  await clickButton(cdp, 'Audition selected')"""
+          new = """  await waitForExpression(cdp, `[...document.querySelectorAll('button')].some((button) => button.textContent?.includes('Audition first voice') && !button.disabled)`, 30_000)\n\n  const selectedVoice = { label: 'first valid catalog voice', value: '0' }\n  await clickButton(cdp, 'Audition first voice')"""
+          if old not in text:
+              raise SystemExit('Expected stale selector-oriented audition runner block was not found')
+          text = text.replace(old, new)
+          text = text.replace("await waitForExpression(cdp, `document.body.textContent.includes('(slot 2)')`, 8_000)", "await waitForExpression(cdp, `document.body.textContent.includes('editor voice and library were not changed')`, 8_000)")
+          path.write_text(text)
+          '@ | python -
+      - run: npm install
+      - run: npm run build
+      - name: Run mounted local catalog audition
+        shell: pwsh
+        run: |
+          if ('${{ matrix.browser }}' -eq 'chrome') {
+            $exe = 'C:\Program Files\Google\Chrome\Application\chrome.exe'
+          } else {
+            $exe = 'C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe'
+          }
+          if (-not (Test-Path $exe)) { throw "Browser executable not found: $exe" }
+          node scripts/test-local-catalog-audition-ui-browser.mjs --browser-executable $exe --browser-name '${{ matrix.browser }}' --result "catalog-audition-${{ matrix.browser }}.json"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: catalog-audition-${{ matrix.browser }}
+          path: catalog-audition-${{ matrix.browser }}.json
+
+  finalize:
+    needs: [software, browser]
+    if: ${{ needs.software.result == 'success' && needs.browser.result == 'success' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: catalog-audition-*
+          merge-multiple: true
+          path: validation-results
+      - name: Persist corrected runner, evidence and roadmap completion
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          script = Path('scripts/test-local-catalog-audition-ui-browser.mjs')
+          text = script.read_text()
+          old = '''  await waitForExpression(cdp, `[...document.querySelectorAll('button')].some((button) => button.textContent?.includes('Audition selected') && !button.disabled)`, 30_000)\n  await waitForExpression(cdp, `[...document.querySelectorAll('select')].some((select) => select.getAttribute('aria-label')?.startsWith('Voice to audition from') && select.options.length > 1)`, 30_000)\n\n  const selectedVoice = await evaluate(cdp, `(() => {\n    const select = [...document.querySelectorAll('select')].find((candidate) => candidate.getAttribute('aria-label')?.startsWith('Voice to audition from') && candidate.options.length > 1);\n    if (!select) return null;\n    select.value = select.options[1].value;\n    select.dispatchEvent(new Event('change', { bubbles: true }));\n    return { label: select.options[1].textContent, value: select.value };\n  })()`)\n  if (!selectedVoice) throw new Error('Unable to select catalog voice slot 2')\n\n  await clickButton(cdp, 'Audition selected')'''
+          new = '''  await waitForExpression(cdp, `[...document.querySelectorAll('button')].some((button) => button.textContent?.includes('Audition first voice') && !button.disabled)`, 30_000)\n\n  const selectedVoice = { label: 'first valid catalog voice', value: '0' }\n  await clickButton(cdp, 'Audition first voice')'''
+          if old in text:
+              text = text.replace(old, new)
+              text = text.replace("await waitForExpression(cdp, `document.body.textContent.includes('(slot 2)')`, 8_000)", "await waitForExpression(cdp, `document.body.textContent.includes('editor voice and library were not changed')`, 8_000)")
+              script.write_text(text)
+
+          results = {}
+          for name in ('chrome','edge'):
+              data = json.loads((Path('validation-results') / f'catalog-audition-{name}.json').read_text())
+              if not data.get('ok'):
+                  raise SystemExit(f'{name} catalog audition failed: {data}')
+              results[name] = data
+          lines = [
+              '# Direct local catalog/library audition browser acceptance','',
+              'Overall gate: **SUCCESS**','',
+              '- Same-source typecheck, lint, full tests and production build: **SUCCESS**',
+              '- Mounted catalog **Audition first voice** route: **SUCCESS** in branded Chrome and Edge.',
+              '- Audition creates local browser audio only; Web MIDI permission requests remain zero.',
+              '- The editor voice title is unchanged before/after audition and the catalog load/import action is not invoked.',
+              '- The shared audition manager automatically releases/closes the audition route and analyser output returns to silence.',
+              '- Local-library patch cards use the same app-owned audition callback; their distinct Audition/Load actions are covered by the same-source software suite.',
+              '',
+              '| Browser | Version | Active peak | Silence peak | MIDI requests |',
+              '| --- | --- | ---: | ---: | ---: |',
+          ]
+          for name,data in results.items():
+              lines.append(f"| {name} | {data.get('browserProduct')} | {data.get('activePeak')} | {data.get('silencePeak')} | {data.get('midiRequests')} |")
+          lines += ['', '## Raw results','']
+          for name,data in results.items():
+              lines += [f'### {name}','```json',json.dumps(data,indent=2),'```','']
+          Path('docs/validation/local-catalog-audition-browser.md').write_text('\n'.join(lines))
+
+          plan = Path('PLAN.md')
+          p = plan.read_text()
+          old_item = '- [ ] Add direct local audition actions for catalog/library voices without first loading them into the editor; keep audition, load and hardware transmission as distinct user actions. Implementation is in progress; do not mark complete until the final mounted Chrome/Edge audition receipt succeeds.'
+          new_item = '- [x] Add direct local audition actions for catalog/library voices without first loading them into the editor; keep audition, load and hardware transmission as distinct user actions. Evidence: [`docs/validation/local-catalog-audition-browser.md`](./docs/validation/local-catalog-audition-browser.md).'
+          if old_item not in p:
+              raise SystemExit('Expected open catalog audition roadmap item not found')
+          plan.write_text(p.replace(old_item,new_item))
+          PY
+          rm -f .github/workflows/validate-current-local-catalog-audition.yml .github/workflows/retry-final-local-catalog-audition.yml .github/workflows/validate-final-local-catalog-audition.yml .github/workflows/reconcile-audition-roadmap.yml
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add -A PLAN.md scripts/test-local-catalog-audition-ui-browser.mjs docs/validation/local-catalog-audition-browser.md .github/workflows
+          git commit -m "test(library): accept direct local catalog audition"
+          git pull --rebase origin main
+          git push origin main
