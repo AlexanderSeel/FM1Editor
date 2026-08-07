@@ -10,7 +10,7 @@ permissions:
 
 concurrency:
   group: integrate-local-virtual-preview
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
   integrate:
@@ -36,7 +36,6 @@ jobs:
           if preview_import not in text:
               if import_anchor not in text: raise SystemExit('TargetVoiceAuditionPanel import anchor not found')
               text=text.replace(import_anchor, import_anchor+preview_import, 1)
-
           audition_anchor="""                  <CollapsibleSection
                     description={fm1Mode ? 'Whole-bank transfer, preset recall and virtual piano' : 'Yamaha single-voice and 32-voice bulk transfer, plus virtual piano'}
                     storageKey=\"voice-bank-audition\"
@@ -54,36 +53,29 @@ jobs:
           if 'storageKey="voice-local-virtual-preview"' not in text:
               if audition_anchor not in text: raise SystemExit('voice audition insertion anchor not found')
               text=text.replace(audition_anchor, preview+audition_anchor, 1)
-
           path.write_text(text, encoding='utf-8')
           PY
           git diff -- src/App.tsx
-      - name: Install dependencies
-        id: install
+      - id: install
         continue-on-error: true
         run: npm install --no-audit --no-fund
-      - name: Audit virtual DX7 boundary
-        id: audit
+      - id: audit
         if: steps.install.outcome == 'success'
         continue-on-error: true
         run: npm run audit:virtual-dx7
-      - name: Typecheck
-        id: typecheck
+      - id: typecheck
         if: steps.install.outcome == 'success'
         continue-on-error: true
         run: npm run typecheck
-      - name: Lint
-        id: lint
+      - id: lint
         if: steps.install.outcome == 'success'
         continue-on-error: true
         run: npm run lint
-      - name: Test
-        id: tests
+      - id: tests
         if: steps.install.outcome == 'success'
         continue-on-error: true
         run: npm run test
-      - name: Build
-        id: build
+      - id: build
         if: steps.install.outcome == 'success'
         continue-on-error: true
         run: npm run build
@@ -100,17 +92,14 @@ jobs:
         shell: bash
         run: |
           python - <<'PY'
-          import os
+          import os, subprocess
           from pathlib import Path
-          names=['PATCH','INSTALL','AUDIT','TYPECHECK','LINT','TESTS','BUILD']
-          results={name.lower():os.environ.get(name,'skipped') for name in names}
+          results={name.lower():os.environ.get(name,'skipped') for name in ['PATCH','INSTALL','AUDIT','TYPECHECK','LINT','TESTS','BUILD']}
           success=all(value=='success' for value in results.values())
-          if not success:
-              import subprocess
-              subprocess.run(['git','restore','src/App.tsx'],check=False)
+          if not success: subprocess.run(['git','restore','src/App.tsx'],check=False)
           lines=['# Local virtual preview integration','',f"Validated source/workflow commit: `{os.environ['GITHUB_SHA']}`",'',f"Overall integration gate: **{'SUCCESS' if success else 'FAILED'}**",'', '| Check | Result |','| --- | --- |']
           lines += [f"| {name} | **{value.upper()}** |" for name,value in results.items()]
-          lines += ['', '## Boundary', '', '- The preview is a separate browser-local section in the voice workspace and does not impersonate a `MidiOutputTarget`.', '- No `AudioContext` is created during render; the user must explicitly choose **Enable local audio**.', '- After activation, only the current semantic `Dx7Voice` is mapped into the audited v3-stateful worklet.', '- Voice changes use local all-notes-off before semantic resynchronization.', '- Blur/visibility/unmount cleanup remains centralized in `VirtualPiano`; the local preview additionally closes its AudioWorklet controller on unmount/disable.', '- The accepted renderer remains monophonic here. Overlapping UI notes deterministically replace the active local note; no polyphony claim is made.', '- Hardware MIDI/SysEx audition remains a separate panel and action path.']
+          lines += ['', '## Boundary', '', '- The preview is a separate browser-local section in the voice workspace and does not impersonate a `MidiOutputTarget`.', '- No `AudioContext` is created during render; the user must explicitly choose **Enable local audio**.', '- After activation, only the current semantic `Dx7Voice` is mapped into the audited v3-stateful worklet.', '- Voice changes use local all-notes-off before semantic resynchronization.', '- Blur/visibility/unmount cleanup remains centralized in `VirtualPiano`; the local preview additionally closes its AudioWorklet controller on unmount/disable.', '- The accepted renderer remains monophonic here; no polyphony claim is made.', '- Hardware MIDI/SysEx audition remains a separate panel and action path.']
           Path('docs/validation/local-virtual-preview-integration.md').write_text('\n'.join(lines)+'\n',encoding='utf-8')
           Path('.github/workflows/integrate-local-virtual-preview.yml').unlink(missing_ok=True)
           PY
