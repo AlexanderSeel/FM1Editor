@@ -1,0 +1,383 @@
+name: Execute corrected imported-bank audio repair
+
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/repair-library-virtual-audio-v2.yml']
+
+permissions:
+  contents: write
+
+concurrency:
+  group: repair-imported-bank-virtual-audio-v2
+  cancel-in-progress: false
+
+jobs:
+  repair:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Apply source repair
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          dx7=Path('src/sysex/dx7.ts')
+          text=dx7.read_text(encoding='utf-8')
+          old='''function decodePackedOperator(data: Uint8Array, offset: number): Dx7Operator {
+  const curvesAndScaling = data[offset + 11] ?? 0
+  const modulationAndVelocity = data[offset + 12] ?? 0
+  const oscillatorAndCoarse = data[offset + 14] ?? 0
+
+  return {
+    envelope: {
+      rates: asFour(data, offset),
+      levels: asFour(data, offset + 4),
+    },
+    keyboardScaling: {
+      breakPoint: normalizeBreakpoint(data[offset + 8] ?? 0),
+      leftDepth: data[offset + 9] ?? 0,
+      rightDepth: data[offset + 10] ?? 0,
+      leftCurve: readCurve(curvesAndScaling),
+      rightCurve: readCurve(curvesAndScaling >> 2),
+      rateScaling: (curvesAndScaling >> 4) & 0x07,
+    },
+    amplitudeModulationSensitivity: modulationAndVelocity & 0x03,
+    keyVelocitySensitivity: (modulationAndVelocity >> 2) & 0x07,
+    outputLevel: data[offset + 13] ?? 0,
+    oscillatorMode: (oscillatorAndCoarse & 0x01) === 0 ? 'ratio' : 'fixed',
+    frequencyCoarse: (oscillatorAndCoarse >> 1) & 0x1f,
+    frequencyFine: data[offset + 15] ?? 0,
+    detune: normalizeDetune((data[offset + 16] ?? 0) & 0x0f),
+  }
+}
+'''
+          new='''function decodePackedOperator(data: Uint8Array, offset: number): Dx7Operator {
+  // Yamaha 128-byte bulk format: 11=curves, 12=detune/rate scaling,
+  // 13=KVS/AMS, 14=output level, 15=oscillator mode/coarse, 16=fine.
+  const curves = data[offset + 11] ?? 0
+  const detuneAndRateScaling = data[offset + 12] ?? 0
+  const modulationAndVelocity = data[offset + 13] ?? 0
+  const oscillatorAndCoarse = data[offset + 15] ?? 0
+
+  return {
+    envelope: {
+      rates: asFour(data, offset),
+      levels: asFour(data, offset + 4),
+    },
+    keyboardScaling: {
+      breakPoint: normalizeBreakpoint(data[offset + 8] ?? 0),
+      leftDepth: data[offset + 9] ?? 0,
+      rightDepth: data[offset + 10] ?? 0,
+      leftCurve: readCurve(curves),
+      rightCurve: readCurve(curves >> 2),
+      rateScaling: detuneAndRateScaling & 0x07,
+    },
+    amplitudeModulationSensitivity: modulationAndVelocity & 0x03,
+    keyVelocitySensitivity: (modulationAndVelocity >> 2) & 0x07,
+    outputLevel: data[offset + 14] ?? 0,
+    oscillatorMode: (oscillatorAndCoarse & 0x01) === 0 ? 'ratio' : 'fixed',
+    frequencyCoarse: (oscillatorAndCoarse >> 1) & 0x1f,
+    frequencyFine: data[offset + 16] ?? 0,
+    detune: normalizeDetune((detuneAndRateScaling >> 3) & 0x0f),
+  }
+}
+'''
+          if old in text: text=text.replace(old,new,1)
+          elif 'const detuneAndRateScaling = data[offset + 12] ?? 0' not in text: raise SystemExit('Unexpected packed decoder state')
+
+          old='''    data[offset + 11] =
+      ((data[offset + 11] ?? 0) & 0x80) |
+      writeCurve(operator.keyboardScaling.leftCurve) |
+      (writeCurve(operator.keyboardScaling.rightCurve) << 2) |
+      (operator.keyboardScaling.rateScaling << 4)
+    data[offset + 12] =
+      ((data[offset + 12] ?? 0) & 0x60) |
+      operator.amplitudeModulationSensitivity |
+      (operator.keyVelocitySensitivity << 2)
+    data[offset + 13] = operator.outputLevel
+    data[offset + 14] =
+      ((data[offset + 14] ?? 0) & 0x40) |
+      (operator.oscillatorMode === 'fixed' ? 1 : 0) |
+      (operator.frequencyCoarse << 1)
+    data[offset + 15] = operator.frequencyFine
+    data[offset + 16] = ((data[offset + 16] ?? 0) & 0x70) | normalizeDetune(operator.detune)
+'''
+          new='''    data[offset + 11] =
+      ((data[offset + 11] ?? 0) & 0x70) |
+      writeCurve(operator.keyboardScaling.leftCurve) |
+      (writeCurve(operator.keyboardScaling.rightCurve) << 2)
+    data[offset + 12] =
+      (normalizeDetune(operator.detune) << 3) |
+      operator.keyboardScaling.rateScaling
+    data[offset + 13] =
+      ((data[offset + 13] ?? 0) & 0x60) |
+      operator.amplitudeModulationSensitivity |
+      (operator.keyVelocitySensitivity << 2)
+    data[offset + 14] = operator.outputLevel
+    data[offset + 15] =
+      ((data[offset + 15] ?? 0) & 0x40) |
+      (operator.oscillatorMode === 'fixed' ? 1 : 0) |
+      (operator.frequencyCoarse << 1)
+    data[offset + 16] = operator.frequencyFine
+'''
+          if old in text: text=text.replace(old,new,1)
+          elif '(normalizeDetune(operator.detune) << 3)' not in text: raise SystemExit('Unexpected packed encoder state')
+          dx7.write_text(text,encoding='utf-8')
+
+          Path('src/library/storageMigration.ts').write_text('''import type { Dx7Operator, Dx7Voice } from '../domain/voice'
+import { DX7_PACKED_VOICE_LENGTH, decodePackedVoice, encodeSingleVoiceData } from '../sysex/dx7'
+import { fingerprintVoice, normalizeTags, type PatchOrigin, type PatchOriginKind, type PatchRecord } from './model'
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null
+}
+
+function normalizeOrigin(value: unknown, fallbackTimestamp: string): PatchOrigin {
+  if (!isRecord(value)) return { kind: 'file', label: 'Migrated local library', importedAt: fallbackTimestamp }
+  const validKinds: readonly PatchOriginKind[] = ['editor', 'file', 'external-catalog']
+  const kind = validKinds.includes(value.kind as PatchOriginKind) ? value.kind as PatchOriginKind : 'file'
+  return {
+    kind,
+    label: typeof value.label === 'string' && value.label.trim().length > 0 ? value.label : 'Migrated local library',
+    importedAt: typeof value.importedAt === 'string' ? value.importedAt : fallbackTimestamp,
+    ...(typeof value.filename === 'string' ? { filename: value.filename } : {}),
+    ...(typeof value.url === 'string' ? { url: value.url } : {}),
+    ...(typeof value.license === 'string' ? { license: value.license } : {}),
+    ...(typeof value.bankSlot === 'number' && Number.isInteger(value.bankSlot) ? { bankSlot: value.bankSlot } : {}),
+  }
+}
+
+function legacyPackedOperator(packed: Uint8Array, operatorIndex: number): Pick<
+  Dx7Operator,
+  'amplitudeModulationSensitivity' | 'keyVelocitySensitivity' | 'outputLevel' | 'oscillatorMode' | 'frequencyCoarse' | 'frequencyFine' | 'detune'
+> & { rateScaling: number } {
+  const offset = (5 - operatorIndex) * 17
+  const curvesAndScaling = packed[offset + 11] ?? 0
+  const modulationAndVelocity = packed[offset + 12] ?? 0
+  const oscillatorAndCoarse = packed[offset + 14] ?? 0
+  return {
+    rateScaling: (curvesAndScaling >> 4) & 0x07,
+    amplitudeModulationSensitivity: modulationAndVelocity & 0x03,
+    keyVelocitySensitivity: (modulationAndVelocity >> 2) & 0x07,
+    outputLevel: packed[offset + 13] ?? 0,
+    oscillatorMode: (oscillatorAndCoarse & 0x01) === 0 ? 'ratio' : 'fixed',
+    frequencyCoarse: (oscillatorAndCoarse >> 1) & 0x1f,
+    frequencyFine: packed[offset + 15] ?? 0,
+    detune: Math.min((packed[offset + 16] ?? 0) & 0x0f, 14),
+  }
+}
+
+function repair<T>(stored: T, legacy: T, corrected: T): T {
+  return Object.is(stored, legacy) ? corrected : stored
+}
+
+export function repairLegacyPackedVoice(voice: Dx7Voice): Dx7Voice {
+  const packed = voice.source?.packed
+  if (!(packed instanceof Uint8Array) || packed.length !== DX7_PACKED_VOICE_LENGTH) return voice
+  const corrected = decodePackedVoice(packed)
+  const operators = voice.operators.map((operator, operatorIndex) => {
+    const legacy = legacyPackedOperator(packed, operatorIndex)
+    const fixed = corrected.operators[operatorIndex]
+    if (!fixed) return operator
+    return {
+      ...operator,
+      keyboardScaling: { ...operator.keyboardScaling, rateScaling: repair(operator.keyboardScaling.rateScaling, legacy.rateScaling, fixed.keyboardScaling.rateScaling) },
+      amplitudeModulationSensitivity: repair(operator.amplitudeModulationSensitivity, legacy.amplitudeModulationSensitivity, fixed.amplitudeModulationSensitivity),
+      keyVelocitySensitivity: repair(operator.keyVelocitySensitivity, legacy.keyVelocitySensitivity, fixed.keyVelocitySensitivity),
+      outputLevel: repair(operator.outputLevel, legacy.outputLevel, fixed.outputLevel),
+      oscillatorMode: repair(operator.oscillatorMode, legacy.oscillatorMode, fixed.oscillatorMode),
+      frequencyCoarse: repair(operator.frequencyCoarse, legacy.frequencyCoarse, fixed.frequencyCoarse),
+      frequencyFine: repair(operator.frequencyFine, legacy.frequencyFine, fixed.frequencyFine),
+      detune: repair(operator.detune, legacy.detune, fixed.detune),
+    }
+  }) as unknown as Dx7Voice['operators']
+  return { ...voice, operators, source: { ...voice.source, packed: packed.slice() } }
+}
+
+export function normalizeStoredPatchRecord(value: unknown, fallbackTimestamp = new Date().toISOString()): PatchRecord | null {
+  if (!isRecord(value) || !isRecord(value.voice)) return null
+  const voice = repairLegacyPackedVoice(value.voice as unknown as Dx7Voice)
+  try { encodeSingleVoiceData(voice) } catch { return null }
+  const fingerprint = fingerprintVoice(voice)
+  const createdAt = typeof value.createdAt === 'string' ? value.createdAt : fallbackTimestamp
+  const updatedAt = typeof value.updatedAt === 'string' ? value.updatedAt : createdAt
+  const rawTags = Array.isArray(value.tags) ? value.tags.filter((tag): tag is string => typeof tag === 'string') : []
+  return {
+    id: typeof value.id === 'string' && value.id.trim().length > 0 ? value.id : `migrated-${fingerprint}`,
+    fingerprint,
+    voice,
+    tags: normalizeTags(rawTags),
+    favorite: value.favorite === true,
+    createdAt,
+    updatedAt,
+    origin: normalizeOrigin(value.origin, createdAt),
+  }
+}
+''',encoding='utf-8')
+
+          db=Path('src/library/indexedDbPatchLibrary.ts')
+          text=db.read_text(encoding='utf-8').replace('const DATABASE_VERSION = 3','const DATABASE_VERSION = 4',1)
+          if 'const DATABASE_VERSION = 4' not in text: raise SystemExit('DB version update failed')
+          db.write_text(text,encoding='utf-8')
+
+          Path('src/library/storageMigration.test.ts').write_text('''import { describe, expect, it } from 'vitest'
+import { createInitializedVoice, type Dx7Voice } from '../domain/voice'
+import { decodePackedVoice, encodePackedVoice } from '../sysex/dx7'
+import { fingerprintVoice } from './model'
+import { normalizeStoredPatchRecord, repairLegacyPackedVoice } from './storageMigration'
+
+function legacyCorruptFromPacked(voice: Dx7Voice): Dx7Voice {
+  const packed = voice.source?.packed
+  if (!(packed instanceof Uint8Array)) throw new Error('test voice has no packed source')
+  const operators = voice.operators.map((operator, operatorIndex) => {
+    const offset = (5 - operatorIndex) * 17
+    const curvesAndScaling = packed[offset + 11] ?? 0
+    const modulationAndVelocity = packed[offset + 12] ?? 0
+    const oscillatorAndCoarse = packed[offset + 14] ?? 0
+    return {
+      ...operator,
+      keyboardScaling: { ...operator.keyboardScaling, rateScaling: (curvesAndScaling >> 4) & 7 },
+      amplitudeModulationSensitivity: modulationAndVelocity & 3,
+      keyVelocitySensitivity: (modulationAndVelocity >> 2) & 7,
+      outputLevel: packed[offset + 13] ?? 0,
+      oscillatorMode: (oscillatorAndCoarse & 1) === 0 ? 'ratio' as const : 'fixed' as const,
+      frequencyCoarse: (oscillatorAndCoarse >> 1) & 31,
+      frequencyFine: packed[offset + 15] ?? 0,
+      detune: Math.min((packed[offset + 16] ?? 0) & 15, 14),
+    }
+  }) as unknown as Dx7Voice['operators']
+  return { ...voice, operators }
+}
+
+describe('IndexedDB record migration', () => {
+  it('normalizes metadata and fingerprints', () => {
+    const voice=createInitializedVoice('LEGACY PAD')
+    const migrated=normalizeStoredPatchRecord({ id:'legacy-1', fingerprint:'stale', voice, tags:[' Pad ',42,'bright','pad'], favorite:1, createdAt:'2026-08-01T08:00:00.000Z', origin:{kind:'unknown',label:''} },'2026-08-05T10:00:00.000Z')
+    expect(migrated).toMatchObject({ id:'legacy-1', fingerprint:fingerprintVoice(voice), tags:['bright','pad'], favorite:false, origin:{kind:'file',label:'Migrated local library'} })
+  })
+
+  it('repairs every shifted packed operator field', () => {
+    const canonical=createInitializedVoice('CACHED PAD')
+    canonical.operators[1]={ ...canonical.operators[1], keyboardScaling:{...canonical.operators[1].keyboardScaling,rateScaling:6}, amplitudeModulationSensitivity:3, keyVelocitySensitivity:5, outputLevel:87, oscillatorMode:'fixed', frequencyCoarse:27, frequencyFine:73, detune:12 }
+    const legacy=legacyCorruptFromPacked(decodePackedVoice(encodePackedVoice(canonical)))
+    const repaired=repairLegacyPackedVoice(legacy)
+    expect(repaired.operators[1]).toMatchObject({ keyboardScaling:{rateScaling:6}, amplitudeModulationSensitivity:3, keyVelocitySensitivity:5, outputLevel:87, oscillatorMode:'fixed', frequencyCoarse:27, frequencyFine:73, detune:12 })
+  })
+
+  it('preserves an explicit edit while repairing untouched fields', () => {
+    const canonical=createInitializedVoice('EDIT KEPT')
+    canonical.operators[2].outputLevel=91
+    canonical.operators[2].frequencyCoarse=19
+    const legacy=legacyCorruptFromPacked(decodePackedVoice(encodePackedVoice(canonical)))
+    const edited: Dx7Voice={ ...legacy, operators:legacy.operators.map((op,index)=>index===2?{...op,outputLevel:77}:op) as unknown as Dx7Voice['operators'] }
+    const repaired=repairLegacyPackedVoice(edited)
+    expect(repaired.operators[2].outputLevel).toBe(77)
+    expect(repaired.operators[2].frequencyCoarse).toBe(19)
+  })
+
+  it('creates fallback IDs and rejects invalid stored voices', () => {
+    const voice=createInitializedVoice('NO ID')
+    expect(normalizeStoredPatchRecord({voice},'2026-08-05T10:00:00.000Z')?.id).toBe(`migrated-${fingerprintVoice(voice)}`)
+    expect(normalizeStoredPatchRecord({voice:{name:'BROKEN'}})).toBeNull()
+    expect(normalizeStoredPatchRecord(null)).toBeNull()
+  })
+})
+''',encoding='utf-8')
+
+          app=Path('src/App.tsx')
+          text=app.read_text(encoding='utf-8')
+          text=text.replace('const { auditionVoice } = useLocalVoiceAudition()','const { auditionVoice, prepareAudition } = useLocalVoiceAudition()',1)
+          if 'onPrepareAudition={prepareAudition}' not in text:
+              text=text.replace('<PatchCatalogBrowser\n                      onAuditionVoice={auditionVoice}','<PatchCatalogBrowser\n                      onPrepareAudition={prepareAudition}\n                      onAuditionVoice={auditionVoice}',1)
+              text=text.replace('<PatchLibrary\n                      currentVoice={voice}','<PatchLibrary\n                      currentVoice={voice}\n                      onPrepareAudition={prepareAudition}',1)
+          if text.count('onPrepareAudition={prepareAudition}') != 2: raise SystemExit('App preparation wiring failed')
+          app.write_text(text,encoding='utf-8')
+
+          catalog=Path('src/components/PatchCatalogBrowser.tsx')
+          text=catalog.read_text(encoding='utf-8')
+          if 'onPrepareAudition: () => Promise<void>' not in text:
+              text=text.replace('  onAuditionVoice: (voice: Dx7Voice) => Promise<void>\n','  onPrepareAudition: () => Promise<void>\n  onAuditionVoice: (voice: Dx7Voice) => Promise<void>\n',1)
+              text=text.replace('  onLoadVoice,\n  onAuditionVoice,\n','  onLoadVoice,\n  onPrepareAudition,\n  onAuditionVoice,\n',1)
+              text=text.replace('''  const auditionEntry = async (entry: PatchCatalogEntry) => {
+    setAuditioningEntryId(entry.id)
+    setStatus(null)
+    setError(null)
+    try {
+      const { voices } = await readEntryVoices(entry)
+''','''  const auditionEntry = async (entry: PatchCatalogEntry) => {
+    const preparedAudio = onPrepareAudition()
+    setAuditioningEntryId(entry.id)
+    setStatus(null)
+    setError(null)
+    try {
+      await preparedAudio
+      const { voices } = await readEntryVoices(entry)
+''',1)
+          catalog.write_text(text,encoding='utf-8')
+
+          library=Path('src/components/PatchLibrary.tsx')
+          text=library.read_text(encoding='utf-8')
+          if 'onPrepareAudition: () => Promise<void>' not in text:
+              text=text.replace('  onLoad: (voice: Dx7Voice) => void\n  onAuditionVoice: (voice: Dx7Voice) => Promise<void>\n','  onLoad: (voice: Dx7Voice) => void\n  onPrepareAudition: () => Promise<void>\n  onAuditionVoice: (voice: Dx7Voice) => Promise<void>\n',1)
+              text=text.replace('  currentVoice,\n  onLoad,\n  onAuditionVoice,\n','  currentVoice,\n  onLoad,\n  onPrepareAudition,\n  onAuditionVoice,\n',1)
+              text=text.replace('''  const auditionVoice = async (record: PatchRecord) => {
+    setActionError(null)
+    setStatus(null)
+    setAuditioningId(record.id)
+    try {
+      await onAuditionVoice(record.voice)
+''','''  const auditionVoice = async (record: PatchRecord) => {
+    const preparedAudio = onPrepareAudition()
+    setActionError(null)
+    setStatus(null)
+    setAuditioningId(record.id)
+    try {
+      await preparedAudio
+      await onAuditionVoice(record.voice)
+''',1)
+          library.write_text(text,encoding='utf-8')
+
+          for name in ['.github/workflows/fix-dx7-packed-operator-layout.yml','.github/workflows/apply-local-audition-activation-fix.yml','.github/workflows/repair-library-virtual-audio.yml','.github/workflows/validate-local-catalog-audition-final.yml']:
+              Path(name).unlink(missing_ok=True)
+          PY
+      - name: Validate repair
+        run: |
+          npm install --no-audit --no-fund
+          npm run typecheck
+          npm run lint
+          npm test -- src/sysex/dx7.test.ts src/sysex/dx7.property.test.ts src/library/storageMigration.test.ts src/audio/localVoiceAudition.test.ts src/audio/libraryVoiceRender.integration.test.ts
+          npm run test
+          npm run build
+      - name: Record receipt
+        run: |
+          cat > docs/validation/imported-bank-virtual-audio-repair.md <<EOF
+          # Imported-bank virtual audio repair
+
+          Trigger commit: \`${GITHUB_SHA}\`
+
+          Software repair gate: **SUCCESS**
+
+          - Corrected Yamaha 128-byte packed operator mapping: byte 12 detune/rate scaling, 13 KVS/AMS, 14 output, 15 mode/coarse, 16 fine.
+          - IndexedDB schema v4 repairs previously imported voices from retained raw packed bytes while preserving explicit edits.
+          - Catalog and saved-library audition prepare browser audio in the direct click gesture before asynchronous work.
+          - Real tracked Yamaha bank voices render through the packaged MSFA engine after correction.
+          - Typecheck, lint, focused regressions, full Vitest suite and production build passed.
+
+          Browser PCM validation remains a separate gate. No physical hardware claim is made.
+          EOF
+          rm -f .github/workflows/repair-library-virtual-audio-v2.yml
+      - name: Commit repair
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git commit -m 'fix(audio): repair imported-bank virtual playback'
+          git pull --rebase origin main
+          git push origin HEAD:main
