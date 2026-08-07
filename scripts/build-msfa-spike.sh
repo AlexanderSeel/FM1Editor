@@ -62,7 +62,7 @@ if [[ "$MODE" == wasm || "$MODE" == both ]]; then
     -sFILESYSTEM=0 \
     -sALLOW_MEMORY_GROWTH=1 \
     -sASSERTIONS=0 \
-    -sEXPORTED_FUNCTIONS='["_malloc","_free","_fm1_msfa_render","_fm1_msfa_block_size","_fm1_msfa_patch_length"]' \
+    -sEXPORTED_FUNCTIONS='["_malloc","_free","_fm1_msfa_render","_fm1_msfa_session_create","_fm1_msfa_session_destroy","_fm1_msfa_session_load_patch","_fm1_msfa_session_note_on","_fm1_msfa_session_note_off","_fm1_msfa_session_all_notes_off","_fm1_msfa_session_render64","_fm1_msfa_session_is_playing","_fm1_msfa_block_size","_fm1_msfa_patch_length"]' \
     -sEXPORTED_RUNTIME_METHODS='["HEAPU8","HEAPF32"]' \
     -o "$OUTPUT_ROOT/fm1-msfa.mjs"
 fi
