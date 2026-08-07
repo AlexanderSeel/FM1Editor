@@ -39,32 +39,54 @@ describe('DX7 single voice', () => {
 })
 
 describe('DX7 packed voice', () => {
-  it('masks detune reserved bits and preserves them during re-encoding', () => {
-    const packed = encodePackedVoice(createInitializedVoice('RESERVED'))
-    const op2DetuneOffset = 4 * 17 + 16
-    packed[op2DetuneOffset] = 0x35
+  it('uses Yamaha bulk bytes 11..16 for curves, detune/rate, KVS/AMS, output, mode/coarse and fine', () => {
+    const voice = createInitializedVoice('YAMAHA MAP')
+    const operator = voice.operators[1]
+    operator.keyboardScaling.rateScaling = 6
+    operator.keyboardScaling.leftCurve = 'positive-linear'
+    operator.keyboardScaling.rightCurve = 'negative-exponential'
+    operator.amplitudeModulationSensitivity = 3
+    operator.keyVelocitySensitivity = 5
+    operator.outputLevel = 87
+    operator.oscillatorMode = 'fixed'
+    operator.frequencyCoarse = 27
+    operator.frequencyFine = 73
+    operator.detune = 12
 
-    const decoded = decodePackedVoice(packed)
-    const reencoded = encodePackedVoice(decoded)
+    const packed = encodePackedVoice(voice)
+    const offset = 4 * 17
 
-    expect(decoded.operators[1].detune).toBe(5)
-    expect(reencoded[op2DetuneOffset]).toBe(0x35)
+    expect(packed[offset + 11] & 0x0f).toBe(0x07)
+    expect(packed[offset + 12]).toBe((12 << 3) | 6)
+    expect(packed[offset + 13] & 0x1f).toBe(3 | (5 << 2))
+    expect(packed[offset + 14]).toBe(87)
+    expect(packed[offset + 15] & 0x3f).toBe(1 | (27 << 1))
+    expect(packed[offset + 16]).toBe(73)
+
+    const decoded = decodePackedVoice(packed).operators[1]
+    expect(decoded.keyboardScaling.rateScaling).toBe(6)
+    expect(decoded.amplitudeModulationSensitivity).toBe(3)
+    expect(decoded.keyVelocitySensitivity).toBe(5)
+    expect(decoded.outputLevel).toBe(87)
+    expect(decoded.oscillatorMode).toBe('fixed')
+    expect(decoded.frequencyCoarse).toBe(27)
+    expect(decoded.frequencyFine).toBe(73)
+    expect(decoded.detune).toBe(12)
   })
 
-  it('normalizes reserved detune nibble 15 at the raw import boundary and rejects it in the voice model', () => {
+  it('normalizes reserved detune nibble 15 without corrupting rate scaling', () => {
     const packed = encodePackedVoice(createInitializedVoice('DETUNE 15'))
-    const op6DetuneOffset = 16
-    packed[op6DetuneOffset] = 0x3f
+    packed[12] = (15 << 3) | 5
 
     const decoded = decodePackedVoice(packed)
     const reencoded = encodePackedVoice(decoded)
 
     expect(decoded.operators[5].detune).toBe(14)
-    expect(reencoded[op6DetuneOffset]).toBe(0x3e)
+    expect(decoded.operators[5].keyboardScaling.rateScaling).toBe(5)
+    expect(reencoded[12]).toBe((14 << 3) | 5)
 
     const invalidVoice = createInitializedVoice('INVALID 15')
     invalidVoice.operators[5].detune = 15
-
     expect(() => encodePackedVoice(invalidVoice)).toThrow(/detune.*0 to 14/i)
     expect(() => encodeSingleVoiceMessage(invalidVoice)).toThrow(/detune.*0 to 14/i)
   })
