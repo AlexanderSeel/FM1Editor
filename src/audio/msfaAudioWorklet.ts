@@ -1,3 +1,7 @@
+import {
+  encodeDx7ControllerAssignment,
+  type Dx7ControllerFunction,
+} from '../domain/dx7FunctionState'
 import type { Dx7Voice } from '../domain/voice'
 import { createMsfaCompatibleVoiceBridge } from './msfaVoiceBridge'
 import {
@@ -13,8 +17,31 @@ export const MSFA_WORKLET_MANIFEST_PATH = 'virtual-dx7/manifest.json' as const
 export const MSFA_WORKLET_WASM_PATH = 'virtual-dx7/fm1-msfa.wasm' as const
 export const MSFA_WORKLET_READY_TIMEOUT_MS = 5_000 as const
 export const MSFA_WORKLET_POLYPHONY = 16 as const
+export const MSFA_WORKLET_PERFORMANCE_ABI = 1 as const
 
 export type MsfaAudioWorkletState = 'disabled' | 'enabling' | 'ready' | 'error' | 'closed'
+
+export interface MsfaLocalPerformanceConfig {
+  pitchBendRange: number
+  pitchBendStep: number
+  modulationWheel: Dx7ControllerFunction
+  aftertouch: Dx7ControllerFunction
+}
+
+export function createDefaultMsfaLocalPerformanceConfig(): MsfaLocalPerformanceConfig {
+  return {
+    pitchBendRange: 3,
+    pitchBendStep: 0,
+    modulationWheel: {
+      range: 0,
+      assignment: { pitch: false, amplitude: false, egBias: false },
+    },
+    aftertouch: {
+      range: 0,
+      assignment: { pitch: false, amplitude: false, egBias: false },
+    },
+  }
+}
 
 interface MsfaWorkletManifest {
   engineId: string
@@ -27,6 +54,7 @@ interface MsfaWorkletManifest {
   statefulSessionAbi: number
   renderBlockFrames: number
   workletPolyphony: number
+  performanceControlAbi: number
 }
 
 export interface MsfaWorkletPackage {
@@ -71,10 +99,16 @@ export interface MsfaAudioWorkletController {
   readonly engineVersion: typeof MSFA_OFFLINE_ENGINE_VERSION
   readonly licenseSpdx: typeof MSFA_OFFLINE_ENGINE_LICENSE
   readonly polyphony: typeof MSFA_WORKLET_POLYPHONY
+  readonly performanceControlAbi: typeof MSFA_WORKLET_PERFORMANCE_ABI
   readonly state: MsfaAudioWorkletState
   readonly sampleRate: number | null
   enable(): Promise<void>
   loadVoice(voice: Dx7Voice, randomSeed?: number): Promise<void>
+  configurePerformance(config: MsfaLocalPerformanceConfig): Promise<void>
+  setPitchBend(value: number): Promise<void>
+  setModulation(value: number): Promise<void>
+  setSustain(enabled: boolean): Promise<void>
+  setAftertouch(value: number): Promise<void>
   noteOn(midiNote: number, velocity: number): Promise<void>
   noteOff(midiNote?: number): Promise<void>
   allNotesOff(): Promise<void>
@@ -97,6 +131,28 @@ function integerRange(value: number, minimum: number, maximum: number, label: st
   return value
 }
 
+function validatePerformanceConfig(config: MsfaLocalPerformanceConfig): {
+  pitchBendRange: number
+  pitchBendStep: number
+  modulationRange: number
+  modulationAssignment: number
+  aftertouchRange: number
+  aftertouchAssignment: number
+} {
+  const pitchBendRange = integerRange(config.pitchBendRange, 0, 12, 'pitchBendRange')
+  const pitchBendStep = integerRange(config.pitchBendStep, 0, 12, 'pitchBendStep')
+  const modulationRange = integerRange(config.modulationWheel.range, 0, 99, 'modulationWheel.range')
+  const aftertouchRange = integerRange(config.aftertouch.range, 0, 99, 'aftertouch.range')
+  return {
+    pitchBendRange,
+    pitchBendStep,
+    modulationRange,
+    modulationAssignment: encodeDx7ControllerAssignment(config.modulationWheel.assignment),
+    aftertouchRange,
+    aftertouchAssignment: encodeDx7ControllerAssignment(config.aftertouch.assignment),
+  }
+}
+
 function parseManifest(value: unknown): MsfaWorkletManifest {
   if (!value || typeof value !== 'object') throw new Error('Virtual DX7 manifest is not an object')
   const manifest = value as Partial<MsfaWorkletManifest>
@@ -110,6 +166,9 @@ function parseManifest(value: unknown): MsfaWorkletManifest {
   if (manifest.renderBlockFrames !== 64) throw new Error('Virtual DX7 render block size is not supported')
   if (manifest.workletPolyphony !== MSFA_WORKLET_POLYPHONY) {
     throw new Error(`Virtual DX7 manifest polyphony must be ${MSFA_WORKLET_POLYPHONY}`)
+  }
+  if (manifest.performanceControlAbi !== MSFA_WORKLET_PERFORMANCE_ABI) {
+    throw new Error(`Virtual DX7 manifest performance-control ABI must be ${MSFA_WORKLET_PERFORMANCE_ABI}`)
   }
   return manifest as MsfaWorkletManifest
 }
@@ -212,6 +271,7 @@ export function createMsfaAudioWorkletController(
       sampleRate?: unknown
       blockFrames?: unknown
       polyphony?: unknown
+      performanceAbi?: unknown
     }
     if (data.type === 'ready') {
       const resolve = readyResolve
@@ -225,6 +285,9 @@ export function createMsfaAudioWorkletController(
         }
         if (data.polyphony !== MSFA_WORKLET_POLYPHONY) {
           throw new Error(`Virtual DX7 AudioWorklet reported unexpected polyphony ${String(data.polyphony)}`)
+        }
+        if (data.performanceAbi !== MSFA_WORKLET_PERFORMANCE_ABI) {
+          throw new Error(`Virtual DX7 AudioWorklet reported unexpected performance ABI ${String(data.performanceAbi)}`)
         }
         clearReadyWaiters()
         resolve?.()
@@ -294,6 +357,7 @@ export function createMsfaAudioWorkletController(
     engineVersion: MSFA_OFFLINE_ENGINE_VERSION,
     licenseSpdx: MSFA_OFFLINE_ENGINE_LICENSE,
     polyphony: MSFA_WORKLET_POLYPHONY,
+    performanceControlAbi: MSFA_WORKLET_PERFORMANCE_ABI,
     get state() {
       return state
     },
@@ -367,6 +431,22 @@ export function createMsfaAudioWorkletController(
       })
       const bridge = createMsfaCompatibleVoiceBridge(plan)
       await sendCommand('loadVoice', { patch: bridge.patchBuffer, randomSeed: seed })
+    },
+    async configurePerformance(config) {
+      await sendCommand('configurePerformance', validatePerformanceConfig(config))
+    },
+    async setPitchBend(value) {
+      await sendCommand('pitchBend', { value: integerRange(value, 0, 0x3fff, 'pitchBend') })
+    },
+    async setModulation(value) {
+      await sendCommand('modulation', { value: integerRange(value, 0, 127, 'modulation') })
+    },
+    async setSustain(enabled) {
+      if (typeof enabled !== 'boolean') throw new TypeError('sustain must be boolean')
+      await sendCommand('sustain', { enabled })
+    },
+    async setAftertouch(value) {
+      await sendCommand('aftertouch', { value: integerRange(value, 0, 127, 'aftertouch') })
     },
     async noteOn(midiNote, velocity) {
       const validatedNote = integerRange(midiNote, 0, 127, 'midiNote')
