@@ -10,7 +10,10 @@
   "distributionStatus": "not-vendored",
   "policy": {
     "publicApi": "semantic-dx7-voice-only",
-    "allowedLicenses": ["Apache-2.0", "FM1-Editor-owned"],
+    "allowedLicenses": [
+      "Apache-2.0",
+      "FM1-Editor-owned"
+    ],
     "forbiddenPathPrefixes": [
       "Source/Plugin",
       "Source/DXComponents",
@@ -48,7 +51,7 @@
     {
       "path": "Source/msfa/synth.h",
       "upstreamBlobSha1": "c64005b4704906c2e421342e7fb65abe4401aa2f",
-      "sha256": null,
+      "sha256": "8aa3de2de1a7d303b34cae2b0cf0837e9e476ab640ff02dbf4d59ccf23e96b50",
       "licenseConclusion": "Apache-2.0",
       "action": "copy-unmodified",
       "forbiddenIncludes": []
@@ -56,7 +59,7 @@
     {
       "path": "Source/msfa/aligned_buf.h",
       "upstreamBlobSha1": "8f7c5b68273b42f22ef9d61c5e4403025649e1cc",
-      "sha256": null,
+      "sha256": "6140a81aacae153220ce80aa58f5d7efcd5b3a2c8389fef14ed35deb14d62caf",
       "licenseConclusion": "Apache-2.0",
       "action": "copy-unmodified",
       "forbiddenIncludes": []
@@ -64,7 +67,7 @@
     {
       "path": "Source/msfa/env.h",
       "upstreamBlobSha1": "9d426e48238ff4dd2150e09f5b83db76fc4cdb28",
-      "sha256": null,
+      "sha256": "6936df4cc9dc41c2ee4a3fd19a2669976e3e245e7a7795392bd561cd778abe36",
       "licenseConclusion": "Apache-2.0",
       "action": "copy-unmodified",
       "forbiddenIncludes": []
@@ -72,16 +75,20 @@
     {
       "path": "Source/msfa/env.cc",
       "upstreamBlobSha1": "d48696f636e27520852c842f6e1ec87be681cf0d",
-      "sha256": null,
+      "sha256": "a6d10f3cab97bf081ec551883aa39abdf40c1c5339f1009ba837f3e1027dcbbf",
       "licenseConclusion": "Apache-2.0",
       "action": "patch-required",
-      "forbiddenIncludes": ["../Dexed.h"],
-      "requiredEdits": ["remove the GPL-3.0 ../Dexed.h include; retain the Apache-2.0 header and envelope implementation"]
+      "forbiddenIncludes": [
+        "../Dexed.h"
+      ],
+      "requiredEdits": [
+        "remove the GPL-3.0 ../Dexed.h include; retain the Apache-2.0 header and envelope implementation"
+      ]
     },
     {
       "path": "Source/msfa/exp2.h",
       "upstreamBlobSha1": "016ca331de869ca816731ea065d5d22b92eae332",
-      "sha256": null,
+      "sha256": "23aa480e221e5d1f928a5ccab654a9c01a80eb0b610fd66d9364af09d18cdda8",
       "licenseConclusion": "Apache-2.0",
       "action": "copy-unmodified",
       "forbiddenIncludes": []
@@ -89,7 +96,7 @@
     {
       "path": "Source/msfa/exp2.cc",
       "upstreamBlobSha1": "84feb20540e045107893929964a8ed834b2c10f5",
-      "sha256": null,
+      "sha256": "dff6dfd8af6f0a470360c2d2fa98aa7ae5208c27b83c9229ffccbc84815930da",
       "licenseConclusion": "Apache-2.0",
       "action": "copy-unmodified",
       "forbiddenIncludes": []
@@ -97,7 +104,7 @@
     {
       "path": "Source/msfa/freqlut.h",
       "upstreamBlobSha1": "5cba4af3e238c4d67e4e5e543a338fb5a8335b33",
-      "sha256": null,
+      "sha256": "d319ee2d35e8e8e2c860b6fc2a2d1382bf5782d1d147264914325ca41f89f00b",
       "licenseConclusion": "Apache-2.0",
       "action": "copy-unmodified",
       "forbiddenIncludes": []
@@ -105,7 +112,7 @@
     {
       "path": "Source/msfa/freqlut.cc",
       "upstreamBlobSha1": "931ef672871c6023902ee95a28f7f33dc290496b",
-      "sha256": null,
+      "sha256": "f46ddab0d296f1a82d2ef6826f7e431cad97967418a37fdb486052a4187dcaf8",
       "licenseConclusion": "Apache-2.0",
       "action": "copy-unmodified",
       "forbiddenIncludes": []
@@ -113,7 +120,7 @@
     {
       "path": "Source/msfa/sin.h",
       "upstreamBlobSha1": "6605e9964e11b56196de20bc16ddcf77c73a3650",
-      "sha256": null,
+      "sha256": "b57300e93e18a4262d7f0dec84642a7da228704bec1fddd481d2ab85ed805311",
       "licenseConclusion": "Apache-2.0",
       "action": "copy-unmodified",
       "forbiddenIncludes": []
@@ -121,7 +128,7 @@
     {
       "path": "Source/msfa/sin.cc",
       "upstreamBlobSha1": "3257dcdf9561d1728edff410178d7c403717c9d5",
-      "sha256": null,
+      "sha256": "ebb96ae8460af68da025659a329f72d2c64301673ad83ef54a7ac20590ad7e65",
       "licenseConclusion": "Apache-2.0",
       "action": "copy-unmodified",
       "forbiddenIncludes": []
@@ -129,7 +136,7 @@
     {
       "path": "Source/msfa/fm_op_kernel.h",
       "upstreamBlobSha1": "c9739e5e924367fcd93e28e7e986c05c1115f93b",
-      "sha256": null,
+      "sha256": "77c12aae2c5c3c2cacd541e693e4fdbc28f474c8446aa5d6711cf4908ebb07e6",
       "licenseConclusion": "Apache-2.0",
       "action": "copy-unmodified",
       "forbiddenIncludes": []
@@ -137,7 +144,7 @@
     {
       "path": "Source/msfa/fm_op_kernel.cc",
       "upstreamBlobSha1": "a14ff6a46e1c335e4634fed3fb7ae92e8f6c2844",
-      "sha256": null,
+      "sha256": "ad00f2c63bf8163624a367478969f5a250568a9c6c0dcee348a4eb0b7848b21b",
       "licenseConclusion": "Apache-2.0",
       "action": "copy-unmodified",
       "forbiddenIncludes": []
@@ -145,25 +152,32 @@
     {
       "path": "Source/msfa/controllers.h",
       "upstreamBlobSha1": "9049d7f19acbe8851cf80c834430448142d155e3",
-      "sha256": null,
+      "sha256": "ac3e0e21e335a19165f72a9fd05cba7802e3a966466bb42c55b6251a6a42e9d7",
       "licenseConclusion": "Apache-2.0",
       "action": "patch-required",
-      "forbiddenIncludes": ["../Dexed.h"],
-      "requiredEdits": ["remove the GPL-3.0 ../Dexed.h include", "keep only controller state used by the dry renderer"]
+      "forbiddenIncludes": [
+        "../Dexed.h"
+      ],
+      "requiredEdits": [
+        "remove the GPL-3.0 ../Dexed.h include",
+        "keep only controller state used by the dry renderer"
+      ]
     },
     {
       "path": "Source/msfa/fm_core.h",
       "upstreamBlobSha1": "6daef838b9dd4eb2a040853f5d1170b8ea667a58",
-      "sha256": null,
+      "sha256": "528389d74d0e136a4f8167047e5ed11730f2663938eb71454c8922780ee4a280",
       "licenseConclusion": "Apache-2.0",
       "action": "patch-required",
       "forbiddenIncludes": [],
-      "requiredEdits": ["drop the unused controllers.h include if the derived build no longer needs it through this header"]
+      "requiredEdits": [
+        "drop the unused controllers.h include if the derived build no longer needs it through this header"
+      ]
     },
     {
       "path": "Source/msfa/fm_core.cc",
       "upstreamBlobSha1": "8c148bfd8ccf56ec02510bb5f6ef81298b890310",
-      "sha256": null,
+      "sha256": "3febb3b2d73299636982c373126db4263ba67f5001241d5cbb1bd50357829e87",
       "licenseConclusion": "Apache-2.0",
       "action": "copy-unmodified",
       "forbiddenIncludes": []
@@ -171,7 +185,7 @@
     {
       "path": "Source/msfa/pitchenv.h",
       "upstreamBlobSha1": "e10634105ac666221373e814e232527aaa7fc067",
-      "sha256": null,
+      "sha256": "be825b9272fe59bd7faf47b4878fdbd756f502ca3b4364d2934a7f5dafa0abe4",
       "licenseConclusion": "Apache-2.0",
       "action": "copy-unmodified",
       "forbiddenIncludes": []
@@ -179,7 +193,7 @@
     {
       "path": "Source/msfa/pitchenv.cc",
       "upstreamBlobSha1": "a85b8d4b3682e2f05ecdb65d4488477232102f89",
-      "sha256": null,
+      "sha256": "99529ae7ed0ccc153af765da100f205ed84cbf56113f2db1ec24e29175e85078",
       "licenseConclusion": "Apache-2.0",
       "action": "copy-unmodified",
       "forbiddenIncludes": []
@@ -187,7 +201,7 @@
     {
       "path": "Source/msfa/lfo.h",
       "upstreamBlobSha1": "288857dd1b0d82cc510679872055daa3a075e8a3",
-      "sha256": null,
+      "sha256": "d21527675911a53f6d05b0c1ece3eeb08b906ae4513c36a8e2de02d628934ec4",
       "licenseConclusion": "Apache-2.0",
       "action": "copy-unmodified",
       "forbiddenIncludes": []
@@ -195,7 +209,7 @@
     {
       "path": "Source/msfa/lfo.cc",
       "upstreamBlobSha1": "1a4311c645b66fc7653378e2021ce455a1efc5bd",
-      "sha256": null,
+      "sha256": "63a4da54b7a9d6161f355ac3a4a293e21c63e1295ca43c8fe1fcd586fe529729",
       "licenseConclusion": "Apache-2.0",
       "action": "copy-unmodified",
       "forbiddenIncludes": []
@@ -203,7 +217,7 @@
     {
       "path": "Source/msfa/porta.h",
       "upstreamBlobSha1": "99614ff407dc948a26ec52cfc76b1802a85a0239",
-      "sha256": null,
+      "sha256": "7970dcd3d2ec929b0827782a7fb05b6e36b981162a7891026c307210715e95d2",
       "licenseConclusion": "Apache-2.0",
       "action": "copy-unmodified",
       "forbiddenIncludes": []
@@ -211,7 +225,7 @@
     {
       "path": "Source/msfa/porta.cpp",
       "upstreamBlobSha1": "c585a51044290f58c38b4090602e06345ae31826",
-      "sha256": null,
+      "sha256": "f03fb9e9bf6c111f5bca404a515d2919b333f03a1fce71051419b040b5e4fdca",
       "licenseConclusion": "Apache-2.0",
       "action": "copy-unmodified",
       "forbiddenIncludes": []
@@ -219,20 +233,30 @@
     {
       "path": "Source/msfa/dx7note.h",
       "upstreamBlobSha1": "3ba583d5159423dc856afe6a90cfcd038694c4d7",
-      "sha256": null,
+      "sha256": "b5bffd672b91d99d78a82ec418f1b4fbff8123a8e65996477c6d738a5953a325",
       "licenseConclusion": "Apache-2.0",
       "action": "patch-required",
-      "forbiddenIncludes": ["libMTSClient.h", "tuning.h"],
-      "requiredEdits": ["replace tuning/MTS-ESP types with the FM1 Editor-owned standard-12-TET adapter", "retain the semantic patch/note/velocity interface"]
+      "forbiddenIncludes": [
+        "libMTSClient.h",
+        "tuning.h"
+      ],
+      "requiredEdits": [
+        "replace tuning/MTS-ESP types with the FM1 Editor-owned standard-12-TET adapter",
+        "retain the semantic patch/note/velocity interface"
+      ]
     },
     {
       "path": "Source/msfa/dx7note.cc",
       "upstreamBlobSha1": "272328312e5a83a8d50e284bbecb75b06b35089e",
-      "sha256": null,
+      "sha256": "88185eaeb14c9cca3b944d929bafe232abb6a2c19536c69ba05cc4634b4d54e9",
       "licenseConclusion": "Apache-2.0",
       "action": "patch-required",
       "forbiddenIncludes": [],
-      "requiredEdits": ["remove MTS_HasMaster/MTS_NoteToFrequency branches", "use the FM1 Editor-owned standard-12-TET log-frequency adapter", "leave microtuning and MPE expansion outside the feasibility acceptance gate"]
+      "requiredEdits": [
+        "remove MTS_HasMaster/MTS_NoteToFrequency branches",
+        "use the FM1 Editor-owned standard-12-TET log-frequency adapter",
+        "leave microtuning and MPE expansion outside the feasibility acceptance gate"
+      ]
     }
   ],
   "excludedUpstreamFiles": [
