@@ -1,6 +1,7 @@
 #include <algorithm>
 #include <cstdint>
 #include <cstring>
+#include <iterator>
 
 #ifdef __EMSCRIPTEN__
 #include <emscripten/emscripten.h>
