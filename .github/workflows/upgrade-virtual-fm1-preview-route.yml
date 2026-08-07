@@ -1,0 +1,113 @@
+name: Upgrade local preview with Virtual FM1 route
+
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/upgrade-virtual-fm1-preview-route.yml']
+
+permissions:
+  contents: write
+
+jobs:
+  integrate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - name: Upgrade existing local preview
+        shell: python
+        run: |
+          from pathlib import Path
+          path=Path('src/components/VirtualDx7PreviewPanel.tsx')
+          text=path.read_text(encoding='utf-8')
+          import_anchor="import { MSFA_OFFLINE_ENGINE_VERSION } from '../audio/msfaOfflineEngine'\n"
+          import_new=import_anchor+"import {\n  createVirtualFm1OutputRoute,\n  VIRTUAL_FM1_LIMITER,\n  VIRTUAL_FM1_MASTER_GAIN_DEFAULT_DB,\n  VIRTUAL_FM1_MASTER_GAIN_MAX_DB,\n  VIRTUAL_FM1_MASTER_GAIN_MIN_DB,\n  type VirtualFm1OutputRoute,\n} from '../audio/virtualFm1OutputRoute'\n"
+          if "createVirtualFm1OutputRoute" not in text:
+              if import_anchor not in text: raise SystemExit('preview import anchor missing')
+              text=text.replace(import_anchor,import_new,1)
+          fx_import="import type { Dx7ControllerAssignment } from '../domain/dx7FunctionState'\n"
+          fx_new=fx_import+"import type { Fm1FxState } from '../domain/fx'\n"
+          if "type { Fm1FxState }" not in text:
+              if fx_import not in text: raise SystemExit('fx import anchor missing')
+              text=text.replace(fx_import,fx_new,1)
+          props='''interface VirtualDx7PreviewPanelProps {\n  voice: Dx7Voice\n  createController?: () => MsfaAudioWorkletController\n}\n'''
+          props_new='''interface VirtualDx7PreviewPanelProps {\n  voice: Dx7Voice\n  fxState: Fm1FxState\n  createController?: () => MsfaAudioWorkletController\n}\n'''
+          if props in text: text=text.replace(props,props_new,1)
+          elif 'fxState: Fm1FxState' not in text: raise SystemExit('preview props anchor missing')
+          signature='''export function VirtualDx7PreviewPanel({\n  voice,\n  createController = createMsfaAudioWorkletController,\n}: VirtualDx7PreviewPanelProps) {\n  const controllerRef = useRef<MsfaAudioWorkletController | null>(null)\n'''
+          signature_new='''export function VirtualDx7PreviewPanel({\n  voice,\n  fxState,\n  createController,\n}: VirtualDx7PreviewPanelProps) {\n  const controllerRef = useRef<MsfaAudioWorkletController | null>(null)\n  const outputRouteRef = useRef<VirtualFm1OutputRoute | null>(null)\n  const fxStateRef = useRef(fxState)\n  const fxBypassedRef = useRef(true)\n  const masterGainDbRef = useRef<number>(VIRTUAL_FM1_MASTER_GAIN_DEFAULT_DB)\n'''
+          if signature in text: text=text.replace(signature,signature_new,1)
+          elif 'outputRouteRef' not in text: raise SystemExit('preview signature anchor missing')
+          state_anchor='''  const [sustain, setSustain] = useState(false)\n  const [status, setStatus] = useState<string | null>(null)\n'''
+          state_new='''  const [sustain, setSustain] = useState(false)\n  const [fxBypassed, setFxBypassed] = useState(true)\n  const [masterGainDb, setMasterGainDb] = useState<number>(VIRTUAL_FM1_MASTER_GAIN_DEFAULT_DB)\n  const [status, setStatus] = useState<string | null>(null)\n'''
+          if state_anchor in text: text=text.replace(state_anchor,state_new,1)
+          elif 'const [fxBypassed' not in text: raise SystemExit('preview state anchor missing')
+          close_anchor='''  const closeController = useCallback(async () => {\n'''
+          factory='''  fxStateRef.current = fxState\n  fxBypassedRef.current = fxBypassed\n  masterGainDbRef.current = masterGainDb\n\n  const createPreviewController = useCallback(() => {\n    if (createController) return createController()\n    return createMsfaAudioWorkletController({\n      createOutputRoute: (context) => {\n        const route = createVirtualFm1OutputRoute(context, fxStateRef.current, {\n          fxBypassed: fxBypassedRef.current,\n          masterGainDb: masterGainDbRef.current,\n        })\n        outputRouteRef.current = route\n        return {\n          destination: route.input,\n          dispose() {\n            if (outputRouteRef.current === route) outputRouteRef.current = null\n            route.dispose()\n          },\n        }\n      },\n    })\n  }, [createController])\n\n'''+close_anchor
+          if 'const createPreviewController' not in text:
+              if close_anchor not in text: raise SystemExit('preview close anchor missing')
+              text=text.replace(close_anchor,factory,1)
+          text=text.replace('const controller = createController()','const controller = createPreviewController()',1)
+          text=text.replace('closeController, createController, modulation','closeController, createPreviewController, modulation',1)
+          status_old="setStatus(`Local dry preview enabled at ${controller.sampleRate ?? 'browser'} Hz with ${controller.polyphony}-voice polyphony.`)"
+          status_new="setStatus(`Virtual FM-1 preview enabled at ${controller.sampleRate ?? 'browser'} Hz · ${fxBypassedRef.current ? 'dry' : 'FM-1-inspired FX'} · ${controller.polyphony}-voice polyphony.`)"
+          text=text.replace(status_old,status_new,1)
+          voice_effect_anchor='''  useEffect(() => {\n    const controller = controllerRef.current\n    if (state !== 'ready' || !controller || loadedVoiceRef.current === voice) return\n'''
+          route_effects='''  useEffect(() => {\n    outputRouteRef.current?.setFxState(fxState)\n  }, [fxState])\n\n  useEffect(() => {\n    outputRouteRef.current?.setFxBypass(fxBypassed)\n    if (state === 'ready') setStatus(`Virtual FM-1 output switched to ${fxBypassed ? 'dry bypass' : 'FM-1-inspired FX'}.`)\n  }, [fxBypassed, state])\n\n  useEffect(() => {\n    outputRouteRef.current?.setMasterGainDb(masterGainDb)\n  }, [masterGainDb])\n\n'''+voice_effect_anchor
+          if 'outputRouteRef.current?.setFxState' not in text:
+              if voice_effect_anchor not in text: raise SystemExit('voice effect anchor missing')
+              text=text.replace(voice_effect_anchor,route_effects,1)
+          text=text.replace("label: `local DX7-compatible dry audio · ${MSFA_WORKLET_POLYPHONY}-voice polyphony`,","label: `local ${fxBypassed ? 'DX7-compatible dry' : 'FM-1-inspired FX'} audio · ${MSFA_WORKLET_POLYPHONY}-voice polyphony`,",1)
+          text=text.replace('  }), [])','  }), [fxBypassed])',1)
+          text=text.replace('Local DX7-compatible preview</p>','Virtual FM-1 preview</p>',1)
+          old_desc='''            Audition the current semantic voice through the audited dry WebAssembly engine. Enabling this creates local browser audio only; it does not request Web MIDI, transmit SysEx or send anything to connected hardware.\n'''
+          new_desc='''            Audition the current semantic voice through the audited DX7-compatible engine, optionally routed through the FM-1-inspired software FX approximation. Local audio never requests Web MIDI, transmits SysEx or sends anything to connected hardware.\n'''
+          text=text.replace(old_desc,new_desc,1)
+          old_summary='''          <p className="mt-1">Dry · 12-TET · {MSFA_WORKLET_POLYPHONY} voices · performance ABI {MSFA_WORKLET_PERFORMANCE_ABI}</p>\n'''
+          new_summary='''          <p className="mt-1">{fxBypassed ? 'Dry' : 'FM-1-inspired FX'} · {masterGainDb} dB · limiter {VIRTUAL_FM1_LIMITER.thresholdDb} dB · {MSFA_WORKLET_POLYPHONY} voices</p>\n          <p className="mt-1">12-TET · performance ABI {MSFA_WORKLET_PERFORMANCE_ABI}</p>\n'''
+          if old_summary in text: text=text.replace(old_summary,new_summary,1)
+          control_anchor='''        {!ready ? (\n          <button className="rounded-xl bg-violet-300 px-4 py-2.5 text-sm font-black text-slate-950 hover:bg-violet-200 disabled:cursor-not-allowed disabled:opacity-40" disabled={state === 'enabling'} onClick={() => void enableLocalAudio()} type="button">\n'''
+          controls='''        <div className="grid gap-1.5 text-xs text-slate-400">\n          <span className="font-semibold uppercase tracking-[0.12em]">Output</span>\n          <button\n            className={`rounded-xl px-3 py-2.5 text-sm font-bold ${fxBypassed ? 'border border-white/10 bg-white/5 text-slate-200' : 'bg-cyan-300 text-slate-950'}`}\n            onClick={() => setFxBypassed((current) => !current)}\n            type="button"\n          >\n            {fxBypassed ? 'Dry bypass' : 'FX enabled'}\n          </button>\n        </div>\n        <div className="grid min-w-[190px] flex-1 gap-1.5 text-xs text-slate-400">\n          <label className="flex justify-between font-semibold uppercase tracking-[0.12em]" htmlFor="virtual-fm1-master-gain">\n            <span>Master gain</span><strong className="text-cyan-200">{masterGainDb} dB</strong>\n          </label>\n          <input\n            id="virtual-fm1-master-gain"\n            max={VIRTUAL_FM1_MASTER_GAIN_MAX_DB}\n            min={VIRTUAL_FM1_MASTER_GAIN_MIN_DB}\n            onChange={(event) => setMasterGainDb(Number(event.target.value))}\n            step={1}\n            type="range"\n            value={masterGainDb}\n          />\n        </div>\n'''+control_anchor
+          if 'id="virtual-fm1-master-gain"' not in text:
+              if control_anchor not in text: raise SystemExit('preview control anchor missing')
+              text=text.replace(control_anchor,controls,1)
+          path.write_text(text,encoding='utf-8')
+
+          app=Path('src/App.tsx')
+          app_text=app.read_text(encoding='utf-8')
+          app_text=app_text.replace('<VirtualDx7PreviewPanel voice={voice} />','<VirtualDx7PreviewPanel fxState={effects} voice={voice} />',1)
+          app_text=app_text.replace('description="Audited dry DX7-compatible AudioWorklet · explicit browser-local enable · no MIDI hardware required"','description="DX7-compatible AudioWorklet · FM-1-inspired FX/master/limiter · explicit browser-local enable · no MIDI hardware required"',1)
+          app_text=app_text.replace('title="Local virtual preview"','title="Virtual FM-1 preview"',1)
+          app.write_text(app_text,encoding='utf-8')
+      - run: npm install --no-audit --no-fund
+      - run: npm run audit:virtual-dx7
+      - run: npm run typecheck
+      - run: npm run lint
+      - run: npm test -- src/audio/msfaAudioWorklet.test.ts src/audio/virtualFm1OutputRoute.test.ts src/audio/fm1InspiredFxGraph.test.ts src/components/VirtualDx7PreviewPanel.test.tsx
+      - run: npm run test
+      - run: npm run build
+      - name: Persist software receipt
+        run: |
+          cat > docs/validation/virtual-fm1-preview-route-ui.md <<EOF
+          # Virtual FM-1 preview routed-output UI validation
+
+          Source commit: \`${GITHUB_SHA}\`
+
+          Overall software gate: **SUCCESS**
+
+          The existing local Voice preview now acts as the Virtual FM-1 preview target while retaining the audited DX7-compatible dry engine. Its default browser controller opts into the validated FM-1-inspired output route; injected test/custom controllers remain untouched.
+
+          The panel synchronizes the current semantic `Dx7Voice` and current App `Fm1FxState`, exposes explicit dry/FX bypass, −48…+6 dB master gain and the accepted −1 dB/20:1 limiter. Dry remains the default. Catalog audition, sequencer audio and other controller users still use direct dry output because they do not request an output route.
+
+          Virtual-DX7 source audit, typecheck, lint, focused controller/FX/preview tests, full tests and production build passed. CPU diagnostics, WAV rendering and shared uploaded-reference A/B remain open before the overall Virtual FM-1 preview PLAN item can close.
+          EOF
+          rm .github/workflows/upgrade-virtual-fm1-preview-route.yml
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add -A
+          git commit -m 'feat(audio): route Virtual FM1 preview through FX output' || true
+          git pull --rebase origin main
+          git push origin HEAD:main
