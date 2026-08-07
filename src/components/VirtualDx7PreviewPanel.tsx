@@ -240,13 +240,13 @@ export function VirtualDx7PreviewPanel({
         </p>
 
         <div className="mt-3 grid gap-3 lg:grid-cols-2 xl:grid-cols-4">
-          <label className="grid gap-1.5 text-xs text-slate-400" htmlFor="virtual-dx7-pitch-bend-range">
-            <span className="flex justify-between font-semibold uppercase tracking-[0.12em]"><span>Pitch-bend range</span><strong>{performance.pitchBendRange}</strong></span>
+          <label className="flex justify-between gap-2 text-xs font-semibold uppercase tracking-[0.12em] text-slate-400" htmlFor="virtual-dx7-pitch-bend-range">
+            Pitch-bend range <strong>{performance.pitchBendRange}</strong>
           </label>
           <input className="self-end" id="virtual-dx7-pitch-bend-range" max={12} min={0} onChange={(event) => setPerformance((current) => ({ ...current, pitchBendRange: Number(event.target.value) }))} type="range" value={performance.pitchBendRange} />
 
-          <label className="grid gap-1.5 text-xs text-slate-400" htmlFor="virtual-dx7-pitch-bend-step">
-            <span className="flex justify-between font-semibold uppercase tracking-[0.12em]"><span>Pitch-bend step</span><strong>{performance.pitchBendStep}</strong></span>
+          <label className="flex justify-between gap-2 text-xs font-semibold uppercase tracking-[0.12em] text-slate-400" htmlFor="virtual-dx7-pitch-bend-step">
+            Pitch-bend step <strong>{performance.pitchBendStep}</strong>
           </label>
           <input className="self-end" id="virtual-dx7-pitch-bend-step" max={12} min={0} onChange={(event) => setPerformance((current) => ({ ...current, pitchBendStep: Number(event.target.value) }))} type="range" value={performance.pitchBendStep} />
 
