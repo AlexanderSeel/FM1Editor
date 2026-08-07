@@ -12,9 +12,11 @@ export interface LocalVoiceAuditionState {
   error: string | null
 }
 
+export type LocalAuditionVoiceSource = Dx7Voice | Promise<Dx7Voice>
+
 export interface LocalVoiceAuditionActions extends LocalVoiceAuditionState {
   prepareAudition(): Promise<void>
-  auditionVoice(voice: Dx7Voice): Promise<void>
+  auditionVoice(voice: LocalAuditionVoiceSource): Promise<void>
   stopAudition(): Promise<void>
 }
 
@@ -81,25 +83,35 @@ export function useLocalVoiceAudition(): LocalVoiceAuditionActions {
     }
   }, [])
 
-  const auditionVoice = useCallback(async (voice: Dx7Voice) => {
-    setState({
-      activeVoice: voice,
-      phase: 'starting',
-      status: `Starting local audition: ${voiceLabel(voice)}…`,
-      error: null,
-    })
-    try {
-      await managerRef.current?.audition(voice)
-    } catch (cause) {
-      const error = cause instanceof Error ? cause : new Error('Local voice audition failed')
-      setState({
-        activeVoice: voice,
-        phase: 'error',
-        status: null,
-        error: error.message,
-      })
-      throw error
-    }
+  const auditionVoice = useCallback((voiceSource: LocalAuditionVoiceSource): Promise<void> => {
+    const manager = managerRef.current
+    // Start AudioContext creation/resume synchronously in the originating click.
+    // The voice itself may arrive later from asynchronous ZIP/catalog parsing.
+    const preparation = manager?.prepare()
+
+    return (async () => {
+      let voice: Dx7Voice | null = null
+      try {
+        voice = await voiceSource
+        setState({
+          activeVoice: voice,
+          phase: 'starting',
+          status: `Starting local audition: ${voiceLabel(voice)}…`,
+          error: null,
+        })
+        await preparation
+        await manager?.audition(voice)
+      } catch (cause) {
+        const error = cause instanceof Error ? cause : new Error('Local voice audition failed')
+        setState({
+          activeVoice: voice,
+          phase: 'error',
+          status: null,
+          error: error.message,
+        })
+        throw error
+      }
+    })()
   }, [])
 
   const stopAudition = useCallback(async () => {
