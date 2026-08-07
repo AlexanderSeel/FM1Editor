@@ -17,6 +17,7 @@ import { importSysexFile } from '../sysex/importSysex'
 interface PatchCatalogBrowserProps {
   onLoadBank: (voices: readonly Dx7Voice[]) => void
   onLoadVoice: (voice: Dx7Voice) => void
+  onAuditionVoice: (voice: Dx7Voice) => Promise<void>
   onImportToLibrary: (
     voices: readonly Dx7Voice[],
     origin: Omit<PatchOrigin, 'bankSlot'>,
@@ -39,7 +40,26 @@ function availabilityClass(entry: PatchCatalogEntry): string {
   return 'border-cyan-300/20 bg-cyan-300/10 text-cyan-200'
 }
 
-export function PatchCatalogBrowser({ onLoadBank, onLoadVoice, onImportToLibrary }: PatchCatalogBrowserProps) {
+function voicesFromParsedEntry(parsed: ReturnType<typeof importSysexFile>): {
+  voices: readonly Dx7Voice[]
+  bank: Extract<(typeof parsed)[number], { kind: 'voice-bank' }> | undefined
+} {
+  const bank = parsed.find((item): item is Extract<(typeof parsed)[number], { kind: 'voice-bank' }> => item.kind === 'voice-bank')
+  const singles = parsed.filter((item): item is Extract<(typeof parsed)[number], { kind: 'single-voice' }> => item.kind === 'single-voice')
+  const voices = bank ? bank.voices : singles.map((item) => item.voice)
+  if (voices.length === 0) {
+    const unsupported = parsed.find((item) => item.kind === 'unsupported')
+    throw new Error(unsupported?.kind === 'unsupported' ? unsupported.reason : 'No supported DX7 voices were found.')
+  }
+  return { voices, bank }
+}
+
+export function PatchCatalogBrowser({
+  onLoadBank,
+  onLoadVoice,
+  onAuditionVoice,
+  onImportToLibrary,
+}: PatchCatalogBrowserProps) {
   const [catalog, setCatalog] = useState<LoadedPatchCatalog | null>(null)
   const [query, setQuery] = useState('')
   const [source, setSource] = useState('all')
@@ -47,6 +67,7 @@ export function PatchCatalogBrowser({ onLoadBank, onLoadVoice, onImportToLibrary
   const [includeDiagnostics, setIncludeDiagnostics] = useState(false)
   const [page, setPage] = useState(0)
   const [loadingEntryId, setLoadingEntryId] = useState<string | null>(null)
+  const [auditioningEntryId, setAuditioningEntryId] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [status, setStatus] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -80,22 +101,33 @@ export function PatchCatalogBrowser({ onLoadBank, onLoadVoice, onImportToLibrary
   const pageCount = Math.max(1, Math.ceil(visible.length / PAGE_SIZE))
   const pageEntries = visible.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE)
 
+  const readEntryVoices = async (entry: PatchCatalogEntry) => voicesFromParsedEntry(
+    importSysexFile(await loadCatalogEntryBytes(entry)),
+  )
+
+  const auditionEntry = async (entry: PatchCatalogEntry) => {
+    setAuditioningEntryId(entry.id)
+    setStatus(null)
+    setError(null)
+    try {
+      const { voices } = await readEntryVoices(entry)
+      const voice = voices[0]
+      if (!voice) throw new Error('The selected catalog bank contains no auditionable voice.')
+      await onAuditionVoice(voice)
+      setStatus(`Auditioning ${voice.name || 'UNTITLED'} from ${entry.title} locally. The editor voice and library were not changed.`)
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'The catalog voice could not be auditioned locally.')
+    } finally {
+      setAuditioningEntryId(null)
+    }
+  }
+
   const loadEntry = async (entry: PatchCatalogEntry) => {
     setLoadingEntryId(entry.id)
     setStatus(null)
     setError(null)
     try {
-      const parsed = importSysexFile(await loadCatalogEntryBytes(entry))
-      const bank = parsed.find((item) => item.kind === 'voice-bank')
-      const singles = parsed.filter((item) => item.kind === 'single-voice')
-      const voices = bank?.kind === 'voice-bank'
-        ? bank.voices
-        : singles.flatMap((item) => item.kind === 'single-voice' ? [item.voice] : [])
-      if (voices.length === 0) {
-        const unsupported = parsed.find((item) => item.kind === 'unsupported')
-        throw new Error(unsupported?.kind === 'unsupported' ? unsupported.reason : 'No supported DX7 voices were found.')
-      }
-
+      const { voices, bank } = await readEntryVoices(entry)
       const summary = await onImportToLibrary(voices, {
         kind: 'external-catalog',
         label: entry.website ? 'Yamaha Black Boxes + sysexFinal' : `sysexFinal.zip / ${entry.source}`,
@@ -104,7 +136,7 @@ export function PatchCatalogBrowser({ onLoadBank, onLoadVoice, onImportToLibrary
         ...(entry.website ? { url: entry.website.remoteUrl } : {}),
       })
 
-      if (bank?.kind === 'voice-bank') onLoadBank(bank.voices)
+      if (bank) onLoadBank(bank.voices)
       else if (voices[0]) onLoadVoice(voices[0])
       setStatus(`Loaded ${entry.title}: ${summary.added} new voices, ${summary.duplicates} duplicates skipped.`)
     } catch (cause) {
@@ -114,6 +146,8 @@ export function PatchCatalogBrowser({ onLoadBank, onLoadVoice, onImportToLibrary
     }
   }
 
+  const entryActionBusy = loadingEntryId !== null || auditioningEntryId !== null
+
   return (
     <section className="grid gap-4 rounded-2xl border border-white/10 bg-white/[0.025] p-4">
       <div className="flex flex-wrap items-start justify-between gap-4">
@@ -121,7 +155,7 @@ export function PatchCatalogBrowser({ onLoadBank, onLoadVoice, onImportToLibrary
           <p className="text-xs font-semibold uppercase tracking-[0.18em] text-violet-300">Merged SysEx library browser</p>
           <h3 className="mt-1 text-xl font-bold text-white">sysexFinal.zip + Yamaha Black Boxes</h3>
           <p className="mt-2 max-w-4xl text-sm leading-6 text-slate-400">
-            Browse and load banks directly inside FM1 Editor. Website matches use the ZIP copy; website-only banks use the build mirror or their direct `.syx` source URL.
+            Browse banks, audition the first valid voice locally without changing the editor, or explicitly load/import a bank. Website matches use the ZIP copy; website-only banks use the build mirror or their direct `.syx` source URL.
           </p>
         </div>
         <button
@@ -203,19 +237,29 @@ export function PatchCatalogBrowser({ onLoadBank, onLoadVoice, onImportToLibrary
                       <span className="rounded-md border border-white/8 bg-white/[0.035] px-2 py-1 text-[10px] text-slate-400" key={`${voice}-${index}`}>{voice || 'UNTITLED'}</span>
                     ))}
                     {entry.voices.length > 8 && <span className="px-2 py-1 text-[10px] text-slate-600">+{entry.voices.length - 8}</span>}
-                    {entry.voices.length === 0 && <span className="text-[10px] text-slate-600">Voice list available after loading</span>}
+                    {entry.voices.length === 0 && <span className="text-[10px] text-slate-600">Voice list available after reading the bank</span>}
                   </div>
                 </div>
-                <div className="flex items-center justify-between gap-3">
+                <div className="flex flex-wrap items-center justify-between gap-2">
                   <span className={`text-[10px] uppercase tracking-[0.12em] ${diagnostic ? 'text-rose-300' : 'text-slate-600'}`}>{entry.status}</span>
-                  <button
-                    className="rounded-lg bg-cyan-300 px-3 py-2 text-xs font-bold text-slate-950 disabled:cursor-not-allowed disabled:bg-slate-700 disabled:text-slate-400"
-                    disabled={diagnostic || loadingEntryId !== null}
-                    onClick={() => void loadEntry(entry)}
-                    type="button"
-                  >
-                    {loadingEntryId === entry.id ? 'Loading…' : 'Load bank'}
-                  </button>
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      className="rounded-lg border border-violet-300/20 bg-violet-300/5 px-3 py-2 text-xs font-bold text-violet-200 disabled:cursor-not-allowed disabled:opacity-40"
+                      disabled={diagnostic || entryActionBusy}
+                      onClick={() => void auditionEntry(entry)}
+                      type="button"
+                    >
+                      {auditioningEntryId === entry.id ? 'Starting local…' : 'Audition first voice'}
+                    </button>
+                    <button
+                      className="rounded-lg bg-cyan-300 px-3 py-2 text-xs font-bold text-slate-950 disabled:cursor-not-allowed disabled:bg-slate-700 disabled:text-slate-400"
+                      disabled={diagnostic || entryActionBusy}
+                      onClick={() => void loadEntry(entry)}
+                      type="button"
+                    >
+                      {loadingEntryId === entry.id ? 'Loading…' : 'Load bank'}
+                    </button>
+                  </div>
                 </div>
               </article>
             )
@@ -232,7 +276,7 @@ export function PatchCatalogBrowser({ onLoadBank, onLoadVoice, onImportToLibrary
       </div>
 
       <p className="text-[11px] leading-5 text-slate-600">
-        Patch rights vary by original author and collection. The app retains source metadata and does not treat every bank as public domain.
+        Patch rights vary by original author and collection. Local audition parses the bank in memory only and does not import, load or transmit a voice. The app retains source metadata and does not treat every bank as public domain.
       </p>
     </section>
   )
