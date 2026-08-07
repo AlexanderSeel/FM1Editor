@@ -17,7 +17,7 @@ import { importSysexFile } from '../sysex/importSysex'
 interface PatchCatalogBrowserProps {
   onLoadBank: (voices: readonly Dx7Voice[]) => void
   onLoadVoice: (voice: Dx7Voice) => void
-  onAuditionVoice: (voice: Dx7Voice) => Promise<void>
+  onAuditionVoice: (voice: Dx7Voice | Promise<Dx7Voice>) => Promise<void>
   onImportToLibrary: (
     voices: readonly Dx7Voice[],
     origin: Omit<PatchOrigin, 'bankSlot'>,
@@ -110,10 +110,15 @@ export function PatchCatalogBrowser({
     setStatus(null)
     setError(null)
     try {
-      const { voices } = await readEntryVoices(entry)
-      const voice = voices[0]
-      if (!voice) throw new Error('The selected catalog bank contains no auditionable voice.')
-      await onAuditionVoice(voice)
+      // Pass the unresolved voice promise immediately so the shared audition
+      // hook can create/resume browser audio inside this direct click gesture.
+      const voicePromise = readEntryVoices(entry).then(({ voices }) => {
+        const voice = voices[0]
+        if (!voice) throw new Error('The selected catalog bank contains no auditionable voice.')
+        return voice
+      })
+      await onAuditionVoice(voicePromise)
+      const voice = await voicePromise
       setStatus(`Auditioning ${voice.name || 'UNTITLED'} from ${entry.title} locally. The editor voice and library were not changed.`)
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'The catalog voice could not be auditioned locally.')
