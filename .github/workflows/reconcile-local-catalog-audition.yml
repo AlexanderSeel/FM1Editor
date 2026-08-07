@@ -1,0 +1,81 @@
+name: Reconcile local catalog audition roadmap
+
+on:
+  push:
+    branches: [main]
+    paths: ['docs/validation/local-catalog-library-audition-browser.md']
+
+permissions:
+  contents: write
+
+concurrency:
+  group: reconcile-local-catalog-audition
+  cancel-in-progress: false
+
+jobs:
+  reconcile:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Reconcile unresolved-only plan and implementation record
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          receipt_path=Path('docs/validation/local-catalog-library-audition-browser.md')
+          receipt=receipt_path.read_text(encoding='utf-8') if receipt_path.exists() else ''
+          success='Overall audition gate: **SUCCESS**' in receipt
+
+          if success:
+              plan=Path('PLAN.md')
+              text=plan.read_text(encoding='utf-8')
+              text=text.replace(
+                  'The audited deterministic offline renderer, explicit local preview, 16-voice stateful AudioWorklet, deterministic allocation/stealing, local DX7-style pitch bend/modulation/sustain/aftertouch and internal-clock browser sequencer routing are software/browser-validated.',
+                  'The audited deterministic offline renderer, explicit local preview, 16-voice stateful AudioWorklet, deterministic allocation/stealing, local DX7-style pitch bend/modulation/sustain/aftertouch, internal-clock browser sequencer routing and direct catalog/library local audition are software/browser-validated.'
+              )
+              text=text.replace("- [ ] Add direct local audition actions for catalog/library voices without first loading them into the editor; keep audition, load and hardware transmission as distinct user actions.\n",'')
+              if '`docs/validation/local-catalog-library-audition-browser.md`' not in text:
+                  text=text.replace(
+                      '[`docs/validation/local-sequence-ui-browser.md`](./docs/validation/local-sequence-ui-browser.md).',
+                      '[`docs/validation/local-sequence-ui-browser.md`](./docs/validation/local-sequence-ui-browser.md) and [`docs/validation/local-catalog-library-audition-browser.md`](./docs/validation/local-catalog-library-audition-browser.md).'
+                  )
+              plan.write_text(text,encoding='utf-8')
+
+              research=Path('docs/research/virtual-dx7-renderer-feasibility-spike.md')
+              if research.exists():
+                  text=research.read_text(encoding='utf-8')
+                  text=text.replace(
+                      'Status: **audited deterministic dry engine packaged and integrated; explicit 16-voice local AudioWorklet preview with DX7-style performance controls accepted in branded Chrome and Edge**.',
+                      'Status: **audited deterministic dry engine packaged and integrated; explicit 16-voice local AudioWorklet preview, DX7-style performance controls, internal-clock local sequencer routing and direct catalog/library audition accepted in branded Chrome and Edge**.'
+                  )
+                  marker='## Browser limitations and claim boundary\n'
+                  section='''### Direct catalog/library audition\n\nPermanent evidence: `docs/validation/local-catalog-library-audition-browser.md`.\n\nAccepted behavior:\n\n- one app-owned audition manager is shared by catalog and local-library surfaces;\n- every audition is an explicit short browser-local semantic C4 action;\n- a new audition releases/closes the previous controller before starting;\n- catalog banks expose named slot selection and the selected semantic voice is parsed in memory without loading/importing it into the editor;\n- library cards audition their stored semantic voice directly;\n- production Chrome/Edge UI evidence requires non-silent PCM, automatic return to silence, zero Web MIDI permission requests and an unchanged editor voice title;\n- audition, editor loading/import and hardware transmission remain separate actions.\n\n'''
+                  if success and '### Direct catalog/library audition' not in text and marker in text:
+                      text=text.replace(marker,section+marker,1)
+                  text=text.replace('1. add direct local catalog/library voice audition without first loading the voice into the editor; keep audition, load and hardware actions distinct;\n2. add external-MIDI-clock local playback only through a separately validated input-clock scheduler;','1. add external-MIDI-clock local playback only through a separately validated input-clock scheduler;')
+                  text=text.replace('3. implement the FM-1-inspired effect graph separately from the dry synthesis engine;','2. implement the FM-1-inspired effect graph separately from the dry synthesis engine;')
+                  text=text.replace('4. add master gain/limiter and useful polyphony/CPU diagnostics at the Virtual FM-1 product layer;','3. add master gain/limiter and useful polyphony/CPU diagnostics at the Virtual FM-1 product layer;')
+                  text=text.replace('5. add note/chord WAV rendering and uploaded-reference A/B comparison;','4. add note/chord WAV rendering and uploaded-reference A/B comparison;')
+                  text=text.replace('6. expand integrated performance/underrun/error regression gates as effects and additional routing are added;','5. expand integrated performance/underrun/error regression gates as effects and additional routing are added;')
+                  text=text.replace('7. perform controlled Yamaha DX7 / M-VAVE FM-1 comparisons only after physical capture evidence exists.','6. perform controlled Yamaha DX7 / M-VAVE FM-1 comparisons only after physical capture evidence exists.')
+                  if '- `docs/validation/local-catalog-library-audition-browser.md`' not in text:
+                      text=text.rstrip()+"\n- `docs/validation/local-catalog-library-audition-browser.md`\n"
+                  research.write_text(text,encoding='utf-8')
+
+          Path('docs/validation/local-catalog-audition-roadmap-reconciliation.md').write_text('\n'.join([
+              '# Local catalog audition roadmap reconciliation','',
+              f"Browser audition receipt success: **{'YES' if success else 'NO'}**",'',
+              'The unresolved-only roadmap was advanced only when the mounted Chrome/Edge receipt reported SUCCESS.' if success else 'The audition item remains unresolved because the mounted Chrome/Edge receipt did not report SUCCESS.'
+          ])+'\n',encoding='utf-8')
+          Path('.github/workflows/reconcile-local-catalog-audition.yml').unlink(missing_ok=True)
+          PY
+      - name: Commit reconciliation and cleanup
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git diff --cached --quiet || git commit -m 'chore(plan): reconcile local catalog audition evidence'
+          git pull --rebase origin main
+          git push origin HEAD:main
