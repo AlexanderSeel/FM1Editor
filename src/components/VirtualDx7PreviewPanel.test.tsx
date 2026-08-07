@@ -24,7 +24,8 @@ describe('VirtualDx7PreviewPanel', () => {
     expect(markup).toContain('LOCAL AUDIO OFF')
     expect(markup).toContain('Browser only')
     expect(markup).toContain('does not request Web MIDI')
-    expect(markup).toContain('Dry · standard 12-TET · one voice')
+    expect(markup).toContain('Dry · standard 12-TET · 16 voices')
+    expect(markup).toContain('deterministic 16-voice allocation and stealing')
   })
 
   it('presents the local piano as unavailable before audio activation without asking for MIDI hardware', () => {
