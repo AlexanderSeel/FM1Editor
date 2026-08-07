@@ -1,0 +1,82 @@
+name: Validate current imported-bank audio fix
+
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/validate-imported-bank-audio-current.yml']
+
+permissions:
+  contents: write
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - run: npm install --no-audit --no-fund
+      - name: Run complete software gate
+        id: gate
+        shell: bash
+        run: |
+          set +e
+          : > /tmp/gate.txt
+          run_stage() {
+            label="$1"; shift
+            echo "=== $label ===" | tee -a /tmp/gate.txt
+            "$@" 2>&1 | tee -a /tmp/gate.txt
+            code=${PIPESTATUS[0]}
+            echo "${label}_EXIT=$code" | tee -a /tmp/gate.txt
+            echo "$label=$code" >> "$GITHUB_OUTPUT"
+          }
+          run_stage typecheck npm run typecheck
+          run_stage lint npm run lint
+          run_stage focused npm test -- src/sysex/dx7.test.ts src/sysex/dx7.property.test.ts src/sysex/normalizeLegacyVoice.test.ts src/sysex/syntheticFixtureCorpus.test.ts src/library/storageMigration.test.ts src/audio/localVoiceAudition.test.ts src/audio/libraryVoiceRender.integration.test.ts
+          run_stage test npm run test
+          run_stage build npm run build
+          typecheck=$(grep 'typecheck_EXIT=' /tmp/gate.txt | tail -1 | cut -d= -f2)
+          lint=$(grep 'lint_EXIT=' /tmp/gate.txt | tail -1 | cut -d= -f2)
+          focused=$(grep 'focused_EXIT=' /tmp/gate.txt | tail -1 | cut -d= -f2)
+          test=$(grep 'test_EXIT=' /tmp/gate.txt | tail -1 | cut -d= -f2)
+          build=$(grep 'build_EXIT=' /tmp/gate.txt | tail -1 | cut -d= -f2)
+          ok=false
+          if [ "$typecheck" = 0 ] && [ "$lint" = 0 ] && [ "$focused" = 0 ] && [ "$test" = 0 ] && [ "$build" = 0 ]; then ok=true; fi
+          echo "ok=$ok" >> "$GITHUB_OUTPUT"
+          exit 0
+      - name: Write receipt
+        env:
+          OK: ${{ steps.gate.outputs.ok }}
+          TYPECHECK: ${{ steps.gate.outputs.typecheck }}
+          LINT: ${{ steps.gate.outputs.lint }}
+          FOCUSED: ${{ steps.gate.outputs.focused }}
+          TEST: ${{ steps.gate.outputs.test }}
+          BUILD: ${{ steps.gate.outputs.build }}
+        run: |
+          python - <<'PY'
+          import os
+          from pathlib import Path
+          log=Path('/tmp/gate.txt').read_text(encoding='utf-8',errors='replace')
+          ok=os.environ['OK']=='true'
+          Path('docs/validation/imported-bank-virtual-audio-repair.md').write_text('\n'.join([
+            '# Imported-bank virtual audio repair validation','',
+            f"Source commit: `{os.environ['GITHUB_SHA']}`",'',
+            f"Overall software gate: **{'SUCCESS' if ok else 'FAILED'}**",'',
+            '| Stage | Exit code |','| --- | ---: |',
+            f"| typecheck | {os.environ['TYPECHECK']} |",f"| lint | {os.environ['LINT']} |",
+            f"| focused regressions | {os.environ['FOCUSED']} |",f"| full test suite | {os.environ['TEST']} |",f"| production build | {os.environ['BUILD']} |",'',
+            'The focused gate validates canonical Yamaha 128-byte packing, compatibility normalization, generated codec properties, schema-v4 cached-library repair, user-activation-safe audition and real tracked ROM-bank PCM through packaged MSFA WASM.','',
+            '```text',log[-18000:],'```',''
+          ]),encoding='utf-8')
+          Path('.github/workflows/validate-imported-bank-audio-current.yml').unlink(missing_ok=True)
+          PY
+      - name: Commit receipt
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git commit -m 'test(ci): record current imported-bank audio gate' || true
+          git pull --rebase origin main
+          git push origin HEAD:main
