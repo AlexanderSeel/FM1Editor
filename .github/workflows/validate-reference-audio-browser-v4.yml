@@ -1,0 +1,77 @@
+name: Validate reference audio with browser startup retry
+
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/validate-reference-audio-browser-v4.yml']
+
+permissions:
+  contents: write
+
+jobs:
+  browser:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - run: npm install --no-audit --no-fund
+      - run: npm run build
+      - name: Run Chrome and Edge reference acceptance with one retry
+        shell: pwsh
+        run: |
+          $programFilesX86 = ${env:ProgramFiles(x86)}
+          $chrome = @((Join-Path $env:PROGRAMFILES 'Google\Chrome\Application\chrome.exe'), (Join-Path $programFilesX86 'Google\Chrome\Application\chrome.exe')) | Where-Object { $_ -and (Test-Path $_) } | Select-Object -First 1
+          $edge = @((Join-Path $env:PROGRAMFILES 'Microsoft\Edge\Application\msedge.exe'), (Join-Path $programFilesX86 'Microsoft\Edge\Application\msedge.exe')) | Where-Object { $_ -and (Test-Path $_) } | Select-Object -First 1
+          if (-not $chrome) { throw 'Chrome not found' }
+          if (-not $edge) { throw 'Edge not found' }
+          function Run-Acceptance($exe, $name, $result) {
+            $exitCode=1
+            for ($attempt=1; $attempt -le 2; $attempt++) {
+              node scripts/test-reference-audio-input-browser.mjs --browser-executable $exe --browser-name $name --result $result
+              $exitCode=$LASTEXITCODE
+              if ($exitCode -eq 0) { break }
+              Write-Host "$name attempt $attempt failed; retrying if available"
+              Start-Sleep -Seconds 1
+            }
+            return $exitCode
+          }
+          $chromeExit=Run-Acceptance $chrome 'chrome' 'reference-audio-chrome.json'
+          $edgeExit=Run-Acceptance $edge 'edge' 'reference-audio-edge.json'
+          Write-Host "Chrome exit $chromeExit; Edge exit $edgeExit"
+          exit 0
+      - name: Record permanent receipt
+        if: always()
+        shell: pwsh
+        run: |
+          @'
+          import json, os
+          from pathlib import Path
+          def read(path):
+              p=Path(path)
+              return json.loads(p.read_text(encoding='utf-8')) if p.exists() else {'ok':False,'error':'result missing'}
+          chrome=read('reference-audio-chrome.json'); edge=read('reference-audio-edge.json')
+          ok=bool(chrome.get('ok')) and bool(edge.get('ok'))
+          def row(name,d):
+              if not d.get('ok'): return f"| {name} | FAILED | — | — | — | {d.get('error','unknown')} |"
+              return f"| {name} | {d.get('browserProduct')} | {d.get('detectedPitchText')} | {d.get('manualPitchVisible')} | {d.get('fetchesAfter') - d.get('baselineFetches')} | PASS |"
+          Path('docs/validation/reference-audio-browser.md').write_text('\n'.join([
+            '# Local reference audio browser acceptance','',f"Source commit: `{os.environ['GITHUB_SHA']}`",'',f"Overall browser gate: **{'SUCCESS' if ok else 'FAILED'}**",'',
+            '| Browser | Product | Detected pitch | Manual override | New network fetches | Result |','| --- | --- | --- | --- | ---: | --- |',row('Chrome',chrome),row('Edge',edge),'',
+            'The real mounted reference input receives a generated PCM16 A4 WAV with leading/trailing silence. Acceptance requires fundamental-range pitch detection, region/trim/normalization controls, SHA-256 display, 330 Hz manual override, local-only privacy status and zero reference-processing network fetches. Browser startup is retried once to separate CDP startup flakes from product behavior.','',
+            'No server upload or physical-hardware claim is part of this acceptance.',''
+          ]),encoding='utf-8')
+          Path('.github/workflows/validate-reference-audio-browser-v4.yml').unlink(missing_ok=True)
+          '@ | python
+      - name: Commit evidence
+        if: always()
+        shell: bash
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add -A
+          git commit -m 'test(browser): validate local reference audio in Chrome and Edge' || true
+          git pull --rebase origin main
+          git push origin HEAD:main
