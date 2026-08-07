@@ -1,8 +1,16 @@
-export const REFERENCE_AUDIO_MAX_BYTES = 25 * 1024 * 1024
+export const REFERENCE_AUDIO_MAX_BYTES = 32 * 1024 * 1024
 export const REFERENCE_AUDIO_MAX_DURATION_SECONDS = 30
-export const REFERENCE_AUDIO_MIN_REGION_SECONDS = 0.05
+export const REFERENCE_AUDIO_MIN_DURATION_SECONDS = 0.05
 export const REFERENCE_AUDIO_SILENCE_THRESHOLD_DB = -60
-export const REFERENCE_AUDIO_NORMALIZED_PEAK = 0.8912509381337456 // -1 dBFS
+export const REFERENCE_AUDIO_NORMALIZATION_PEAK = 0.95
+export const REFERENCE_AUDIO_PRIVACY = 'Local only: decoded audio and analysis stay in this browser unless a future server action is explicitly enabled.' as const
+
+export interface ReferenceAudioFileLike {
+  name: string
+  type: string
+  size: number
+  arrayBuffer(): Promise<ArrayBuffer>
+}
 
 export interface ReferenceAudioRegion {
   startSeconds: number
@@ -10,58 +18,53 @@ export interface ReferenceAudioRegion {
 }
 
 export interface ReferenceAudioPreparationOptions {
-  region: ReferenceAudioRegion
-  trimSilence: boolean
-  normalize: boolean
+  region?: ReferenceAudioRegion
+  trimSilence?: boolean
+  normalize?: boolean
   manualPitchHz?: number | null
 }
 
 export interface PreparedReferenceAudio {
-  readonly sampleRate: number
-  readonly samples: Float32Array
-  readonly region: ReferenceAudioRegion
-  readonly detectedPitchHz: number | null
-  readonly analysisPitchHz: number | null
-  readonly normalizationGain: number
-  readonly trimmedLeadingSeconds: number
-  readonly trimmedTrailingSeconds: number
-  readonly durationSeconds: number
+  filename: string
+  mimeType: string
+  byteLength: number
+  contentSha256: string
+  sampleRate: number
+  decodedDurationSeconds: number
+  selectedRegion: ReferenceAudioRegion
+  trimStartSeconds: number
+  trimEndSeconds: number
+  durationSeconds: number
+  samples: Float32Array
+  peakBeforeNormalization: number
+  appliedGain: number
+  detectedPitchHz: number | null
+  selectedPitchHz: number | null
+  pitchSource: 'manual' | 'detected' | 'unresolved'
+  privacy: typeof REFERENCE_AUDIO_PRIVACY
 }
 
 export interface DecodedReferenceAudio {
-  readonly filename: string
-  readonly mimeType: string
-  readonly sizeBytes: number
-  readonly contentSha256: string
-  readonly sampleRate: number
-  readonly durationSeconds: number
-  readonly channels: readonly Float32Array[]
-  readonly privacy: 'local-browser-only'
+  sampleRate: number
+  channels: readonly Float32Array[]
 }
 
-function assertFinite(label: string, value: number): number {
-  if (!Number.isFinite(value)) throw new RangeError(`${label} must be finite`)
-  return value
+function assertFinite(label: string, value: number): void {
+  if (!Number.isFinite(value)) throw new RangeError(`${label} must be finite.`)
 }
 
-function clamp(value: number, minimum: number, maximum: number): number {
-  return Math.max(minimum, Math.min(maximum, value))
+function extensionOf(name: string): string {
+  const dot = name.lastIndexOf('.')
+  return dot < 0 ? '' : name.slice(dot).toLowerCase()
 }
 
-function extensionOf(filename: string): string {
-  const index = filename.lastIndexOf('.')
-  return index >= 0 ? filename.slice(index).toLowerCase() : ''
-}
-
-export function validateReferenceAudioFile(file: Pick<File, 'name' | 'size' | 'type'>): void {
+export function validateReferenceAudioFile(file: Pick<ReferenceAudioFileLike, 'name' | 'type' | 'size'>): void {
   if (!Number.isInteger(file.size) || file.size <= 0) throw new Error('Reference audio file is empty.')
-  if (file.size > REFERENCE_AUDIO_MAX_BYTES) {
-    throw new Error(`Reference audio must be ${Math.round(REFERENCE_AUDIO_MAX_BYTES / 1024 / 1024)} MB or smaller.`)
-  }
+  if (file.size > REFERENCE_AUDIO_MAX_BYTES) throw new Error(`Reference audio is larger than ${REFERENCE_AUDIO_MAX_BYTES / 1024 / 1024} MiB.`)
   const extension = extensionOf(file.name)
-  const mime = file.type.toLowerCase()
   const extensionAllowed = extension === '.wav' || extension === '.mp3'
-  const mimeAllowed = mime === 'audio/wav' || mime === 'audio/wave' || mime === 'audio/x-wav' || mime === 'audio/mpeg' || mime === 'audio/mp3' || mime === ''
+  const type = file.type.toLowerCase()
+  const mimeAllowed = type === '' || type === 'audio/wav' || type === 'audio/x-wav' || type === 'audio/mpeg' || type === 'audio/mp3'
   if (!extensionAllowed || !mimeAllowed) throw new Error('Reference audio must be a WAV or MP3 file.')
 }
 
@@ -78,7 +81,9 @@ export function mixReferenceChannelsToMono(channels: readonly Float32Array[]): F
   if (channels.some((channel) => channel.length !== length)) throw new Error('Decoded reference audio channels have inconsistent lengths.')
   const mono = new Float32Array(length)
   for (const channel of channels) {
-    for (let index = 0; index < length; index += 1) mono[index] += (channel[index] ?? 0) / channels.length
+    for (let index = 0; index < length; index += 1) {
+      mono[index] = (mono[index] ?? 0) + (channel[index] ?? 0) / channels.length
+    }
   }
   return mono
 }
@@ -95,142 +100,169 @@ export function findReferenceSilenceBounds(
   const threshold = silenceThresholdAmplitude(thresholdDb)
   let start = 0
   while (start < samples.length && Math.abs(samples[start] ?? 0) <= threshold) start += 1
+  if (start === samples.length) return { start: 0, endExclusive: samples.length }
   let endExclusive = samples.length
   while (endExclusive > start && Math.abs(samples[endExclusive - 1] ?? 0) <= threshold) endExclusive -= 1
   return { start, endExclusive }
 }
 
-export function estimateReferencePitchHz(
-  samples: Float32Array,
-  sampleRate: number,
-  minimumHz = 45,
-  maximumHz = 2_000,
-): number | null {
-  assertFinite('sampleRate', sampleRate)
-  if (sampleRate <= 0 || samples.length < 64) return null
-  const minLag = Math.max(1, Math.floor(sampleRate / maximumHz))
-  const maxLag = Math.min(samples.length - 2, Math.ceil(sampleRate / minimumHz))
-  if (maxLag <= minLag) return null
+function peakOf(samples: Float32Array): number {
+  let peak = 0
+  for (const sample of samples) peak = Math.max(peak, Math.abs(sample))
+  return peak
+}
 
-  let energy = 0
-  let mean = 0
-  for (const sample of samples) mean += sample
-  mean /= samples.length
-  for (const sample of samples) {
-    const centered = sample - mean
-    energy += centered * centered
+export function normalizeReferenceSamples(samples: Float32Array, targetPeak = REFERENCE_AUDIO_NORMALIZATION_PEAK): {
+  samples: Float32Array
+  peakBeforeNormalization: number
+  appliedGain: number
+} {
+  assertFinite('targetPeak', targetPeak)
+  if (targetPeak <= 0 || targetPeak > 1) throw new RangeError('targetPeak must be greater than 0 and no more than 1.')
+  const peakBeforeNormalization = peakOf(samples)
+  if (peakBeforeNormalization === 0) return { samples: samples.slice(), peakBeforeNormalization, appliedGain: 1 }
+  const appliedGain = targetPeak / peakBeforeNormalization
+  return {
+    samples: Float32Array.from(samples, (sample) => Math.max(-1, Math.min(1, sample * appliedGain))),
+    peakBeforeNormalization,
+    appliedGain,
   }
-  if (energy / samples.length < 1e-8) return null
+}
 
-  const analysisLength = Math.min(samples.length, Math.floor(sampleRate * 0.5))
+export function estimateReferencePitchHz(samples: Float32Array, sampleRate: number): number | null {
+  assertFinite('sampleRate', sampleRate)
+  if (sampleRate <= 0 || samples.length < 128) return null
+  const maximumLag = Math.min(Math.floor(sampleRate / 50), samples.length - 2)
+  const minimumLag = Math.max(1, Math.floor(sampleRate / 2000))
+  if (maximumLag <= minimumLag) return null
+  const analysisLength = Math.min(samples.length, Math.floor(sampleRate * 0.35))
+  let rms = 0
+  for (let index = 0; index < analysisLength; index += 1) {
+    const sample = samples[index] ?? 0
+    rms += sample * sample
+  }
+  rms = Math.sqrt(rms / analysisLength)
+  if (rms < 1e-4) return null
+
   let bestLag = 0
-  let bestCorrelation = 0
-  for (let lag = minLag; lag <= maxLag; lag += 1) {
-    let cross = 0
-    let leftEnergy = 0
-    let rightEnergy = 0
+  let bestCorrelation = -Infinity
+  for (let lag = minimumLag; lag <= maximumLag; lag += 1) {
+    let correlation = 0
+    let energyA = 0
+    let energyB = 0
     const count = analysisLength - lag
-    if (count <= 16) break
+    if (count <= 32) break
     for (let index = 0; index < count; index += 1) {
-      const left = (samples[index] ?? 0) - mean
-      const right = (samples[index + lag] ?? 0) - mean
-      cross += left * right
-      leftEnergy += left * left
-      rightEnergy += right * right
+      const left = samples[index] ?? 0
+      const right = samples[index + lag] ?? 0
+      correlation += left * right
+      energyA += left * left
+      energyB += right * right
     }
-    const denominator = Math.sqrt(leftEnergy * rightEnergy)
-    const correlation = denominator > 0 ? cross / denominator : 0
-    if (correlation > bestCorrelation) {
-      bestCorrelation = correlation
+    const denominator = Math.sqrt(energyA * energyB)
+    if (denominator <= 0) continue
+    const normalizedCorrelation = correlation / denominator
+    if (normalizedCorrelation > bestCorrelation) {
+      bestCorrelation = normalizedCorrelation
       bestLag = lag
     }
   }
-  if (bestLag === 0 || bestCorrelation < 0.55) return null
+  if (bestLag === 0 || bestCorrelation < 0.6) return null
   return sampleRate / bestLag
 }
 
-export function prepareReferenceAudio(
-  decoded: Pick<DecodedReferenceAudio, 'sampleRate' | 'durationSeconds' | 'channels'>,
-  options: ReferenceAudioPreparationOptions,
-): PreparedReferenceAudio {
-  if (!Number.isFinite(decoded.sampleRate) || decoded.sampleRate <= 0) throw new Error('Decoded reference sample rate is invalid.')
-  if (!Number.isFinite(decoded.durationSeconds) || decoded.durationSeconds <= 0) throw new Error('Decoded reference duration is invalid.')
-  const startSeconds = clamp(assertFinite('region.startSeconds', options.region.startSeconds), 0, decoded.durationSeconds)
-  const endSeconds = clamp(assertFinite('region.endSeconds', options.region.endSeconds), 0, decoded.durationSeconds)
-  if (endSeconds - startSeconds < REFERENCE_AUDIO_MIN_REGION_SECONDS) {
-    throw new Error(`Reference region must be at least ${REFERENCE_AUDIO_MIN_REGION_SECONDS} seconds.`)
+export function prepareDecodedReferenceAudio(
+  decoded: DecodedReferenceAudio,
+  options: ReferenceAudioPreparationOptions = {},
+): Omit<PreparedReferenceAudio, 'filename' | 'mimeType' | 'byteLength' | 'contentSha256'> {
+  if (!Number.isFinite(decoded.sampleRate) || decoded.sampleRate <= 0) throw new Error('Decoded reference audio has an invalid sample rate.')
+  const mono = mixReferenceChannelsToMono(decoded.channels)
+  const decodedDurationSeconds = mono.length / decoded.sampleRate
+  if (decodedDurationSeconds < REFERENCE_AUDIO_MIN_DURATION_SECONDS) throw new Error('Decoded reference audio is too short.')
+
+  const region = options.region ?? {
+    startSeconds: 0,
+    endSeconds: Math.min(decodedDurationSeconds, REFERENCE_AUDIO_MAX_DURATION_SECONDS),
+  }
+  assertFinite('region.startSeconds', region.startSeconds)
+  assertFinite('region.endSeconds', region.endSeconds)
+  if (region.startSeconds < 0 || region.endSeconds <= region.startSeconds || region.endSeconds > decodedDurationSeconds) {
+    throw new RangeError('Reference audio region is outside the decoded audio.')
+  }
+  if (region.endSeconds - region.startSeconds > REFERENCE_AUDIO_MAX_DURATION_SECONDS) {
+    throw new RangeError(`Reference audio region must be ${REFERENCE_AUDIO_MAX_DURATION_SECONDS} seconds or shorter.`)
   }
 
-  const fullMono = mixReferenceChannelsToMono(decoded.channels)
-  const startSample = Math.floor(startSeconds * decoded.sampleRate)
-  const endSample = Math.min(fullMono.length, Math.ceil(endSeconds * decoded.sampleRate))
-  let selected = fullMono.slice(startSample, endSample)
-  let trimmedLeadingSamples = 0
-  let trimmedTrailingSamples = 0
-
-  if (options.trimSilence) {
+  const regionStart = Math.floor(region.startSeconds * decoded.sampleRate)
+  const regionEnd = Math.min(mono.length, Math.ceil(region.endSeconds * decoded.sampleRate))
+  let selected = mono.slice(regionStart, regionEnd)
+  let trimStartFrames = 0
+  let trimEndFrames = 0
+  if (options.trimSilence !== false) {
     const bounds = findReferenceSilenceBounds(selected)
-    trimmedLeadingSamples = bounds.start
-    trimmedTrailingSamples = selected.length - bounds.endExclusive
+    trimStartFrames = bounds.start
+    trimEndFrames = selected.length - bounds.endExclusive
     selected = selected.slice(bounds.start, bounds.endExclusive)
   }
-  if (selected.length === 0) throw new Error('The selected reference region is silent after trimming.')
-  if (selected.length / decoded.sampleRate > REFERENCE_AUDIO_MAX_DURATION_SECONDS) {
-    throw new Error(`Prepared reference region must be ${REFERENCE_AUDIO_MAX_DURATION_SECONDS} seconds or shorter.`)
+  if (selected.length === 0) throw new Error('The selected reference audio region contains no samples after trimming.')
+  if (selected.length / decoded.sampleRate < REFERENCE_AUDIO_MIN_DURATION_SECONDS) throw new Error('The selected reference audio region is too short after trimming.')
+
+  const normalized = options.normalize === false
+    ? { samples: selected.slice(), peakBeforeNormalization: peakOf(selected), appliedGain: 1 }
+    : normalizeReferenceSamples(selected)
+  const detectedPitchHz = estimateReferencePitchHz(normalized.samples, decoded.sampleRate)
+  const manualPitchHz = options.manualPitchHz ?? null
+  if (manualPitchHz !== null) {
+    assertFinite('manualPitchHz', manualPitchHz)
+    if (manualPitchHz < 20 || manualPitchHz > 5000) throw new RangeError('manualPitchHz must be between 20 and 5000 Hz.')
   }
+  const selectedPitchHz = manualPitchHz ?? detectedPitchHz
 
-  let peak = 0
-  for (const sample of selected) peak = Math.max(peak, Math.abs(sample))
-  const normalizationGain = options.normalize && peak > 0 ? REFERENCE_AUDIO_NORMALIZED_PEAK / peak : 1
-  const samples = new Float32Array(selected.length)
-  for (let index = 0; index < selected.length; index += 1) samples[index] = clamp((selected[index] ?? 0) * normalizationGain, -1, 1)
-
-  const detectedPitchHz = estimateReferencePitchHz(samples, decoded.sampleRate)
-  const manualPitchHz = options.manualPitchHz
-  if (manualPitchHz !== undefined && manualPitchHz !== null && (!Number.isFinite(manualPitchHz) || manualPitchHz < 20 || manualPitchHz > 5_000)) {
-    throw new RangeError('Manual reference pitch must be between 20 and 5000 Hz.')
-  }
-
-  const preparedStart = startSeconds + trimmedLeadingSamples / decoded.sampleRate
-  const preparedEnd = endSeconds - trimmedTrailingSamples / decoded.sampleRate
   return {
     sampleRate: decoded.sampleRate,
-    samples,
-    region: { startSeconds: preparedStart, endSeconds: preparedEnd },
+    decodedDurationSeconds,
+    selectedRegion: { ...region },
+    trimStartSeconds: trimStartFrames / decoded.sampleRate,
+    trimEndSeconds: trimEndFrames / decoded.sampleRate,
+    durationSeconds: normalized.samples.length / decoded.sampleRate,
+    samples: normalized.samples,
+    peakBeforeNormalization: normalized.peakBeforeNormalization,
+    appliedGain: normalized.appliedGain,
     detectedPitchHz,
-    analysisPitchHz: manualPitchHz ?? detectedPitchHz,
-    normalizationGain,
-    trimmedLeadingSeconds: trimmedLeadingSamples / decoded.sampleRate,
-    trimmedTrailingSeconds: trimmedTrailingSamples / decoded.sampleRate,
-    durationSeconds: samples.length / decoded.sampleRate,
+    selectedPitchHz,
+    pitchSource: manualPitchHz !== null ? 'manual' : detectedPitchHz !== null ? 'detected' : 'unresolved',
+    privacy: REFERENCE_AUDIO_PRIVACY,
   }
 }
 
-export async function decodeReferenceAudioFile(
-  file: File,
-  createContext: () => AudioContext = () => new AudioContext(),
-): Promise<DecodedReferenceAudio> {
-  validateReferenceAudioFile(file)
-  const bytes = await file.arrayBuffer()
-  const contentSha256 = await sha256Hex(bytes)
-  const context = createContext()
+async function defaultDecodeAudio(bytes: ArrayBuffer): Promise<DecodedReferenceAudio> {
+  if (typeof AudioContext === 'undefined') throw new Error('Web Audio is required to decode reference WAV/MP3 audio.')
+  const context = new AudioContext()
   try {
     const buffer = await context.decodeAudioData(bytes.slice(0))
-    if (buffer.duration > REFERENCE_AUDIO_MAX_DURATION_SECONDS * 4) {
-      throw new Error(`Decoded reference audio must be ${REFERENCE_AUDIO_MAX_DURATION_SECONDS * 4} seconds or shorter before region selection.`)
-    }
-    const channels = Array.from({ length: buffer.numberOfChannels }, (_, index) => new Float32Array(buffer.getChannelData(index)))
     return {
-      filename: file.name,
-      mimeType: file.type || (extensionOf(file.name) === '.mp3' ? 'audio/mpeg' : 'audio/wav'),
-      sizeBytes: file.size,
-      contentSha256,
       sampleRate: buffer.sampleRate,
-      durationSeconds: buffer.duration,
-      channels,
-      privacy: 'local-browser-only',
+      channels: Array.from({ length: buffer.numberOfChannels }, (_, index) => buffer.getChannelData(index).slice()),
     }
   } finally {
     await context.close().catch(() => undefined)
+  }
+}
+
+export async function prepareReferenceAudioFile(
+  file: ReferenceAudioFileLike,
+  options: ReferenceAudioPreparationOptions = {},
+  decodeAudio: (bytes: ArrayBuffer) => Promise<DecodedReferenceAudio> = defaultDecodeAudio,
+): Promise<PreparedReferenceAudio> {
+  validateReferenceAudioFile(file)
+  const bytes = await file.arrayBuffer()
+  if (bytes.byteLength !== file.size) throw new Error('Reference audio file size changed while reading.')
+  const [contentSha256, decoded] = await Promise.all([sha256Hex(bytes), decodeAudio(bytes)])
+  return {
+    filename: file.name,
+    mimeType: file.type || (extensionOf(file.name) === '.wav' ? 'audio/wav' : 'audio/mpeg'),
+    byteLength: bytes.byteLength,
+    contentSha256,
+    ...prepareDecodedReferenceAudio(decoded, options),
   }
 }
