@@ -1,0 +1,105 @@
+name: Integrate shared local catalog audition
+
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/integrate-local-catalog-audition.yml']
+
+permissions:
+  contents: write
+
+concurrency:
+  group: integrate-local-catalog-audition
+  cancel-in-progress: false
+
+jobs:
+  integrate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Wire shared audition hook into App
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p=Path('src/App.tsx')
+          text=p.read_text(encoding='utf-8')
+          import_anchor="import { useMidi } from './hooks/useMidi'\n"
+          hook_import="import { useLocalVoiceAudition } from './hooks/useLocalVoiceAudition'\n"
+          if hook_import not in text:
+              if import_anchor not in text: raise SystemExit('useMidi import anchor missing')
+              text=text.replace(import_anchor,import_anchor+hook_import,1)
+
+          state_anchor="  const midi = useMidi(target)\n"
+          hook_state="  const { auditionVoice } = useLocalVoiceAudition()\n"
+          if hook_state not in text:
+              if state_anchor not in text: raise SystemExit('midi hook anchor missing')
+              text=text.replace(state_anchor,state_anchor+hook_state,1)
+
+          catalog_anchor="""                    <PatchCatalogBrowser
+                      onImportToLibrary={patchLibrary.importVoices}
+"""
+          catalog_replacement="""                    <PatchCatalogBrowser
+                      onAuditionVoice={auditionVoice}
+                      onImportToLibrary={patchLibrary.importVoices}
+"""
+          if 'onAuditionVoice={auditionVoice}' not in text:
+              if catalog_anchor not in text: raise SystemExit('catalog component anchor missing')
+              text=text.replace(catalog_anchor,catalog_replacement,1)
+
+          library_anchor="""                    <PatchLibrary
+                      currentVoice={voice}
+"""
+          library_replacement="""                    <PatchLibrary
+                      currentVoice={voice}
+                      onAuditionVoice={auditionVoice}
+"""
+          if text.count('onAuditionVoice={auditionVoice}') < 2:
+              if library_anchor not in text: raise SystemExit('library component anchor missing')
+              text=text.replace(library_anchor,library_replacement,1)
+
+          p.write_text(text,encoding='utf-8')
+          PY
+          git diff -- src/App.tsx
+      - name: Full software validation
+        run: |
+          npm install --no-audit --no-fund
+          npm run audit:virtual-dx7
+          npm run typecheck
+          npm run lint
+          npm run test
+          npm run build
+      - name: Record integration receipt and self-clean
+        run: |
+          python - <<'PY'
+          import os
+          from pathlib import Path
+          Path('docs/validation/local-catalog-library-audition-integration.md').write_text('\n'.join([
+            '# Local catalog/library audition integration','',
+            f"Validated source/workflow commit: `{os.environ['GITHUB_SHA']}`",'',
+            'Overall software integration gate: **SUCCESS**','',
+            '## Boundary','',
+            '- `App.tsx` owns one shared `useLocalVoiceAudition()` hook and passes its `auditionVoice` action to both catalog and local-library surfaces.',
+            '- The manager creates browser audio only after an explicit audition click, plays one semantic C4, releases it, keeps a bounded release tail and closes the controller automatically.',
+            '- Starting another audition cancels/releases/closes the previous audition first; catalog and library cannot accumulate independent AudioContexts.',
+            '- Catalog audition parses the selected bank in memory and auditions its first valid semantic voice without importing or loading the bank into the editor.',
+            '- Library audition uses the stored semantic voice directly and does not replace the current editor voice.',
+            '- Audition, Load/Load bank and all hardware transmission actions remain separate UI actions.',
+            '- Source audit, typecheck, lint, full tests and production build passed.',
+            '- Real-browser click/PCM evidence for catalog/library audition remains a separate gate.'
+          ])+'\n',encoding='utf-8')
+          Path('.github/workflows/integrate-local-catalog-audition.yml').unlink(missing_ok=True)
+          PY
+      - name: Commit validated integration and cleanup
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git commit -m 'feat(library): integrate shared local voice audition'
+          git pull --rebase origin main
+          git push origin HEAD:main
