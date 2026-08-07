@@ -76,7 +76,7 @@ function recordReservedSourceValues(
 
     if (packed?.length === 128) {
       const breakpoint = packed[block * 17 + 8]
-      const detuneByte = packed[block * 17 + 16]
+      const detuneByte = packed[block * 17 + 12]
       if (breakpoint !== undefined) {
         recordNormalization(
           `${operatorPath}.keyboardScaling.breakPoint`,
@@ -86,7 +86,7 @@ function recordReservedSourceValues(
         )
       }
       if (detuneByte !== undefined) {
-        const detune = detuneByte & 0x0f
+        const detune = (detuneByte >> 3) & 0x0f
         recordNormalization(`${operatorPath}.detune`, detune, Math.min(detune, 14), normalizations)
       }
     }
