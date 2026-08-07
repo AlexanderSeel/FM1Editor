@@ -56,11 +56,11 @@ describe('DX7 packed voice', () => {
     const packed = encodePackedVoice(voice)
     const offset = 4 * 17
 
-    expect(packed[offset + 11] & 0x0f).toBe(0x07)
+    expect((packed[offset + 11] ?? 0) & 0x0f).toBe(0x07)
     expect(packed[offset + 12]).toBe((12 << 3) | 6)
-    expect(packed[offset + 13] & 0x1f).toBe(3 | (5 << 2))
+    expect((packed[offset + 13] ?? 0) & 0x1f).toBe(3 | (5 << 2))
     expect(packed[offset + 14]).toBe(87)
-    expect(packed[offset + 15] & 0x3f).toBe(1 | (27 << 1))
+    expect((packed[offset + 15] ?? 0) & 0x3f).toBe(1 | (27 << 1))
     expect(packed[offset + 16]).toBe(73)
 
     const decoded = decodePackedVoice(packed).operators[1]
