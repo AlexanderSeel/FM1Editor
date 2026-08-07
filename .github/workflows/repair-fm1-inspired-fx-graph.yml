@@ -1,4 +1,4 @@
-name: Repair and validate FM1-inspired effect graph
+name: Validate repaired FM1-inspired effect graph
 
 on:
   push:
@@ -19,31 +19,6 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - name: Repair strict TypeScript and lint findings
-        run: |
-          python - <<'PY'
-          from pathlib import Path
-          path = Path('src/audio/fm1InspiredFxGraph.ts')
-          text = path.read_text(encoding='utf-8')
-          old = """  const candidate = state.values[id]
-  if (!Number.isInteger(candidate) || candidate < definition.minimum || candidate > definition.maximum) {
-    throw new RangeError(`${id} must be an integer from ${definition.minimum} through ${definition.maximum}`)
-  }
-  return candidate
-"""
-          new = """  const candidate = state.values[id]
-  if (candidate === undefined || !Number.isInteger(candidate) || candidate < definition.minimum || candidate > definition.maximum) {
-    throw new RangeError(`${id} must be an integer from ${definition.minimum} through ${definition.maximum}`)
-  }
-  return candidate
-"""
-          if old not in text:
-              raise SystemExit('Expected strict-value block was not found')
-          text = text.replace(old, new, 1)
-          text = text.replace("try { chorusLfo.stop() } catch {}", "try { chorusLfo.stop() } catch { /* already stopped */ }", 1)
-          text = text.replace("try { phaserLfo.stop() } catch {}", "try { phaserLfo.stop() } catch { /* already stopped */ }", 1)
-          path.write_text(text, encoding='utf-8')
-          PY
       - name: Full software gate
         run: |
           npm install --no-audit --no-fund
