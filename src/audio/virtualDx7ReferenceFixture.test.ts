@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto'
+import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import { decodeSingleVoiceMessage, DX7_SINGLE_MESSAGE_LENGTH } from '../sysex/dx7'
 import { createMsfaCompatibleVoiceBridge } from './msfaVoiceBridge'
@@ -14,6 +15,12 @@ import {
 
 function sha256(bytes: Uint8Array): string {
   return createHash('sha256').update(bytes).digest('hex')
+}
+
+function nativeReferencePatch(): Uint8Array {
+  const hex = readFileSync(new URL('../../native/virtual-dx7-spike/reference-patch-v1.hex', import.meta.url), 'utf8').trim()
+  if (!/^[0-9a-f]{312}$/i.test(hex)) throw new Error('Native virtual-DX7 reference patch must contain exactly 156 hexadecimal bytes.')
+  return Uint8Array.from(hex.match(/../g) ?? [], (value) => Number.parseInt(value, 16))
 }
 
 describe('virtual DX7 synthetic reference fixture', () => {
@@ -57,6 +64,7 @@ describe('virtual DX7 synthetic reference fixture', () => {
       .toEqual(Array.from(sysex.slice(6, 6 + 145)))
     expect(Array.from(bridge.voiceData.slice(145))).not.toEqual(Array.from(sysex.slice(151, 161)))
     expect(sha256(bridge.patchBuffer)).toBe(VIRTUAL_DX7_REFERENCE_BRIDGE_SHA256)
+    expect(Array.from(nativeReferencePatch())).toEqual(Array.from(bridge.patchBuffer))
   })
 
   it('is repository-defined semantic data without imported source bytes', () => {
