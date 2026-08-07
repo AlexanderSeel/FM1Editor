@@ -1,5 +1,6 @@
 name: Validate local reference audio input in browsers
 
+# Rerun after the reference input was mounted in the current Voice workspace.
 on:
   push:
     branches: [main]
@@ -29,7 +30,8 @@ jobs:
           if (-not $edge) { throw 'Edge not found' }
           node scripts/test-reference-audio-input-browser.mjs --browser-executable $chrome --browser-name chrome --result reference-audio-chrome.json
           node scripts/test-reference-audio-input-browser.mjs --browser-executable $edge --browser-name edge --result reference-audio-edge.json
-      - name: Record receipt and PLAN
+      - name: Record receipt
+        if: always()
         shell: pwsh
         run: |
           @'
@@ -46,23 +48,18 @@ jobs:
           Path('docs/validation/reference-audio-browser.md').write_text('\n'.join([
             '# Local reference audio browser acceptance','',f"Source commit: `{os.environ['GITHUB_SHA']}`",'',f"Overall browser gate: **{'SUCCESS' if ok else 'FAILED'}**",'',
             '| Browser | Product | Manual pitch override | New network fetches | Result |','| --- | --- | --- | ---: | --- |',row('Chrome',chrome),row('Edge',edge),'',
-            'A generated local WAV with leading/trailing silence is selected through the real file input. Acceptance requires local decode, region controls, silence trimming, normalization, SHA-256 display, detected pitch, manual pitch override, explicit local-only privacy copy and zero new network fetches caused by reference processing.','',
+            'A generated local WAV with leading/trailing silence is selected through the real mounted file input. Acceptance requires local decode, region controls, silence trimming, normalization, SHA-256 display, detected pitch, manual pitch override, explicit local-only privacy copy and zero new network fetches caused by reference processing.','',
             'No server upload or physical-hardware claim is part of this acceptance.',''
           ]),encoding='utf-8')
-          if ok:
-              plan=Path('PLAN.md'); text=plan.read_text(encoding='utf-8')
-              old='- [ ] Add local WAV/MP3 upload with region selection, duration/size limits, silence trimming, mono analysis, pitch detection with manual override, normalization controls, content hashes and explicit privacy status.'
-              new='- [x] Add local WAV/MP3 input with region selection, duration/size limits, silence trimming, mono analysis, pitch detection with manual override, normalization controls, content hashes and explicit local-only privacy status. Chrome/Edge acceptance confirms the reference path causes no network upload/fetch. Evidence: [`docs/validation/reference-audio-browser.md`](./docs/validation/reference-audio-browser.md).'
-              if old in text: text=text.replace(old,new,1)
-              plan.write_text(text,encoding='utf-8')
           Path('.github/workflows/validate-reference-audio-browser.yml').unlink(missing_ok=True)
           '@ | python
       - name: Commit evidence
+        if: always()
         shell: bash
         run: |
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add -A
-          git commit -m 'test(browser): record reference audio acceptance' || true
+          git commit -m 'test(browser): record mounted reference audio acceptance' || true
           git pull --rebase origin main
           git push origin HEAD:main
