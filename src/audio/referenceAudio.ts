@@ -71,7 +71,7 @@ function extensionOf(name: string): string {
 
 export function validateReferenceAudioFile(file: Pick<ReferenceAudioFileLike, 'name' | 'type' | 'size'>): void {
   if (!Number.isInteger(file.size) || file.size <= 0) throw new Error('Reference audio file is empty.')
-  if (file.size > REFERENCE_AUDIO_MAX_BYTES) throw new Error(`Reference audio is larger than ${REFERENCE_AUDIO_MAX_BYTES / 1024 / 1024} MB.`)
+  if (file.size > REFERENCE_AUDIO_MAX_BYTES) throw new Error(`Reference audio exceeds the ${REFERENCE_AUDIO_MAX_BYTES / 1024 / 1024} MB file-size limit.`)
   const extension = extensionOf(file.name)
   const extensionAllowed = extension === '.wav' || extension === '.mp3'
   const type = file.type.toLowerCase()
@@ -188,9 +188,11 @@ export function prepareReferenceAudio(
   if (!Number.isFinite(decoded.sampleRate) || decoded.sampleRate <= 0) throw new Error('Decoded reference audio has an invalid sample rate.')
   const mono = mixReferenceChannelsToMono(decoded.channels)
   const actualDurationSeconds = mono.length / decoded.sampleRate
-  if (actualDurationSeconds < REFERENCE_AUDIO_MIN_REGION_SECONDS) throw new Error(`Decoded reference audio must be at least ${REFERENCE_AUDIO_MIN_REGION_SECONDS} seconds.`)
+  if (actualDurationSeconds < REFERENCE_AUDIO_MIN_REGION_SECONDS) {
+    throw new Error(`Decoded reference audio is shorter than ${REFERENCE_AUDIO_MIN_REGION_SECONDS} seconds.`)
+  }
   if (decoded.durationSeconds > REFERENCE_AUDIO_MAX_DECODED_DURATION_SECONDS + 1e-6) {
-    throw new Error(`Decoded reference audio must be ${REFERENCE_AUDIO_MAX_DECODED_DURATION_SECONDS} seconds or shorter.`)
+    throw new Error(`Decoded reference audio exceeds the ${REFERENCE_AUDIO_MAX_DECODED_DURATION_SECONDS} second limit.`)
   }
 
   const region = options.region ?? {
@@ -201,13 +203,13 @@ export function prepareReferenceAudio(
   assertFinite('region.endSeconds', region.endSeconds)
   const regionDuration = region.endSeconds - region.startSeconds
   if (region.startSeconds < 0 || region.endSeconds <= region.startSeconds || region.endSeconds > actualDurationSeconds + 1e-6) {
-    throw new RangeError('Reference audio region is outside the decoded audio.')
+    throw new RangeError('Reference audio selection is outside the decoded audio.')
   }
   if (regionDuration < REFERENCE_AUDIO_MIN_REGION_SECONDS) {
-    throw new RangeError(`Reference audio region must be at least ${REFERENCE_AUDIO_MIN_REGION_SECONDS} seconds.`)
+    throw new RangeError(`Reference audio selection is shorter than ${REFERENCE_AUDIO_MIN_REGION_SECONDS} seconds.`)
   }
   if (regionDuration > REFERENCE_AUDIO_MAX_DURATION_SECONDS) {
-    throw new RangeError(`Reference audio region must be ${REFERENCE_AUDIO_MAX_DURATION_SECONDS} seconds or shorter.`)
+    throw new RangeError(`Reference audio selection exceeds the ${REFERENCE_AUDIO_MAX_DURATION_SECONDS} second prepared-region limit.`)
   }
 
   const regionStart = Math.floor(region.startSeconds * decoded.sampleRate)
@@ -223,7 +225,7 @@ export function prepareReferenceAudio(
   }
   if (selected.length === 0) throw new Error('The selected reference audio region contains no samples after trimming.')
   if (selected.length / decoded.sampleRate < REFERENCE_AUDIO_MIN_REGION_SECONDS) {
-    throw new Error(`The selected reference audio region must be at least ${REFERENCE_AUDIO_MIN_REGION_SECONDS} seconds after trimming.`)
+    throw new Error(`The selected reference audio region is shorter than ${REFERENCE_AUDIO_MIN_REGION_SECONDS} seconds after trimming.`)
   }
 
   const normalized = options.normalize === false
@@ -280,7 +282,7 @@ export async function decodeReferenceAudioFile(
   if (bytes.byteLength !== file.size) throw new Error('Reference audio file size changed while reading.')
   const [contentSha256, decoded] = await Promise.all([sha256Hex(bytes), decodeAudio(bytes)])
   if (decoded.durationSeconds > REFERENCE_AUDIO_MAX_DECODED_DURATION_SECONDS) {
-    throw new Error(`Decoded reference audio must be ${REFERENCE_AUDIO_MAX_DECODED_DURATION_SECONDS} seconds or shorter.`)
+    throw new Error(`Decoded reference audio exceeds the ${REFERENCE_AUDIO_MAX_DECODED_DURATION_SECONDS} second limit.`)
   }
   return {
     ...decoded,
