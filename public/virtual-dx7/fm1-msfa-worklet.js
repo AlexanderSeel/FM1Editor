@@ -20,6 +20,10 @@ class Fm1MsfaProcessor extends AudioWorkletProcessor {
     this.ageCounter = 0
     this.sustainEnabled = false
     this.performanceAbi = 0
+    this.diagnosticCallbacks = 0
+    this.diagnosticTotalMs = 0
+    this.diagnosticMaxMs = 0
+    this.diagnosticOverBudget = 0
     this.port.onmessage = (event) => this.receiveCommand(event.data)
 
     const wasmBinary = options?.processorOptions?.wasmBinary
@@ -415,6 +419,31 @@ class Fm1MsfaProcessor extends AudioWorkletProcessor {
     }
   }
 
+  diagnosticNow() {
+    return typeof performance !== 'undefined' && typeof performance.now === 'function' ? performance.now() : null
+  }
+
+  recordDiagnostics(startedAtMs, frameCount) {
+    if (startedAtMs === null) return
+    const finishedAtMs = this.diagnosticNow()
+    if (finishedAtMs === null) return
+    const elapsedMs = Math.max(0, finishedAtMs - startedAtMs)
+    const budgetMs = frameCount / sampleRate * 1000
+    this.diagnosticCallbacks += 1
+    this.diagnosticTotalMs += elapsedMs
+    this.diagnosticMaxMs = Math.max(this.diagnosticMaxMs, elapsedMs)
+    if (elapsedMs > budgetMs) this.diagnosticOverBudget += 1
+    if (this.diagnosticCallbacks < 128) return
+    const callbacks = this.diagnosticCallbacks
+    const meanRenderMs = this.diagnosticTotalMs / callbacks
+    const maxRenderMs = this.diagnosticMaxMs
+    this.port.postMessage({ type: 'diagnostics', callbacks, meanRenderMs, maxRenderMs, budgetMs, meanUtilization: meanRenderMs / budgetMs, maxUtilization: maxRenderMs / budgetMs, overBudgetCallbacks: this.diagnosticOverBudget, activeVoices: this.voices.filter((voice) => voice.state !== 'idle').length, polyphony: MAX_POLYPHONY })
+    this.diagnosticCallbacks = 0
+    this.diagnosticTotalMs = 0
+    this.diagnosticMaxMs = 0
+    this.diagnosticOverBudget = 0
+  }
+
   process(_inputs, outputs) {
     this.clearOutputs(outputs)
     if (this.disposed) return false
@@ -423,6 +452,7 @@ class Fm1MsfaProcessor extends AudioWorkletProcessor {
     try {
       const channels = outputs[0]
       const mono = channels?.[0]
+      const diagnosticStart = mono ? this.diagnosticNow() : null
       if (!mono) return true
       if (mono.length % ENGINE_BLOCK_FRAMES !== 0) {
         throw new Error(`AudioWorklet callback length ${mono.length} is not divisible by ${ENGINE_BLOCK_FRAMES}`)
@@ -453,6 +483,7 @@ class Fm1MsfaProcessor extends AudioWorkletProcessor {
         }
       }
       for (let channel = 1; channel < channels.length; channel += 1) channels[channel].set(mono)
+      this.recordDiagnostics(diagnosticStart, mono.length)
       return true
     } catch (error) {
       this.clearOutputs(outputs)

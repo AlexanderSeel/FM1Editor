@@ -13,6 +13,7 @@ function controllerHarness() {
     performanceControlAbi: 1,
     get state() { return state },
     sampleRate: 48_000,
+    diagnostics: null,
     enable: vi.fn(async () => { state = 'ready' }),
     loadVoice: vi.fn(async () => {}),
     configurePerformance: vi.fn(async () => {}),

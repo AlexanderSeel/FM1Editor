@@ -101,6 +101,18 @@ export interface MsfaAudioWorkletDependencies {
   readyTimeoutMs?: number
 }
 
+export interface MsfaAudioWorkletDiagnostics {
+  readonly callbacks: number
+  readonly meanRenderMs: number
+  readonly maxRenderMs: number
+  readonly budgetMs: number
+  readonly meanUtilization: number
+  readonly maxUtilization: number
+  readonly overBudgetCallbacks: number
+  readonly activeVoices: number
+  readonly polyphony: number
+}
+
 export interface MsfaAudioWorkletController {
   readonly engineId: typeof MSFA_OFFLINE_ENGINE_ID
   readonly engineVersion: typeof MSFA_OFFLINE_ENGINE_VERSION
@@ -109,6 +121,7 @@ export interface MsfaAudioWorkletController {
   readonly performanceControlAbi: typeof MSFA_WORKLET_PERFORMANCE_ABI
   readonly state: MsfaAudioWorkletState
   readonly sampleRate: number | null
+  readonly diagnostics: MsfaAudioWorkletDiagnostics | null
   enable(): Promise<void>
   loadVoice(voice: Dx7Voice, randomSeed?: number): Promise<void>
   configurePerformance(config: MsfaLocalPerformanceConfig): Promise<void>
@@ -246,6 +259,7 @@ export function createMsfaAudioWorkletController(
   let context: AudioContextLike | null = null
   let node: AudioWorkletNodeLike | null = null
   let outputRoute: MsfaAudioWorkletOutputRoute | null = null
+  let diagnostics: MsfaAudioWorkletDiagnostics | null = null
   let enablePromise: Promise<void> | null = null
   let readyResolve: (() => void) | null = null
   let readyReject: ((error: Error) => void) | null = null
@@ -281,6 +295,14 @@ export function createMsfaAudioWorkletController(
       blockFrames?: unknown
       polyphony?: unknown
       performanceAbi?: unknown
+      callbacks?: unknown
+      meanRenderMs?: unknown
+      maxRenderMs?: unknown
+      budgetMs?: unknown
+      meanUtilization?: unknown
+      maxUtilization?: unknown
+      overBudgetCallbacks?: unknown
+      activeVoices?: unknown
     }
     if (data.type === 'ready') {
       const resolve = readyResolve
@@ -303,6 +325,22 @@ export function createMsfaAudioWorkletController(
       } catch (cause) {
         clearReadyWaiters()
         reject?.(cause instanceof Error ? cause : new Error('Virtual DX7 AudioWorklet readiness validation failed'))
+      }
+      return
+    }
+    if (data.type === 'diagnostics') {
+      const numeric = (value: unknown): number | null => typeof value === 'number' && Number.isFinite(value) ? value : null
+      const callbacks = numeric(data.callbacks)
+      const meanRenderMs = numeric(data.meanRenderMs)
+      const maxRenderMs = numeric(data.maxRenderMs)
+      const budgetMs = numeric(data.budgetMs)
+      const meanUtilization = numeric(data.meanUtilization)
+      const maxUtilization = numeric(data.maxUtilization)
+      const overBudgetCallbacks = numeric(data.overBudgetCallbacks)
+      const activeVoices = numeric(data.activeVoices)
+      const polyphony = numeric(data.polyphony)
+      if (callbacks !== null && callbacks > 0 && meanRenderMs !== null && meanRenderMs >= 0 && maxRenderMs !== null && maxRenderMs >= 0 && budgetMs !== null && budgetMs > 0 && meanUtilization !== null && meanUtilization >= 0 && maxUtilization !== null && maxUtilization >= 0 && overBudgetCallbacks !== null && overBudgetCallbacks >= 0 && activeVoices !== null && activeVoices >= 0 && polyphony !== null && polyphony > 0) {
+        diagnostics = { callbacks, meanRenderMs, maxRenderMs, budgetMs, meanUtilization, maxUtilization, overBudgetCallbacks, activeVoices, polyphony }
       }
       return
     }
@@ -335,6 +373,7 @@ export function createMsfaAudioWorkletController(
 
   const cleanup = async () => {
     clearReadyWaiters()
+    diagnostics = null
     rejectPending(new Error('Virtual DX7 AudioWorklet was closed'))
     if (node) {
       try {
@@ -381,6 +420,9 @@ export function createMsfaAudioWorkletController(
     },
     get sampleRate() {
       return context?.sampleRate ?? null
+    },
+    get diagnostics() {
+      return diagnostics
     },
     enable() {
       if (state === 'closed') return Promise.reject(new Error('Virtual DX7 AudioWorklet is closed'))

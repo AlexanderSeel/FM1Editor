@@ -116,6 +116,7 @@ function browserHarness(options: {
     routedDestination,
     createOutputRoute,
     routeDispose,
+    emitMessage(data: unknown) { port.onmessage?.({ data } as MessageEvent<unknown>) },
     get nodeOptions() { return nodeOptions },
   }
 }
@@ -176,6 +177,18 @@ describe('performance-capable MSFA AudioWorklet controller', () => {
     expect(routed.connect).toHaveBeenCalledWith(routed.routedDestination)
     await routed.controller.close()
     expect(routed.routeDispose).toHaveBeenCalledTimes(1)
+  })
+
+  it('accepts measured worklet diagnostics without inventing values', async () => {
+    const harness = browserHarness()
+    expect(harness.controller.diagnostics).toBeNull()
+    await harness.controller.enable()
+    harness.emitMessage({ type: 'diagnostics', callbacks: 128, meanRenderMs: 0.4, maxRenderMs: 1.2, budgetMs: 2.6667, meanUtilization: 0.15, maxUtilization: 0.45, overBudgetCallbacks: 0, activeVoices: 3, polyphony: 16 })
+    expect(harness.controller.diagnostics).toMatchObject({ callbacks: 128, meanRenderMs: 0.4, maxRenderMs: 1.2, activeVoices: 3, overBudgetCallbacks: 0, polyphony: 16 })
+    harness.emitMessage({ type: 'diagnostics', callbacks: -1 })
+    expect(harness.controller.diagnostics?.callbacks).toBe(128)
+    await harness.controller.close()
+    expect(harness.controller.diagnostics).toBeNull()
   })
 
   it('routes semantic voice, performance controls and independent notes', async () => {
