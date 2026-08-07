@@ -1,0 +1,105 @@
+name: Validate imported-bank audio repair
+
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/validate-imported-bank-audio-fix.yml']
+
+permissions:
+  contents: write
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm install --no-audit --no-fund
+
+      - name: Run repair gate
+        id: gate
+        shell: bash
+        run: |
+          set +e
+          {
+            echo '=== typecheck ==='
+            npm run typecheck
+            typecheck=$?
+            echo "TYPECHECK_EXIT=$typecheck"
+            echo '=== lint ==='
+            npm run lint
+            lint=$?
+            echo "LINT_EXIT=$lint"
+            echo '=== focused regressions ==='
+            npm test -- src/sysex/dx7.test.ts src/sysex/dx7.property.test.ts src/library/storageMigration.test.ts src/audio/localVoiceAudition.test.ts src/audio/libraryVoiceRender.integration.test.ts
+            focused=$?
+            echo "FOCUSED_EXIT=$focused"
+            echo '=== full test ==='
+            npm run test
+            tests=$?
+            echo "TEST_EXIT=$tests"
+            echo '=== build ==='
+            npm run build
+            build=$?
+            echo "BUILD_EXIT=$build"
+          } 2>&1 | tee /tmp/imported-bank-audio-gate.txt
+          status=${PIPESTATUS[0]}
+          typecheck=$(grep 'TYPECHECK_EXIT=' /tmp/imported-bank-audio-gate.txt | tail -1 | cut -d= -f2)
+          lint=$(grep 'LINT_EXIT=' /tmp/imported-bank-audio-gate.txt | tail -1 | cut -d= -f2)
+          focused=$(grep 'FOCUSED_EXIT=' /tmp/imported-bank-audio-gate.txt | tail -1 | cut -d= -f2)
+          tests=$(grep 'TEST_EXIT=' /tmp/imported-bank-audio-gate.txt | tail -1 | cut -d= -f2)
+          build=$(grep 'BUILD_EXIT=' /tmp/imported-bank-audio-gate.txt | tail -1 | cut -d= -f2)
+          ok=false
+          if [ "$typecheck" = 0 ] && [ "$lint" = 0 ] && [ "$focused" = 0 ] && [ "$tests" = 0 ] && [ "$build" = 0 ]; then ok=true; fi
+          echo "ok=$ok" >> "$GITHUB_OUTPUT"
+          echo "typecheck=$typecheck" >> "$GITHUB_OUTPUT"
+          echo "lint=$lint" >> "$GITHUB_OUTPUT"
+          echo "focused=$focused" >> "$GITHUB_OUTPUT"
+          echo "tests=$tests" >> "$GITHUB_OUTPUT"
+          echo "build=$build" >> "$GITHUB_OUTPUT"
+          exit 0
+
+      - name: Record permanent receipt
+        env:
+          OK: ${{ steps.gate.outputs.ok }}
+          TYPECHECK: ${{ steps.gate.outputs.typecheck }}
+          LINT: ${{ steps.gate.outputs.lint }}
+          FOCUSED: ${{ steps.gate.outputs.focused }}
+          TESTS: ${{ steps.gate.outputs.tests }}
+          BUILD: ${{ steps.gate.outputs.build }}
+        run: |
+          python - <<'PY'
+          import os
+          from pathlib import Path
+          ok=os.environ['OK']=='true'
+          log=Path('/tmp/imported-bank-audio-gate.txt').read_text(encoding='utf-8',errors='replace')
+          lines=[
+            '# Imported-bank virtual audio repair validation','',
+            f"Source commit: `{os.environ['GITHUB_SHA']}`",'',
+            f"Overall software gate: **{'SUCCESS' if ok else 'FAILED'}**",'',
+            '| Stage | Exit code |','| --- | ---: |',
+            f"| typecheck | {os.environ['TYPECHECK']} |",
+            f"| lint | {os.environ['LINT']} |",
+            f"| focused regressions | {os.environ['FOCUSED']} |",
+            f"| full test suite | {os.environ['TESTS']} |",
+            f"| production build | {os.environ['BUILD']} |",'',
+            'Focused regressions cover canonical Yamaha packed bytes, packed-bank properties, real tracked ROM-bank MSFA PCM, schema-v4 stored-voice repair and local audition activation.','',
+            '```text',log[-16000:],'```',''
+          ]
+          Path('docs/validation/imported-bank-virtual-audio-repair.md').write_text('\n'.join(lines),encoding='utf-8')
+          Path('.github/workflows/validate-imported-bank-audio-fix.yml').unlink(missing_ok=True)
+          PY
+
+      - name: Commit receipt
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git commit -m 'test(ci): record imported-bank audio repair gate' || true
+          git pull --rebase origin main
+          git push origin HEAD:main
