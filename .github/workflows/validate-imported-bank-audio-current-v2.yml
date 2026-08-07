@@ -1,0 +1,76 @@
+name: Rerun complete imported-bank audio gate
+
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/validate-imported-bank-audio-current-v2.yml']
+
+permissions:
+  contents: write
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - run: npm install --no-audit --no-fund
+      - name: Validate full tree
+        id: gate
+        shell: bash
+        run: |
+          set +e
+          : > /tmp/gate.txt
+          ok=true
+          for stage in typecheck lint focused test build; do
+            echo "=== $stage ===" | tee -a /tmp/gate.txt
+            case "$stage" in
+              typecheck) npm run typecheck 2>&1 | tee -a /tmp/gate.txt ;;
+              lint) npm run lint 2>&1 | tee -a /tmp/gate.txt ;;
+              focused) npm test -- src/sysex/dx7.test.ts src/sysex/dx7.property.test.ts src/sysex/normalizeLegacyVoice.test.ts src/sysex/syntheticFixtureCorpus.test.ts src/library/storageMigration.test.ts src/audio/localVoiceAudition.test.ts src/audio/libraryVoiceRender.integration.test.ts src/audio/referenceAudio.test.ts src/components/LocalSequenceAudioPanel.test.tsx 2>&1 | tee -a /tmp/gate.txt ;;
+              test) npm run test 2>&1 | tee -a /tmp/gate.txt ;;
+              build) npm run build 2>&1 | tee -a /tmp/gate.txt ;;
+            esac
+            code=${PIPESTATUS[0]}
+            echo "$stage=$code" >> "$GITHUB_OUTPUT"
+            if [ "$code" != 0 ]; then ok=false; fi
+          done
+          echo "ok=$ok" >> "$GITHUB_OUTPUT"
+          exit 0
+      - name: Record result
+        env:
+          OK: ${{ steps.gate.outputs.ok }}
+          TYPECHECK: ${{ steps.gate.outputs.typecheck }}
+          LINT: ${{ steps.gate.outputs.lint }}
+          FOCUSED: ${{ steps.gate.outputs.focused }}
+          TEST: ${{ steps.gate.outputs.test }}
+          BUILD: ${{ steps.gate.outputs.build }}
+        run: |
+          python - <<'PY'
+          import os
+          from pathlib import Path
+          log=Path('/tmp/gate.txt').read_text(encoding='utf-8',errors='replace')
+          ok=os.environ['OK']=='true'
+          lines=[
+            '# Imported-bank virtual audio repair validation','',
+            f"Source commit: `{os.environ['GITHUB_SHA']}`",'',
+            f"Overall software gate: **{'SUCCESS' if ok else 'FAILED'}**",'',
+            '| Stage | Exit code |','| --- | ---: |',
+            f"| typecheck | {os.environ['TYPECHECK']} |",f"| lint | {os.environ['LINT']} |",f"| focused regressions | {os.environ['FOCUSED']} |",f"| full test suite | {os.environ['TEST']} |",f"| production build | {os.environ['BUILD']} |",'',
+            'Focused validation includes the real tracked ROM1A bank through packaged MSFA WASM, canonical Yamaha packed bytes, schema-v4 local-library repair, local audition activation, reference-audio API and external local-clock UI.','',
+            '```text',log[-18000:],'```',''
+          ]
+          Path('docs/validation/imported-bank-virtual-audio-repair.md').write_text('\n'.join(lines),encoding='utf-8')
+          Path('.github/workflows/validate-imported-bank-audio-current-v2.yml').unlink(missing_ok=True)
+          PY
+      - name: Commit result
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git commit -m 'test(ci): record repaired imported-bank audio gate' || true
+          git pull --rebase origin main
+          git push origin HEAD:main
