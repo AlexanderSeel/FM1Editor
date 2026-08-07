@@ -1,0 +1,82 @@
+name: Rerun imported-bank PCM browser acceptance
+
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/validate-imported-bank-audio-browser-v2.yml']
+
+permissions:
+  contents: write
+
+jobs:
+  browser:
+    runs-on: windows-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - run: npm install --no-audit --no-fund
+      - run: npm run build
+      - name: Run Chrome and Edge PCM flows
+        id: run
+        shell: pwsh
+        run: |
+          $chrome = @("$env:PROGRAMFILES\Google\Chrome\Application\chrome.exe", "$env:ProgramFiles(x86)\Google\Chrome\Application\chrome.exe") | Where-Object { Test-Path $_ } | Select-Object -First 1
+          $edge = @("$env:PROGRAMFILES\Microsoft\Edge\Application\msedge.exe", "$env:ProgramFiles(x86)\Microsoft\Edge\Application\msedge.exe") | Where-Object { Test-Path $_ } | Select-Object -First 1
+          if (-not $chrome) { throw 'Chrome not found' }
+          if (-not $edge) { throw 'Edge not found' }
+          node scripts/test-imported-bank-virtual-audio-browser.mjs --browser-executable $chrome --browser-name chrome --result imported-bank-audio-chrome.json
+          $chromeExit=$LASTEXITCODE
+          node scripts/test-imported-bank-virtual-audio-browser.mjs --browser-executable $edge --browser-name edge --result imported-bank-audio-edge.json
+          $edgeExit=$LASTEXITCODE
+          "chrome_exit=$chromeExit" >> $env:GITHUB_OUTPUT
+          "edge_exit=$edgeExit" >> $env:GITHUB_OUTPUT
+          if ($chromeExit -eq 0 -and $edgeExit -eq 0) { "ok=true" >> $env:GITHUB_OUTPUT } else { "ok=false" >> $env:GITHUB_OUTPUT }
+          exit 0
+      - name: Write permanent browser evidence
+        shell: pwsh
+        env:
+          OK: ${{ steps.run.outputs.ok }}
+        run: |
+          @'
+          import json, os
+          from pathlib import Path
+          ok=os.environ.get('OK')=='true'
+          def read(path):
+              p=Path(path)
+              return json.loads(p.read_text(encoding='utf-8')) if p.exists() else {'ok':False,'error':'result missing'}
+          chrome=read('imported-bank-audio-chrome.json')
+          edge=read('imported-bank-audio-edge.json')
+          def row(name,d):
+              if not d.get('ok'): return f"| {name} | FAILED | — | — | — | — | {d.get('error','unknown')} |"
+              return f"| {name} | {d.get('browserProduct')} | {d.get('loadedVoicePeak'):.8f} | {d.get('catalogAuditionPeak'):.8f} | {d.get('savedAuditionPeak'):.8f} | {d.get('midiRequests')} | PASS |"
+          lines=[
+            '# Imported-bank virtual audio browser acceptance','',
+            f"Source commit: `{os.environ['GITHUB_SHA']}`",'',
+            f"Overall browser gate: **{'SUCCESS' if ok else 'FAILED'}**",'',
+            '| Browser | Product | Loaded bank PCM peak | Catalog audition peak | Saved-library audition peak | Web MIDI requests | Result |',
+            '| --- | --- | ---: | ---: | ---: | ---: | --- |',row('Chrome',chrome),row('Edge',edge),'',
+            'Exact flow: Library → ROM1A → Load bank → Voice → Enable local audio → play BRASS 1; then Catalog Audition first voice; then saved-library Audition local. All three paths require measurable AudioWorklet PCM and zero Web MIDI requests.','',
+            'Software/browser validation only; no physical FM-1 or DX7 equivalence claim.',''
+          ]
+          Path('docs/validation/imported-bank-virtual-audio-browser.md').write_text('\n'.join(lines),encoding='utf-8')
+          if ok:
+              plan=Path('PLAN.md')
+              text=plan.read_text(encoding='utf-8')
+              old='- [ ] Add direct local audition actions for catalog/library voices without first loading them into the editor; keep audition, load and hardware transmission as distinct user actions. Implementation is in progress; do not mark complete until the final mounted Chrome/Edge audition receipt succeeds.'
+              new='- [x] Add direct local audition actions for catalog/library voices without first loading them into the editor; keep audition, load and hardware transmission as distinct user actions. Imported-bank and audition PCM are validated in Chrome/Edge. Evidence: [`docs/validation/imported-bank-virtual-audio-browser.md`](./docs/validation/imported-bank-virtual-audio-browser.md).'
+              if old in text: text=text.replace(old,new,1)
+              plan.write_text(text,encoding='utf-8')
+          Path('.github/workflows/validate-imported-bank-audio-browser-v2.yml').unlink(missing_ok=True)
+          '@ | python
+      - name: Commit evidence
+        shell: bash
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git commit -m 'test(browser): record repaired imported-bank PCM acceptance' || true
+          git pull --rebase origin main
+          git push origin HEAD:main
