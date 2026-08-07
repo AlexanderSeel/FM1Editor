@@ -4,6 +4,7 @@ const PROCESSOR_NAME = 'fm1-msfa-one-voice'
 const PATCH_LENGTH = 156
 const ENGINE_BLOCK_FRAMES = 64
 const MAX_POLYPHONY = 16
+const PERFORMANCE_ABI = 1
 
 class Fm1MsfaProcessor extends AudioWorkletProcessor {
   constructor(options) {
@@ -17,6 +18,8 @@ class Fm1MsfaProcessor extends AudioWorkletProcessor {
     this.reportedFatal = false
     this.pendingCommands = []
     this.ageCounter = 0
+    this.sustainEnabled = false
+    this.performanceAbi = 0
     this.port.onmessage = (event) => this.receiveCommand(event.data)
 
     const wasmBinary = options?.processorOptions?.wasmBinary
@@ -35,6 +38,7 @@ class Fm1MsfaProcessor extends AudioWorkletProcessor {
       })
       if (this.disposed) return
       this.assertModule(module)
+      this.performanceAbi = this.detectPerformanceAbi(module)
 
       const voices = []
       for (let index = 0; index < MAX_POLYPHONY; index += 1) {
@@ -61,6 +65,7 @@ class Fm1MsfaProcessor extends AudioWorkletProcessor {
         sampleRate,
         blockFrames: ENGINE_BLOCK_FRAMES,
         polyphony: MAX_POLYPHONY,
+        performanceAbi: this.performanceAbi,
       })
 
       const queued = this.pendingCommands
@@ -97,6 +102,22 @@ class Fm1MsfaProcessor extends AudioWorkletProcessor {
     }
   }
 
+  detectPerformanceAbi(module) {
+    const required = [
+      '_fm1_msfa_session_configure_performance',
+      '_fm1_msfa_session_set_pitch_bend',
+      '_fm1_msfa_session_set_modulation',
+      '_fm1_msfa_session_set_aftertouch',
+    ]
+    return required.every((name) => typeof module[name] === 'function') ? PERFORMANCE_ABI : 0
+  }
+
+  requirePerformanceAbi() {
+    if (this.performanceAbi !== PERFORMANCE_ABI) {
+      throw new Error('Packaged MSFA module does not expose the local performance-control ABI')
+    }
+  }
+
   receiveCommand(command) {
     if (!command || command.type !== 'command') return
     if (this.disposed) {
@@ -115,6 +136,21 @@ class Fm1MsfaProcessor extends AudioWorkletProcessor {
       switch (command.command) {
         case 'loadVoice':
           this.loadVoice(command)
+          break
+        case 'configurePerformance':
+          this.configurePerformance(command)
+          break
+        case 'pitchBend':
+          this.setPitchBend(command)
+          break
+        case 'modulation':
+          this.setModulation(command)
+          break
+        case 'aftertouch':
+          this.setAftertouch(command)
+          break
+        case 'sustain':
+          this.setSustain(command)
           break
         case 'noteOn':
           this.noteOn(command)
@@ -166,6 +202,7 @@ class Fm1MsfaProcessor extends AudioWorkletProcessor {
         voice.age = 0
       }
       this.ageCounter = 0
+      this.sustainEnabled = false
       this.voiceLoaded = true
     } finally {
       this.module._free(pointer)
@@ -173,8 +210,98 @@ class Fm1MsfaProcessor extends AudioWorkletProcessor {
     this.respond(command.requestId, true)
   }
 
+  configurePerformance(command) {
+    this.requirePerformanceAbi()
+    const values = [
+      ['pitchBendRange', command.pitchBendRange, 0, 12],
+      ['pitchBendStep', command.pitchBendStep, 0, 12],
+      ['modulationRange', command.modulationRange, 0, 99],
+      ['modulationAssignment', command.modulationAssignment, 0, 7],
+      ['aftertouchRange', command.aftertouchRange, 0, 99],
+      ['aftertouchAssignment', command.aftertouchAssignment, 0, 7],
+    ]
+    for (const [label, value, minimum, maximum] of values) {
+      if (!Number.isInteger(value) || value < minimum || value > maximum) {
+        throw new RangeError(`${label} must be ${minimum} through ${maximum}`)
+      }
+    }
+    for (const voice of this.voices) {
+      this.checkStatus(
+        this.module._fm1_msfa_session_configure_performance(
+          voice.session,
+          command.pitchBendRange,
+          command.pitchBendStep,
+          command.modulationRange,
+          command.modulationAssignment,
+          command.aftertouchRange,
+          command.aftertouchAssignment,
+        ),
+        `configurePerformance[${voice.index}]`,
+      )
+    }
+    this.respond(command.requestId, true)
+  }
+
+  setPitchBend(command) {
+    this.requirePerformanceAbi()
+    if (!Number.isInteger(command.value) || command.value < 0 || command.value > 0x3fff) {
+      throw new RangeError('pitchBend value must be 0 through 16383')
+    }
+    for (const voice of this.voices) {
+      this.checkStatus(
+        this.module._fm1_msfa_session_set_pitch_bend(voice.session, command.value),
+        `pitchBend[${voice.index}]`,
+      )
+    }
+    this.respond(command.requestId, true)
+  }
+
+  setModulation(command) {
+    this.requirePerformanceAbi()
+    if (!Number.isInteger(command.value) || command.value < 0 || command.value > 127) {
+      throw new RangeError('modulation value must be 0 through 127')
+    }
+    for (const voice of this.voices) {
+      this.checkStatus(
+        this.module._fm1_msfa_session_set_modulation(voice.session, command.value),
+        `modulation[${voice.index}]`,
+      )
+    }
+    this.respond(command.requestId, true)
+  }
+
+  setAftertouch(command) {
+    this.requirePerformanceAbi()
+    if (!Number.isInteger(command.value) || command.value < 0 || command.value > 127) {
+      throw new RangeError('aftertouch value must be 0 through 127')
+    }
+    for (const voice of this.voices) {
+      this.checkStatus(
+        this.module._fm1_msfa_session_set_aftertouch(voice.session, command.value),
+        `aftertouch[${voice.index}]`,
+      )
+    }
+    this.respond(command.requestId, true)
+  }
+
+  setSustain(command) {
+    if (typeof command.enabled !== 'boolean') throw new TypeError('sustain enabled must be boolean')
+    const wasEnabled = this.sustainEnabled
+    this.sustainEnabled = command.enabled
+    if (wasEnabled && !this.sustainEnabled) {
+      for (const voice of this.voices) {
+        if (voice.state !== 'sustained') continue
+        this.checkStatus(this.module._fm1_msfa_session_note_off(voice.session), `sustainRelease[${voice.index}]`)
+        voice.state = 'release'
+      }
+    }
+    this.respond(command.requestId, true)
+  }
+
   selectVoice(note) {
-    const repeated = this.voices.find((voice) => voice.state === 'held' && voice.note === note)
+    const repeated = this.voices.find((voice) => (
+      (voice.state === 'held' || voice.state === 'sustained') && voice.note === note
+    ))
     if (repeated) return repeated
     const idle = this.voices.find((voice) => voice.state === 'idle')
     if (idle) return idle
@@ -182,6 +309,10 @@ class Fm1MsfaProcessor extends AudioWorkletProcessor {
       .filter((voice) => voice.state === 'release')
       .sort((left, right) => left.age - right.age || left.index - right.index)[0]
     if (releasing) return releasing
+    const sustained = this.voices
+      .filter((voice) => voice.state === 'sustained')
+      .sort((left, right) => left.age - right.age || left.index - right.index)[0]
+    if (sustained) return sustained
     return [...this.voices].sort((left, right) => left.age - right.age || left.index - right.index)[0]
   }
 
@@ -213,13 +344,18 @@ class Fm1MsfaProcessor extends AudioWorkletProcessor {
       voice.state === 'held' && (note === null || voice.note === note)
     ))
     for (const voice of matches) {
-      this.checkStatus(this.module._fm1_msfa_session_note_off(voice.session), `noteOff[${voice.index}]`)
-      voice.state = 'release'
+      if (this.sustainEnabled) {
+        voice.state = 'sustained'
+      } else {
+        this.checkStatus(this.module._fm1_msfa_session_note_off(voice.session), `noteOff[${voice.index}]`)
+        voice.state = 'release'
+      }
     }
     this.respond(command.requestId, true)
   }
 
   allNotesOff() {
+    this.sustainEnabled = false
     if (!this.voiceLoaded) return
     for (const voice of this.voices) {
       this.checkStatus(this.module._fm1_msfa_session_all_notes_off(voice.session), `allNotesOff[${voice.index}]`)
@@ -260,6 +396,8 @@ class Fm1MsfaProcessor extends AudioWorkletProcessor {
     this.disposed = true
     this.ready = false
     this.voiceLoaded = false
+    this.sustainEnabled = false
+    this.performanceAbi = 0
     this.pendingCommands = []
     if (this.module) {
       for (const voice of this.voices) {
