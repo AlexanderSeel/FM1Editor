@@ -1,5 +1,5 @@
 {
   "ok": false,
   "browserName": "chrome",
-  "error": "Timed out waiting for browser condition: document.body.textContent.includes('Loaded') && document.body.textContent.includes('ROM1A')"
+  "error": "Timed out waiting for browser condition: [...document.querySelectorAll('article')].some((article) => article.textContent?.includes('ROM1A') && [...article.querySelectorAll('button')].some((button) => button.textContent?.trim() === 'Load bank' && !button.disabled))"
 }
