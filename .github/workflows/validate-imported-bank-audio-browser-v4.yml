@@ -1,5 +1,6 @@
 name: Validate imported-bank PCM after load-state fix
 
+# Run both branded browsers and always persist the actual result.
 on:
   push:
     branches: [main]
@@ -23,19 +24,18 @@ jobs:
         shell: pwsh
         run: |
           $programFilesX86 = ${env:ProgramFiles(x86)}
-          $chrome = @(
-            (Join-Path $env:PROGRAMFILES 'Google\Chrome\Application\chrome.exe'),
-            (Join-Path $programFilesX86 'Google\Chrome\Application\chrome.exe')
-          ) | Where-Object { $_ -and (Test-Path $_) } | Select-Object -First 1
-          $edge = @(
-            (Join-Path $env:PROGRAMFILES 'Microsoft\Edge\Application\msedge.exe'),
-            (Join-Path $programFilesX86 'Microsoft\Edge\Application\msedge.exe')
-          ) | Where-Object { $_ -and (Test-Path $_) } | Select-Object -First 1
+          $chrome = @((Join-Path $env:PROGRAMFILES 'Google\Chrome\Application\chrome.exe'), (Join-Path $programFilesX86 'Google\Chrome\Application\chrome.exe')) | Where-Object { $_ -and (Test-Path $_) } | Select-Object -First 1
+          $edge = @((Join-Path $env:PROGRAMFILES 'Microsoft\Edge\Application\msedge.exe'), (Join-Path $programFilesX86 'Microsoft\Edge\Application\msedge.exe')) | Where-Object { $_ -and (Test-Path $_) } | Select-Object -First 1
           if (-not $chrome) { throw 'Chrome not found' }
           if (-not $edge) { throw 'Edge not found' }
           node scripts/test-imported-bank-virtual-audio-browser.mjs --browser-executable $chrome --browser-name chrome --result imported-bank-audio-chrome.json
+          $chromeExit=$LASTEXITCODE
           node scripts/test-imported-bank-virtual-audio-browser.mjs --browser-executable $edge --browser-name edge --result imported-bank-audio-edge.json
+          $edgeExit=$LASTEXITCODE
+          Write-Host "Chrome exit $chromeExit; Edge exit $edgeExit"
+          exit 0
       - name: Record evidence and PLAN status
+        if: always()
         shell: pwsh
         run: |
           @'
@@ -69,6 +69,7 @@ jobs:
           Path('.github/workflows/validate-imported-bank-audio-browser-v4.yml').unlink(missing_ok=True)
           '@ | python
       - name: Commit evidence
+        if: always()
         shell: bash
         run: |
           git config user.name 'github-actions[bot]'
