@@ -36,6 +36,19 @@ function hash(samples) {
   return createHash('sha256').update(bytesOfFloat32(samples)).digest('hex')
 }
 
+function signalStats(samples) {
+  let peak = 0
+  let sumSquares = 0
+  for (const sample of samples) {
+    peak = Math.max(peak, Math.abs(sample))
+    sumSquares += sample * sample
+  }
+  return {
+    peak,
+    rms: Math.sqrt(sumSquares / samples.length),
+  }
+}
+
 const patch = readPatch(patchPath)
 const imported = await import(pathToFileURL(resolve(modulePath)).href)
 const createModule = imported.default
@@ -72,7 +85,9 @@ function renderOnce() {
       throw new Error(`Invalid normalized PCM sample: ${sample}`)
     }
   }
-  return { samples, elapsedMs, sha256: hash(samples) }
+  const stats = signalStats(samples)
+  if (stats.peak < 1e-6 || stats.rms < 1e-7) throw new Error(`WASM renderer produced effectively silent PCM: peak=${stats.peak} rms=${stats.rms}`)
+  return { samples, elapsedMs, sha256: hash(samples), ...stats }
 }
 
 try {
@@ -88,6 +103,8 @@ try {
     noteOnFrames,
     releaseFrames,
     sha256: first.sha256,
+    peak: Number(first.peak.toFixed(9)),
+    rms: Number(first.rms.toFixed(9)),
     firstRenderMs: Number(first.elapsedMs.toFixed(3)),
     secondRenderMs: Number(second.elapsedMs.toFixed(3)),
     realtimeRatio: Number((first.elapsedMs / 1000 / (outputFrames / 48000)).toFixed(6)),
