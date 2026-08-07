@@ -1,0 +1,32 @@
+{
+  "schemaVersion": 1,
+  "engineId": "fm1-editor-msfa-compatible",
+  "engineVersion": "msfa-2e182b3-fm1-v1",
+  "label": "DX7-compatible dry renderer",
+  "licenseSpdx": "Apache-2.0",
+  "upstream": {
+    "repository": "https://github.com/asb2m10/dexed",
+    "commit": "2e182b3db85c09083ab13c8b9b00565ce7d9ff85"
+  },
+  "emscripten": {
+    "version": "4.0.7",
+    "imageDigest": "emscripten/emsdk@sha256:8acec700a48dbff5250afc1e3ee545b7c002b689043ee82c277de6481a237fd7"
+  },
+  "wasm": {
+    "path": "fm1-msfa.wasm",
+    "sha256": "2f39f43d45fc4be075e0bc7ca4be76fb662372da1690c5db067cb565bb65b331"
+  },
+  "glue": {
+    "path": "fm1-msfa.mjs",
+    "sha256": "1133b1edd73d5af0655e9520239221f32c0499c93b70fb5a7faa037900927497"
+  },
+  "acceptedReferencePcmSha256": "313be5ffcb29436e92ecce45b5e1002c72dd810c6999379844b82ce87a18cfc2",
+  "sourceManifestSha256": "f130a6e781330a07a14940deb895e5a0427e46f5e324b1de84079baa106c0828",
+  "apacheLicenseSha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30",
+  "limitations": [
+    "standard-12-TET only",
+    "sample-and-hold LFO seed policy not yet integrated",
+    "dry engine only",
+    "not physical-device validation"
+  ]
+}

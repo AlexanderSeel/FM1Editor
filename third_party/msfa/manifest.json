@@ -1,0 +1,250 @@
+{
+  "schemaVersion": 1,
+  "package": "fm1-editor-msfa-compatible-core",
+  "distributionLabel": "DX7-compatible dry synthesis core",
+  "upstream": {
+    "repository": "https://github.com/asb2m10/dexed",
+    "commit": "2e182b3db85c09083ab13c8b9b00565ce7d9ff85"
+  },
+  "licenseSpdx": "Apache-2.0",
+  "excludedComponents": [
+    "Dexed GPL application/plugin wrapper",
+    "JUCE",
+    "MTS-ESP",
+    "surge-synthesizer/tuning-library",
+    "Dexed effects/UI/assets/cartridges"
+  ],
+  "standardTuningOnly": true,
+  "files": [
+    {
+      "path": "src/synth.h",
+      "upstreamPath": "Source/msfa/synth.h",
+      "upstreamBlobSha1": "c64005b4704906c2e421342e7fb65abe4401aa2f",
+      "upstreamSha256": "8aa3de2de1a7d303b34cae2b0cf0837e9e476ab640ff02dbf4d59ccf23e96b50",
+      "derivedSha256": "8aa3de2de1a7d303b34cae2b0cf0837e9e476ab640ff02dbf4d59ccf23e96b50",
+      "licenseSpdx": "Apache-2.0",
+      "modified": false,
+      "modification": null
+    },
+    {
+      "path": "src/aligned_buf.h",
+      "upstreamPath": "Source/msfa/aligned_buf.h",
+      "upstreamBlobSha1": "8f7c5b68273b42f22ef9d61c5e4403025649e1cc",
+      "upstreamSha256": "6140a81aacae153220ce80aa58f5d7efcd5b3a2c8389fef14ed35deb14d62caf",
+      "derivedSha256": "6140a81aacae153220ce80aa58f5d7efcd5b3a2c8389fef14ed35deb14d62caf",
+      "licenseSpdx": "Apache-2.0",
+      "modified": false,
+      "modification": null
+    },
+    {
+      "path": "src/env.h",
+      "upstreamPath": "Source/msfa/env.h",
+      "upstreamBlobSha1": "9d426e48238ff4dd2150e09f5b83db76fc4cdb28",
+      "upstreamSha256": "6936df4cc9dc41c2ee4a3fd19a2669976e3e245e7a7795392bd561cd778abe36",
+      "derivedSha256": "6936df4cc9dc41c2ee4a3fd19a2669976e3e245e7a7795392bd561cd778abe36",
+      "licenseSpdx": "Apache-2.0",
+      "modified": false,
+      "modification": null
+    },
+    {
+      "path": "src/env.cc",
+      "upstreamPath": "Source/msfa/env.cc",
+      "upstreamBlobSha1": "d48696f636e27520852c842f6e1ec87be681cf0d",
+      "upstreamSha256": "a6d10f3cab97bf081ec551883aa39abdf40c1c5339f1009ba837f3e1027dcbbf",
+      "derivedSha256": "c68a75184add2090e1e81113a783d5c48e31b5f674dcbf557f60c2807d68253f",
+      "licenseSpdx": "Apache-2.0",
+      "modified": true,
+      "modification": "Removed the Dexed application-header dependency and use standard-library min support for the isolated engine build."
+    },
+    {
+      "path": "src/exp2.h",
+      "upstreamPath": "Source/msfa/exp2.h",
+      "upstreamBlobSha1": "016ca331de869ca816731ea065d5d22b92eae332",
+      "upstreamSha256": "23aa480e221e5d1f928a5ccab654a9c01a80eb0b610fd66d9364af09d18cdda8",
+      "derivedSha256": "23aa480e221e5d1f928a5ccab654a9c01a80eb0b610fd66d9364af09d18cdda8",
+      "licenseSpdx": "Apache-2.0",
+      "modified": false,
+      "modification": null
+    },
+    {
+      "path": "src/exp2.cc",
+      "upstreamPath": "Source/msfa/exp2.cc",
+      "upstreamBlobSha1": "84feb20540e045107893929964a8ed834b2c10f5",
+      "upstreamSha256": "dff6dfd8af6f0a470360c2d2fa98aa7ae5208c27b83c9229ffccbc84815930da",
+      "derivedSha256": "dff6dfd8af6f0a470360c2d2fa98aa7ae5208c27b83c9229ffccbc84815930da",
+      "licenseSpdx": "Apache-2.0",
+      "modified": false,
+      "modification": null
+    },
+    {
+      "path": "src/freqlut.h",
+      "upstreamPath": "Source/msfa/freqlut.h",
+      "upstreamBlobSha1": "5cba4af3e238c4d67e4e5e543a338fb5a8335b33",
+      "upstreamSha256": "d319ee2d35e8e8e2c860b6fc2a2d1382bf5782d1d147264914325ca41f89f00b",
+      "derivedSha256": "d319ee2d35e8e8e2c860b6fc2a2d1382bf5782d1d147264914325ca41f89f00b",
+      "licenseSpdx": "Apache-2.0",
+      "modified": false,
+      "modification": null
+    },
+    {
+      "path": "src/freqlut.cc",
+      "upstreamPath": "Source/msfa/freqlut.cc",
+      "upstreamBlobSha1": "931ef672871c6023902ee95a28f7f33dc290496b",
+      "upstreamSha256": "f46ddab0d296f1a82d2ef6826f7e431cad97967418a37fdb486052a4187dcaf8",
+      "derivedSha256": "f46ddab0d296f1a82d2ef6826f7e431cad97967418a37fdb486052a4187dcaf8",
+      "licenseSpdx": "Apache-2.0",
+      "modified": false,
+      "modification": null
+    },
+    {
+      "path": "src/sin.h",
+      "upstreamPath": "Source/msfa/sin.h",
+      "upstreamBlobSha1": "6605e9964e11b56196de20bc16ddcf77c73a3650",
+      "upstreamSha256": "b57300e93e18a4262d7f0dec84642a7da228704bec1fddd481d2ab85ed805311",
+      "derivedSha256": "b57300e93e18a4262d7f0dec84642a7da228704bec1fddd481d2ab85ed805311",
+      "licenseSpdx": "Apache-2.0",
+      "modified": false,
+      "modification": null
+    },
+    {
+      "path": "src/sin.cc",
+      "upstreamPath": "Source/msfa/sin.cc",
+      "upstreamBlobSha1": "3257dcdf9561d1728edff410178d7c403717c9d5",
+      "upstreamSha256": "ebb96ae8460af68da025659a329f72d2c64301673ad83ef54a7ac20590ad7e65",
+      "derivedSha256": "ebb96ae8460af68da025659a329f72d2c64301673ad83ef54a7ac20590ad7e65",
+      "licenseSpdx": "Apache-2.0",
+      "modified": false,
+      "modification": null
+    },
+    {
+      "path": "src/fm_op_kernel.h",
+      "upstreamPath": "Source/msfa/fm_op_kernel.h",
+      "upstreamBlobSha1": "c9739e5e924367fcd93e28e7e986c05c1115f93b",
+      "upstreamSha256": "77c12aae2c5c3c2cacd541e693e4fdbc28f474c8446aa5d6711cf4908ebb07e6",
+      "derivedSha256": "77c12aae2c5c3c2cacd541e693e4fdbc28f474c8446aa5d6711cf4908ebb07e6",
+      "licenseSpdx": "Apache-2.0",
+      "modified": false,
+      "modification": null
+    },
+    {
+      "path": "src/fm_op_kernel.cc",
+      "upstreamPath": "Source/msfa/fm_op_kernel.cc",
+      "upstreamBlobSha1": "a14ff6a46e1c335e4634fed3fb7ae92e8f6c2844",
+      "upstreamSha256": "ad00f2c63bf8163624a367478969f5a250568a9c6c0dcee348a4eb0b7848b21b",
+      "derivedSha256": "ad00f2c63bf8163624a367478969f5a250568a9c6c0dcee348a4eb0b7848b21b",
+      "licenseSpdx": "Apache-2.0",
+      "modified": false,
+      "modification": null
+    },
+    {
+      "path": "src/controllers.h",
+      "upstreamPath": "Source/msfa/controllers.h",
+      "upstreamBlobSha1": "9049d7f19acbe8851cf80c834430448142d155e3",
+      "upstreamSha256": "ac3e0e21e335a19165f72a9fd05cba7802e3a966466bb42c55b6251a6a42e9d7",
+      "derivedSha256": "1f5db56bf585c7b0aee659e2520b2abbbe031a148a62eac544b4fd8ef7dacbc4",
+      "licenseSpdx": "Apache-2.0",
+      "modified": true,
+      "modification": "Removed the Dexed application-header dependency and use standard-library max support for the isolated engine build."
+    },
+    {
+      "path": "src/fm_core.h",
+      "upstreamPath": "Source/msfa/fm_core.h",
+      "upstreamBlobSha1": "6daef838b9dd4eb2a040853f5d1170b8ea667a58",
+      "upstreamSha256": "528389d74d0e136a4f8167047e5ed11730f2663938eb71454c8922780ee4a280",
+      "derivedSha256": "9e5da9a0b9cdac96a497c544b7e203f2c901f043a92249684864fb6cac848c00",
+      "licenseSpdx": "Apache-2.0",
+      "modified": true,
+      "modification": "Removed the unnecessary controller-header dependency from the isolated FM core boundary."
+    },
+    {
+      "path": "src/fm_core.cc",
+      "upstreamPath": "Source/msfa/fm_core.cc",
+      "upstreamBlobSha1": "8c148bfd8ccf56ec02510bb5f6ef81298b890310",
+      "upstreamSha256": "3febb3b2d73299636982c373126db4263ba67f5001241d5cbb1bd50357829e87",
+      "derivedSha256": "3febb3b2d73299636982c373126db4263ba67f5001241d5cbb1bd50357829e87",
+      "licenseSpdx": "Apache-2.0",
+      "modified": false,
+      "modification": null
+    },
+    {
+      "path": "src/pitchenv.h",
+      "upstreamPath": "Source/msfa/pitchenv.h",
+      "upstreamBlobSha1": "e10634105ac666221373e814e232527aaa7fc067",
+      "upstreamSha256": "be825b9272fe59bd7faf47b4878fdbd756f502ca3b4364d2934a7f5dafa0abe4",
+      "derivedSha256": "be825b9272fe59bd7faf47b4878fdbd756f502ca3b4364d2934a7f5dafa0abe4",
+      "licenseSpdx": "Apache-2.0",
+      "modified": false,
+      "modification": null
+    },
+    {
+      "path": "src/pitchenv.cc",
+      "upstreamPath": "Source/msfa/pitchenv.cc",
+      "upstreamBlobSha1": "a85b8d4b3682e2f05ecdb65d4488477232102f89",
+      "upstreamSha256": "99529ae7ed0ccc153af765da100f205ed84cbf56113f2db1ec24e29175e85078",
+      "derivedSha256": "99529ae7ed0ccc153af765da100f205ed84cbf56113f2db1ec24e29175e85078",
+      "licenseSpdx": "Apache-2.0",
+      "modified": false,
+      "modification": null
+    },
+    {
+      "path": "src/lfo.h",
+      "upstreamPath": "Source/msfa/lfo.h",
+      "upstreamBlobSha1": "288857dd1b0d82cc510679872055daa3a075e8a3",
+      "upstreamSha256": "d21527675911a53f6d05b0c1ece3eeb08b906ae4513c36a8e2de02d628934ec4",
+      "derivedSha256": "d21527675911a53f6d05b0c1ece3eeb08b906ae4513c36a8e2de02d628934ec4",
+      "licenseSpdx": "Apache-2.0",
+      "modified": false,
+      "modification": null
+    },
+    {
+      "path": "src/lfo.cc",
+      "upstreamPath": "Source/msfa/lfo.cc",
+      "upstreamBlobSha1": "1a4311c645b66fc7653378e2021ce455a1efc5bd",
+      "upstreamSha256": "63a4da54b7a9d6161f355ac3a4a293e21c63e1295ca43c8fe1fcd586fe529729",
+      "derivedSha256": "63a4da54b7a9d6161f355ac3a4a293e21c63e1295ca43c8fe1fcd586fe529729",
+      "licenseSpdx": "Apache-2.0",
+      "modified": false,
+      "modification": null
+    },
+    {
+      "path": "src/porta.h",
+      "upstreamPath": "Source/msfa/porta.h",
+      "upstreamBlobSha1": "99614ff407dc948a26ec52cfc76b1802a85a0239",
+      "upstreamSha256": "7970dcd3d2ec929b0827782a7fb05b6e36b981162a7891026c307210715e95d2",
+      "derivedSha256": "7970dcd3d2ec929b0827782a7fb05b6e36b981162a7891026c307210715e95d2",
+      "licenseSpdx": "Apache-2.0",
+      "modified": false,
+      "modification": null
+    },
+    {
+      "path": "src/porta.cpp",
+      "upstreamPath": "Source/msfa/porta.cpp",
+      "upstreamBlobSha1": "c585a51044290f58c38b4090602e06345ae31826",
+      "upstreamSha256": "f03fb9e9bf6c111f5bca404a515d2919b333f03a1fce71051419b040b5e4fdca",
+      "derivedSha256": "f03fb9e9bf6c111f5bca404a515d2919b333f03a1fce71051419b040b5e4fdca",
+      "licenseSpdx": "Apache-2.0",
+      "modified": false,
+      "modification": null
+    },
+    {
+      "path": "src/dx7note.h",
+      "upstreamPath": "Source/msfa/dx7note.h",
+      "upstreamBlobSha1": "3ba583d5159423dc856afe6a90cfcd038694c4d7",
+      "upstreamSha256": "b5bffd672b91d99d78a82ec418f1b4fbff8123a8e65996477c6d738a5953a325",
+      "derivedSha256": "799e3ec77fe78d10fc178f45c6215f670ceda6c6b5f649895940426c5eded1b0",
+      "licenseSpdx": "Apache-2.0",
+      "modified": true,
+      "modification": "Removed MTS-ESP/tuning-library state and constructor dependencies for the standard-12-TET browser engine."
+    },
+    {
+      "path": "src/dx7note.cc",
+      "upstreamPath": "Source/msfa/dx7note.cc",
+      "upstreamBlobSha1": "272328312e5a83a8d50e284bbecb75b06b35089e",
+      "upstreamSha256": "88185eaeb14c9cca3b944d929bafe232abb6a2c19536c69ba05cc4634b4d54e9",
+      "derivedSha256": "9da180ac3c15d97d02fbc124144d3059f28fcbac522b70cb2a677a777c97250d",
+      "licenseSpdx": "Apache-2.0",
+      "modified": true,
+      "modification": "Removed MTS-ESP/tuning-library branches, retained standard 12-TET behavior, and reset feedback history for deterministic renderer lifecycle."
+    }
+  ]
+}
