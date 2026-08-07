@@ -125,9 +125,6 @@ class CdpConnection {
 }
 
 async function evaluate(cdp, expression, awaitPromise = false) {
-  // Do not ask CDP to recursively serialize arbitrary browser objects. Primitive
-  // values are available directly even with returnByValue=false; structured
-  // diagnostics are explicitly JSON-stringified at the call site below.
   const result = await cdp.send('Runtime.evaluate', { expression, awaitPromise, returnByValue: false })
   if (result.exceptionDetails) throw new Error(result.exceptionDetails.exception?.description ?? result.exceptionDetails.text ?? 'Browser evaluation failed')
   return result.result?.value
@@ -268,7 +265,7 @@ try {
     if (!button) return false; button.click(); return true;
   })()`)
   if (!loaded) throw new Error('Could not load ROM1A bank')
-  await waitForExpression(cdp, `document.body.textContent.includes('Loaded') && document.body.textContent.includes('ROM1A')`, 30_000)
+  await waitForExpression(cdp, `[...document.querySelectorAll('article')].some((article) => article.textContent?.includes('ROM1A') && [...article.querySelectorAll('button')].some((button) => button.textContent?.trim() === 'Load bank' && !button.disabled))`, 30_000)
 
   await clickButton(cdp, 'Voice')
   await waitForExpression(cdp, `document.querySelector('.fm1-lcd-title')?.textContent?.includes('BRASS 1')`, 10_000)
