@@ -154,6 +154,8 @@ export function estimateReferencePitchHz(samples: Float32Array, sampleRate: numb
   rms = Math.sqrt(rms / analysisLength)
   if (rms < 1e-4) return null
 
+  const correlations = new Float64Array(maximumLag + 1)
+  correlations.fill(Number.NEGATIVE_INFINITY)
   let bestLag = 0
   let bestCorrelation = -Infinity
   for (let lag = minimumLag; lag <= maximumLag; lag += 1) {
@@ -172,12 +174,27 @@ export function estimateReferencePitchHz(samples: Float32Array, sampleRate: numb
     const denominator = Math.sqrt(energyA * energyB)
     if (denominator <= 0) continue
     const normalizedCorrelation = correlation / denominator
+    correlations[lag] = normalizedCorrelation
     if (normalizedCorrelation > bestCorrelation) {
       bestCorrelation = normalizedCorrelation
       bestLag = lag
     }
   }
   if (bestLag === 0 || bestCorrelation < 0.6) return null
+
+  // Periodic signals can have virtually identical maxima at 2x, 3x, 4x...
+  // the fundamental period. PCM quantization can make a later multiple win by
+  // a tiny amount, which would report a subharmonic. Prefer the earliest local
+  // peak that is both strongly periodic and close to the global maximum.
+  const strongPeakThreshold = Math.max(0.6, bestCorrelation * 0.98)
+  for (let lag = minimumLag + 1; lag < maximumLag; lag += 1) {
+    const value = correlations[lag] ?? Number.NEGATIVE_INFINITY
+    if (value < strongPeakThreshold) continue
+    if (value >= (correlations[lag - 1] ?? Number.NEGATIVE_INFINITY)
+      && value >= (correlations[lag + 1] ?? Number.NEGATIVE_INFINITY)) {
+      return sampleRate / lag
+    }
+  }
   return sampleRate / bestLag
 }
 

@@ -46,6 +46,25 @@ describe('reference audio preparation', () => {
     expect(detected ?? 0).toBeLessThan(444)
   })
 
+  it('keeps the fundamental for PCM16-like A4 with trimmed silence instead of selecting a subharmonic', () => {
+    const sampleRate = 48_000
+    const silenceFrames = Math.round(sampleRate * 0.1)
+    const tone = sine(440, sampleRate, 0.8, 0.25)
+    const channel = new Float32Array(silenceFrames + tone.length + silenceFrames)
+    for (let index = 0; index < tone.length; index += 1) {
+      const quantized = Math.round((tone[index] ?? 0) * 32767) / 32767
+      channel[silenceFrames + index] = quantized
+    }
+    const prepared = prepareReferenceAudio({
+      sampleRate,
+      durationSeconds: channel.length / sampleRate,
+      channels: [channel],
+    }, { trimSilence: true, normalize: true })
+    expect(prepared.detectedPitchHz).not.toBeNull()
+    expect(prepared.detectedPitchHz ?? 0).toBeGreaterThan(436)
+    expect(prepared.detectedPitchHz ?? 0).toBeLessThan(444)
+  })
+
   it('trims, normalizes and allows an explicit manual pitch override', () => {
     const sampleRate = 8_000
     const silence = new Float32Array(800)
