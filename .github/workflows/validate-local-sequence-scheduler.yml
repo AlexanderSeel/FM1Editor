@@ -1,0 +1,56 @@
+name: Validate semantic local sequence scheduler
+
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/validate-local-sequence-scheduler.yml']
+
+permissions:
+  contents: write
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Full software validation
+        run: |
+          npm install --no-audit --no-fund
+          npm run audit:virtual-dx7
+          npm run typecheck
+          npm run lint
+          npm run test
+          npm run build
+      - name: Record receipt and self-clean
+        run: |
+          python - <<'PY'
+          import os
+          from pathlib import Path
+          Path('docs/validation/local-sequence-scheduler.md').write_text('\n'.join([
+            '# Semantic local sequence scheduler validation','',
+            f"Validated source/workflow commit: `{os.environ['GITHUB_SHA']}`",'',
+            'Overall software gate: **SUCCESS**','',
+            '## Boundary','',
+            '- Local sequence scheduling emits semantic note-on/note-off events directly from `Fm1Sequence`; it does not encode or decode MIDI bytes.',
+            '- Chords, velocity, gate, ties, swing, direction and arrangement expansion reuse the sequence domain/playback-step model.',
+            '- Local playback currently rejects external MIDI clock explicitly; no browser timing substitute is silently used.',
+            '- Stop, completion and error paths issue local all-notes-off.',
+            '- Source audit, typecheck, lint, full Vitest suite and production build passed.',
+            '- This receipt validates scheduling software only; no UI route or browser AudioWorklet sequencer playback is claimed yet.'
+          ])+'\n',encoding='utf-8')
+          Path('.github/workflows/validate-local-sequence-scheduler.yml').unlink(missing_ok=True)
+          PY
+      - name: Commit receipt and cleanup
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git diff --cached --quiet || git commit -m 'test(ci): record local sequence scheduler validation'
+          git pull --rebase origin main
+          git push origin HEAD:main
