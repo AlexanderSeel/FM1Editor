@@ -10,6 +10,7 @@
     "catalog:audit": "node scripts/catalog-release-audit.mjs",
     "catalog:audit:check": "node scripts/catalog-release-audit.mjs --check",
     "audit:virtual-dx7": "node scripts/verify-msfa-source-audit.mjs",
+    "audit:virtual-dx7:upstream": "node scripts/audit-msfa-upstream.mjs",
     "prebuild": "node scripts/sync-patch-catalog.mjs --best-effort",
     "build": "tsc -b && vite build && node scripts/inject-service-worker-assets.mjs",
     "typecheck": "tsc -b --pretty false",
