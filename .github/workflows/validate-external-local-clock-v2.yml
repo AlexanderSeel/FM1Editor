@@ -1,0 +1,88 @@
+name: Validate external local clock PCM route
+
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/validate-external-local-clock-v2.yml']
+
+permissions:
+  contents: write
+
+jobs:
+  browser:
+    runs-on: windows-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - run: npm install --no-audit --no-fund
+      - run: npm run build
+      - name: Run Chrome and Edge external-clock PCM acceptance
+        id: run
+        shell: pwsh
+        run: |
+          $programFilesX86 = ${env:ProgramFiles(x86)}
+          $chrome = @(
+            (Join-Path $env:PROGRAMFILES 'Google\Chrome\Application\chrome.exe'),
+            (Join-Path $programFilesX86 'Google\Chrome\Application\chrome.exe')
+          ) | Where-Object { $_ -and (Test-Path $_) } | Select-Object -First 1
+          $edge = @(
+            (Join-Path $env:PROGRAMFILES 'Microsoft\Edge\Application\msedge.exe'),
+            (Join-Path $programFilesX86 'Microsoft\Edge\Application\msedge.exe')
+          ) | Where-Object { $_ -and (Test-Path $_) } | Select-Object -First 1
+          if (-not $chrome) { throw 'Chrome not found' }
+          if (-not $edge) { throw 'Edge not found' }
+          node scripts/test-external-local-sequence-ui-browser.mjs --browser-executable $chrome --browser-name chrome --result external-local-chrome.json
+          $chromeExit=$LASTEXITCODE
+          node scripts/test-external-local-sequence-ui-browser.mjs --browser-executable $edge --browser-name edge --result external-local-edge.json
+          $edgeExit=$LASTEXITCODE
+          "chrome_exit=$chromeExit" >> $env:GITHUB_OUTPUT
+          "edge_exit=$edgeExit" >> $env:GITHUB_OUTPUT
+          if ($chromeExit -eq 0 -and $edgeExit -eq 0) { "ok=true" >> $env:GITHUB_OUTPUT } else { "ok=false" >> $env:GITHUB_OUTPUT }
+          exit 0
+      - name: Record evidence and PLAN
+        shell: pwsh
+        env:
+          OK: ${{ steps.run.outputs.ok }}
+        run: |
+          @'
+          import json, os
+          from pathlib import Path
+          ok=os.environ.get('OK')=='true'
+          def read(path):
+              p=Path(path)
+              return json.loads(p.read_text(encoding='utf-8')) if p.exists() else {'ok':False,'error':'result missing'}
+          chrome=read('external-local-chrome.json')
+          edge=read('external-local-edge.json')
+          def row(name,d):
+              if not d.get('ok'): return f"| {name} | FAILED | — | — | — | {d.get('error','unknown')} |"
+              return f"| {name} | {d.get('browserProduct')} | {d.get('activePeak'):.8f} | {d.get('silencePeak'):.8f} | {d.get('midiOutputSendCount')} | PASS |"
+          Path('docs/validation/external-local-sequence-browser.md').write_text('\n'.join([
+              '# External MIDI clock to local audio browser acceptance','',
+              f"Source commit: `{os.environ['GITHUB_SHA']}`",'',
+              f"Overall browser gate: **{'SUCCESS' if ok else 'FAILED'}**",'',
+              '| Browser | Product | Active PCM peak | Stop silence peak | MIDI output sends | Result |',
+              '| --- | --- | ---: | ---: | ---: | --- |',row('Chrome',chrome),row('Edge',edge),'',
+              'The route uses a virtual MIDI input providing Start/Clock/Stop, an armed local semantic scheduler and the browser-local MSFA engine. Acceptance requires audible PCM while clock runs, return to silence on MIDI Stop and zero MIDI output sends.','',
+              'Software/browser validation only; no physical MIDI-device timing claim.',''
+          ]),encoding='utf-8')
+          if ok:
+              plan=Path('PLAN.md')
+              text=plan.read_text(encoding='utf-8')
+              old='- [ ] Add an external-MIDI-clock-to-local-audio route only through a separately validated input-clock scheduler; current local sequence playback intentionally supports internal BPM clock only.'
+              new='- [x] Add an external-MIDI-clock-to-local-audio route through the separately validated input-clock scheduler, with explicit arming, MIDI Start/Continue/Clock/Stop handling and zero local-route MIDI output sends. Evidence: [`docs/validation/external-local-sequence-browser.md`](./docs/validation/external-local-sequence-browser.md).'
+              if old in text: text=text.replace(old,new,1)
+              plan.write_text(text,encoding='utf-8')
+          Path('.github/workflows/validate-external-local-clock-v2.yml').unlink(missing_ok=True)
+          '@ | python
+      - name: Commit evidence
+        shell: bash
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git commit -m 'test(browser): record external local clock acceptance' || true
+          git pull --rebase origin main
+          git push origin HEAD:main
