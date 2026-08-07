@@ -130,8 +130,13 @@ try {
   })()`)
 
   await waitForExpression(cdp, `document.body.textContent.includes('reference-a4.wav') && document.body.textContent.includes('prepared mono region')`, 20_000)
-  await waitForExpression(cdp, `document.body.textContent.includes('440.') || document.body.textContent.includes('441.') || document.body.textContent.includes('439.')`, 10_000)
+  await waitForExpression(cdp, `([...document.querySelectorAll('span')].map((node) => node.textContent ?? '').some((text) => text.includes('detected pitch') && text.includes('Hz') && !text.includes('unresolved')))`, 10_000)
   const detectedPitchText = await evaluate(cdp, `(() => [...document.querySelectorAll('span')].map((node) => node.textContent ?? '').find((text) => text.includes('detected pitch')) ?? '')()`)
+  const detectedPitchMatch = String(detectedPitchText).match(/([0-9]+(?:\.[0-9]+)?)\s*Hz/i)
+  const detectedPitchHz = detectedPitchMatch ? Number(detectedPitchMatch[1]) : Number.NaN
+  if (!Number.isFinite(detectedPitchHz) || detectedPitchHz < 400 || detectedPitchHz > 480) {
+    throw new Error(`Expected a resolved A4-range detected pitch, got ${detectedPitchText}`)
+  }
 
   const manualSet = await evaluate(cdp, `(() => {
     const input = [...document.querySelectorAll('input[type=number]')].find((candidate) => candidate.placeholder?.includes('Detected') || candidate.parentElement?.textContent?.includes('Manual pitch override'));
