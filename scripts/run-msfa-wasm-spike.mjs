@@ -17,8 +17,9 @@ const patchPath = argument('--patch')
 const outputPath = argument('--output')
 const noteOnFrames = Number.parseInt(argument('--note-on-frames') ?? '48000', 10)
 const releaseFrames = Number.parseInt(argument('--release-frames') ?? '24000', 10)
+const randomSeed = Number.parseInt(argument('--random-seed') ?? '42', 10) >>> 0
 if (!modulePath || !patchPath || !outputPath) {
-  console.error('Usage: node scripts/run-msfa-wasm-spike.mjs --module <fm1-msfa.mjs> --patch <reference.hex> --output <render.f32> [--note-on-frames N --release-frames N]')
+  console.error('Usage: node scripts/run-msfa-wasm-spike.mjs --module <fm1-msfa.mjs> --patch <reference.hex> --output <render.f32> [--note-on-frames N --release-frames N --random-seed N]')
   process.exit(2)
 }
 
@@ -74,6 +75,7 @@ function renderOnce() {
     48000,
     noteOnFrames,
     releaseFrames,
+    randomSeed,
     outputPtr,
     outputFrames,
   )
@@ -102,6 +104,7 @@ try {
     sampleRate: 48000,
     noteOnFrames,
     releaseFrames,
+    randomSeed,
     sha256: first.sha256,
     peak: Number(first.peak.toFixed(9)),
     rms: Number(first.rms.toFixed(9)),
