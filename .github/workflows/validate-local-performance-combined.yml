@@ -1,0 +1,109 @@
+name: Validate local performance combined acceptance
+
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/validate-local-performance-combined.yml']
+
+permissions:
+  contents: write
+
+concurrency:
+  group: validate-local-performance-combined
+  cancel-in-progress: false
+
+jobs:
+  software:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm install --no-audit --no-fund
+      - run: npm run audit:virtual-dx7
+      - run: npm run typecheck
+      - run: npm run lint
+      - run: npm run test
+      - run: npm run build
+
+  browser:
+    runs-on: windows-latest
+    timeout-minutes: 8
+    strategy:
+      fail-fast: false
+      matrix:
+        browser: [chrome, edge]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Run accepted package runtime smoke
+        continue-on-error: true
+        shell: pwsh
+        env:
+          BROWSER_NAME: ${{ matrix.browser }}
+        run: |
+          if ($env:BROWSER_NAME -eq 'chrome') {
+            $candidates=@("$env:ProgramFiles\Google\Chrome\Application\chrome.exe","${env:ProgramFiles(x86)}\Google\Chrome\Application\chrome.exe")
+          } else {
+            $candidates=@("$env:ProgramFiles\Microsoft\Edge\Application\msedge.exe","${env:ProgramFiles(x86)}\Microsoft\Edge\Application\msedge.exe")
+          }
+          $browser=$candidates | Where-Object { Test-Path $_ } | Select-Object -First 1
+          $result="combined-$env:BROWSER_NAME.json"
+          if(-not $browser){ @{ok=$false;browserName=$env:BROWSER_NAME;error='browser executable missing'} | ConvertTo-Json | Set-Content -Encoding utf8 $result; exit 1 }
+          node scripts/test-msfa-audioworklet-browser.mjs --browser-executable "$browser" --browser-name "$env:BROWSER_NAME" --soak-seconds 10 --result "$result"
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: combined-${{ matrix.browser }}
+          path: combined-${{ matrix.browser }}.json
+          if-no-files-found: error
+
+  record:
+    if: always()
+    needs: [software,browser]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/download-artifact@v4
+        continue-on-error: true
+        with:
+          pattern: combined-*
+          path: browser-results
+          merge-multiple: true
+      - name: Record combined receipt and self-clean
+        env:
+          SOFTWARE_RESULT: ${{ needs.software.result }}
+        run: |
+          python - <<'PY'
+          import json,os
+          from pathlib import Path
+          software_ok=os.environ.get('SOFTWARE_RESULT')=='success'
+          results=[]
+          for name in ['chrome','edge']:
+              p=Path('browser-results')/f'combined-{name}.json'
+              if p.exists():
+                  try:d=json.loads(p.read_text(encoding='utf-8-sig'))
+                  except Exception as exc:d={'ok':False,'browserName':name,'error':f'invalid result: {exc}'}
+              else:d={'ok':False,'browserName':name,'error':'result missing'}
+              results.append(d)
+          browser_ok=all(bool(d.get('ok')) and d.get('workletPolyphony')==16 and d.get('performanceControlAbi')==1 and d.get('performanceCommandsVerified') is True and d.get('processorErrors')==0 and d.get('suspendedObservations')==0 for d in results)
+          ok=software_ok and browser_ok
+          lines=['# Local virtual preview combined acceptance','',f"Validated source/workflow commit: `{os.environ['GITHUB_SHA']}`",'',f"Overall combined gate: **{'SUCCESS' if ok else 'FAILED'}**",'',f"- Same-commit software suite: **{'SUCCESS' if software_ok else 'FAILED'}**",f"- Chrome/Edge runtime: **{'SUCCESS' if browser_ok else 'FAILED'}**",'', '## Accepted scope','', '- Explicit local audio activation; no automatic Web MIDI/SysEx.', '- Audited dry renderer with 16-voice worklet polyphony, deterministic stealing and per-note release.', '- Local DX7-style pitch bend, modulation, sustain and aftertouch performance controls remain outside `Dx7Voice` and hardware transmission.', '- Fixed offline PCM identity and physical-device equivalence remain separate evidence domains.', '- Browser CI is headless/muted; audible physical-device dropout/headroom is not claimed.']
+          for d in results: lines += ['',f"## {d.get('browserName','browser')}",'```json',json.dumps(d,indent=2),'```']
+          Path('docs/validation/local-virtual-preview-combined-acceptance.md').write_text('\n'.join(lines)+'\n',encoding='utf-8')
+          Path('.github/workflows/validate-local-performance-combined.yml').unlink(missing_ok=True)
+          PY
+      - name: Commit receipt and cleanup
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git diff --cached --quiet || git commit -m 'test(ci): record combined local performance acceptance'
+          git pull --rebase origin main
+          git push origin HEAD:main
