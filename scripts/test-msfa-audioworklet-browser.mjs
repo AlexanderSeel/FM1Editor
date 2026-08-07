@@ -46,6 +46,7 @@ const smokeHtml = String.raw`<!doctype html>
 <script type="module">
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
 const EXPECTED_POLYPHONY = 16
+const PERFORMANCE_ABI = 1
 
 function hexPatch(text) {
   const hex = text.replace(/\s/g, '')
@@ -87,6 +88,10 @@ window.runMsfaWorkletSmoke = async ({ soakMs }) => {
   if (manifest.engineVersion !== 'msfa-2e182b3-fm1-v3-stateful') throw new Error('Unexpected browser engine version')
   if (manifest.statefulSessionAbi !== 1 || manifest.renderBlockFrames !== 64) throw new Error('Unexpected stateful engine ABI')
   if (manifest.workletPolyphony !== EXPECTED_POLYPHONY) throw new Error('Unexpected manifest worklet polyphony')
+  const performanceControlAbi = manifest.performanceControlAbi ?? 0
+  if (performanceControlAbi !== 0 && performanceControlAbi !== PERFORMANCE_ABI) {
+    throw new Error('Unexpected manifest performance-control ABI')
+  }
 
   const context = new AudioContext({ latencyHint: 'interactive', sampleRate: 48000 })
   try {
@@ -148,6 +153,9 @@ window.runMsfaWorkletSmoke = async ({ soakMs }) => {
     clearTimeout(readyTimeout)
     if (readyData?.blockFrames !== 64) throw new Error('AudioWorklet reported unexpected block size')
     if (readyData?.polyphony !== EXPECTED_POLYPHONY) throw new Error('AudioWorklet reported unexpected polyphony')
+    if (performanceControlAbi === PERFORMANCE_ABI && readyData?.performanceAbi !== PERFORMANCE_ABI) {
+      throw new Error('AudioWorklet did not expose the manifest performance-control ABI')
+    }
 
     const command = (name, payload = {}) => {
       const id = ++requestId
@@ -165,6 +173,41 @@ window.runMsfaWorkletSmoke = async ({ soakMs }) => {
     }
 
     await command('loadVoice', { patch, randomSeed: 42 })
+    const analyserBuffer = new Float32Array(analyser.fftSize)
+    let performanceCommandsVerified = performanceControlAbi === 0
+    let sustainedPeak = null
+
+    if (performanceControlAbi === PERFORMANCE_ABI) {
+      await command('configurePerformance', {
+        pitchBendRange: 12,
+        pitchBendStep: 0,
+        modulationRange: 99,
+        modulationAssignment: 1,
+        aftertouchRange: 99,
+        aftertouchAssignment: 2,
+      })
+      await command('pitchBend', { value: 8192 })
+      await command('modulation', { value: 64 })
+      await command('aftertouch', { value: 48 })
+      await command('sustain', { enabled: true })
+      await command('noteOn', { midiNote: 72, velocity: 110 })
+      await sleep(250)
+      await command('noteOff', { midiNote: 72 })
+      await sleep(180)
+      sustainedPeak = peakOf(analyser, analyserBuffer)
+      if (sustainedPeak <= 1e-6) throw new Error('Sustain did not keep the released note active')
+      await command('sustain', { enabled: false })
+      await command('pitchBend', { value: 16383 })
+      await command('modulation', { value: 127 })
+      await command('aftertouch', { value: 127 })
+      await sleep(100)
+      await command('allNotesOff')
+      await command('pitchBend', { value: 8192 })
+      await command('modulation', { value: 0 })
+      await command('aftertouch', { value: 0 })
+      performanceCommandsVerified = true
+      await sleep(100)
+    }
 
     const allocationVoiceIndices = []
     for (let index = 0; index < EXPECTED_POLYPHONY; index += 1) {
@@ -181,7 +224,6 @@ window.runMsfaWorkletSmoke = async ({ soakMs }) => {
     await command('allNotesOff')
     await sleep(150)
 
-    const analyserBuffer = new Float32Array(analyser.fftSize)
     let maxPeak = 0
     let activeSamples = 0
     let partialChordSamples = 0
@@ -244,6 +286,7 @@ window.runMsfaWorkletSmoke = async ({ soakMs }) => {
       ok: processorErrors === 0
         && errors.length === 0
         && rejections.length === 0
+        && performanceCommandsVerified
         && maxPeak > 1e-6
         && activeSamples > 0
         && partialChordSamples > 0
@@ -251,6 +294,9 @@ window.runMsfaWorkletSmoke = async ({ soakMs }) => {
         && durationMs >= soakMs,
       engineVersion: manifest.engineVersion,
       workletPolyphony: manifest.workletPolyphony,
+      performanceControlAbi,
+      performanceCommandsVerified,
+      sustainedPeak,
       allocationVoiceIndices,
       stolenVoiceIndex,
       wasmSha256,
@@ -269,7 +315,7 @@ window.runMsfaWorkletSmoke = async ({ soakMs }) => {
       suspendedObservations,
       audioContextState: context.state,
     }
-    if (!result.ok) throw Object.assign(new Error('AudioWorklet polyphony smoke assertions failed'), { smokeResult: result })
+    if (!result.ok) throw Object.assign(new Error('AudioWorklet polyphony/performance smoke assertions failed'), { smokeResult: result })
     return result
   } finally {
     await context.close()
