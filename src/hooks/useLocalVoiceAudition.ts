@@ -13,6 +13,7 @@ export interface LocalVoiceAuditionState {
 }
 
 export interface LocalVoiceAuditionActions extends LocalVoiceAuditionState {
+  prepareAudition(): Promise<void>
   auditionVoice(voice: Dx7Voice): Promise<void>
   stopAudition(): Promise<void>
 }
@@ -65,6 +66,21 @@ export function useLocalVoiceAudition(): LocalVoiceAuditionActions {
     if (manager) void manager.dispose()
   }, [])
 
+  const prepareAudition = useCallback(async () => {
+    try {
+      await managerRef.current?.prepare()
+    } catch (cause) {
+      const error = cause instanceof Error ? cause : new Error('Local voice audition could not enable browser audio')
+      setState({
+        activeVoice: null,
+        phase: 'error',
+        status: null,
+        error: error.message,
+      })
+      throw error
+    }
+  }, [])
+
   const auditionVoice = useCallback(async (voice: Dx7Voice) => {
     setState({
       activeVoice: voice,
@@ -92,6 +108,7 @@ export function useLocalVoiceAudition(): LocalVoiceAuditionActions {
 
   return {
     ...state,
+    prepareAudition,
     auditionVoice,
     stopAudition,
   }
