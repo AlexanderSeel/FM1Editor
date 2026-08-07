@@ -1,4 +1,6 @@
-# FM1 Editor — unresolved work
+# FM1 Editor — roadmap and progress
+
+Completed work stays visible as `[x]`. Open or blocked work remains `[ ]`. A task is only marked complete when the repository contains implementation plus appropriate validation evidence; physical-device claims remain unchecked until physical evidence exists.
 
 ## 1. FM-1 protocol verification
 
@@ -67,9 +69,16 @@ The staged technical decision and reviewed libraries/research are documented in 
 
 ## 10. Virtual DX7 / FM-1-inspired synthesizer
 
-The virtual engine must be described as DX7-compatible and FM-1-inspired until physical comparison proves stronger equivalence. The audited deterministic offline renderer, explicit local preview, 16-voice stateful AudioWorklet, deterministic allocation/stealing, local DX7-style pitch bend/modulation/sustain/aftertouch and internal-clock browser sequencer routing are software/browser-validated. Evidence is recorded in [`docs/research/virtual-dx7-renderer-feasibility-spike.md`](./docs/research/virtual-dx7-renderer-feasibility-spike.md), [`docs/validation/msfa-audioworklet-ten-minute-soak.md`](./docs/validation/msfa-audioworklet-ten-minute-soak.md), [`docs/validation/msfa-audioworklet-polyphony.md`](./docs/validation/msfa-audioworklet-polyphony.md), [`docs/validation/msfa-performance-package.md`](./docs/validation/msfa-performance-package.md), [`docs/validation/local-virtual-preview-combined-acceptance.md`](./docs/validation/local-virtual-preview-combined-acceptance.md) and [`docs/validation/local-sequence-ui-browser.md`](./docs/validation/local-sequence-ui-browser.md).
+The virtual engine must be described as DX7-compatible and FM-1-inspired until physical comparison proves stronger equivalence.
 
-- [ ] Add direct local audition actions for catalog/library voices without first loading them into the editor; keep audition, load and hardware transmission as distinct user actions.
+- [x] Audit and package the approved Apache-2.0 MSFA-compatible synthesis closure with pinned provenance, license material and reproducible browser artifacts; keep the complete GPL Dexed application, JUCE, tuning/MTS, effects, artwork and patch banks outside the dependency boundary. Evidence: [`docs/validation/msfa-distribution-package.md`](./docs/validation/msfa-distribution-package.md).
+- [x] Integrate the deterministic semantic offline renderer around `Dx7Voice`, including the private Yamaha-compatible bridge, seeded rendering, normalized mono PCM validation and fixed regression identity. Evidence: [`docs/validation/msfa-offline-engine-integration.md`](./docs/validation/msfa-offline-engine-integration.md).
+- [x] Add the stateful local AudioWorklet renderer with explicit browser-audio activation, persistent note/envelope/LFO state, safe silence/error behavior and long-running branded Chrome/Edge validation. Evidence: [`docs/validation/msfa-audioworklet-ten-minute-soak.md`](./docs/validation/msfa-audioworklet-ten-minute-soak.md).
+- [x] Expose an explicit local DX7-compatible preview in the voice workspace without requiring MIDI hardware or automatically sending Web MIDI/SysEx; synchronize only the semantic voice and preserve note-off/all-notes-off cleanup. Evidence: [`docs/validation/local-virtual-preview-combined-acceptance.md`](./docs/validation/local-virtual-preview-combined-acceptance.md).
+- [x] Add 16-voice polyphony with deterministic allocation/stealing and per-note release while preserving the validated dry core. Evidence: [`docs/validation/msfa-audioworklet-polyphony.md`](./docs/validation/msfa-audioworklet-polyphony.md).
+- [x] Add browser-local DX7-style pitch bend, modulation, sustain and aftertouch with documented-range performance configuration kept outside `Dx7Voice` and hardware transmission. Evidence: [`docs/validation/msfa-performance-package.md`](./docs/validation/msfa-performance-package.md) and [`docs/validation/local-virtual-preview-combined-acceptance.md`](./docs/validation/local-virtual-preview-combined-acceptance.md).
+- [x] Route the browser sequencer to the local engine for internal BPM clock as an explicit alternative to hardware MIDI; keep the local semantic scheduler and hardware MIDI transport separate. Evidence: [`docs/validation/local-sequence-scheduler.md`](./docs/validation/local-sequence-scheduler.md) and [`docs/validation/local-sequence-ui-browser.md`](./docs/validation/local-sequence-ui-browser.md).
+- [ ] Add direct local audition actions for catalog/library voices without first loading them into the editor; keep audition, load and hardware transmission as distinct user actions. Implementation is in progress; do not mark complete until the final mounted Chrome/Edge audition receipt succeeds.
 - [ ] Add an external-MIDI-clock-to-local-audio route only through a separately validated input-clock scheduler; current local sequence playback intentionally supports internal BPM clock only.
 - [ ] Evaluate Synth_Dexed and `dx7-synth-js` as implementation references or fallbacks only after branch-level license, compatibility, missing-parameter and maintenance audits.
 - [ ] Implement a separate FM-1-inspired effect graph for documented CC `0–23`: filter, reverb, delay, distortion, chorus and phaser, using native Web Audio and/or audited MIT-licensed Tone.js components.
