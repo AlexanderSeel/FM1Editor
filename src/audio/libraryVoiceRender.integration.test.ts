@@ -17,13 +17,18 @@ async function loadPackagedModule(): Promise<MsfaEmscriptenModule> {
 
 function firstRealBankVoices() {
   const archive = unzipSync(new Uint8Array(readFileSync(new URL('../../public/catalog/sysexFinal.zip', import.meta.url))))
+  const failures: string[] = []
   for (const [filename, bytes] of Object.entries(archive).sort(([left], [right]) => left.localeCompare(right))) {
     if (!filename.toLowerCase().endsWith('.syx')) continue
-    const parsed = importSysexFile(bytes)
-    const bank = parsed.find((item): item is Extract<(typeof parsed)[number], { kind: 'voice-bank' }> => item.kind === 'voice-bank')
-    if (bank) return { filename, voices: bank.voices }
+    try {
+      const parsed = importSysexFile(bytes)
+      const bank = parsed.find((item): item is Extract<(typeof parsed)[number], { kind: 'voice-bank' }> => item.kind === 'voice-bank')
+      if (bank) return { filename, voices: bank.voices }
+    } catch (cause) {
+      failures.push(`${filename}: ${cause instanceof Error ? cause.message : String(cause)}`)
+    }
   }
-  throw new Error('Bundled catalog contains no importable 32-voice DX7 bank')
+  throw new Error(`Bundled catalog contains no importable 32-voice DX7 bank. First failures: ${failures.slice(0, 5).join(' | ')}`)
 }
 
 function peak(samples: Float32Array): number {
