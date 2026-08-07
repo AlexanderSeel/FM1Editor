@@ -13,6 +13,7 @@ import type { Dx7ControllerAssignment } from '../domain/dx7FunctionState'
 import { createInitializedFxState, type Fm1FxState } from '../domain/fx'
 import type { Dx7Voice } from '../domain/voice'
 import { VirtualPiano, type VirtualPianoNoteTarget } from './VirtualPiano'
+import { VirtualFm1PreviewExtras } from './VirtualFm1PreviewExtras'
 
 interface VirtualDx7PreviewPanelProps {
   voice: Dx7Voice
@@ -335,6 +336,15 @@ export function VirtualDx7PreviewPanel({
           )
         })}
       </details>
+
+      <div className="mt-4">
+        <VirtualFm1PreviewExtras
+          fxEnabled={!fxBypassed}
+          fxState={fxState}
+          masterGainDb={masterGainDb}
+          voice={voice}
+        />
+      </div>
 
       {(status || error) && <p aria-live="polite" className={`mt-3 text-xs ${error ? 'text-rose-300' : 'text-emerald-300'}`}>{error ?? status}</p>}
 
