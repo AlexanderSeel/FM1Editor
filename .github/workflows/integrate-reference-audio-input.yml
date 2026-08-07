@@ -1,5 +1,6 @@
 name: Integrate local reference audio input
 
+# Rerun against the current main tree so the existing panel is actually mounted and validated.
 on:
   push:
     branches: [main]
@@ -38,7 +39,7 @@ jobs:
               text = text.replace(anchor, insertion)
           path.write_text(text)
           PY
-      - run: npm install
+      - run: npm install --no-audit --no-fund
       - run: npm run typecheck
       - run: npm run lint
       - run: npm run test
@@ -58,10 +59,10 @@ jobs:
           - Prepared analysis regions are limited to 30 seconds and at least 50 ms.
           - Region selection, −60 dBFS leading/trailing silence trim, channel averaging to mono, optional −1 dBFS peak normalization, deterministic autocorrelation pitch estimate and 20–5000 Hz manual override are implemented.
           - Source bytes receive a local SHA-256 identity.
-          - Decoding starts only after explicit file selection. The feature contains no fetch/upload/server path; privacy state is `local-browser-only`.
+          - Decoding starts only after explicit file selection. The feature contains no upload/server path; privacy is explicitly local-browser-only.
           - Typecheck, lint, full tests and production build passed with the panel mounted in the application.
 
-          Browser codec behavior still depends on the browser's `decodeAudioData` support for the specific WAV/MP3 encoding; real-file browser fixtures and waveform/region UX can be expanded later without weakening the local-only boundary.
+          Browser codec behavior still depends on the browser's decodeAudioData support for the specific WAV/MP3 encoding. Physical FM-1 audio is not involved in this validation.
           EOF
           python - <<'PY'
           from pathlib import Path
@@ -71,12 +72,12 @@ jobs:
           new = '- [x] Add local WAV/MP3 reference input with region selection, duration/size limits, silence trimming, mono analysis, pitch detection with manual override, normalization controls, content hashes and explicit local-browser-only privacy status. Evidence: [`docs/validation/reference-audio-input-software.md`](./docs/validation/reference-audio-input-software.md).'
           if old not in text:
               raise SystemExit('Expected open reference-audio roadmap item not found')
-          plan.write_text(text.replace(old,new))
+          plan.write_text(text.replace(old, new, 1))
           PY
           rm .github/workflows/integrate-reference-audio-input.yml
           git config user.name github-actions[bot]
           git config user.email 41898282+github-actions[bot]@users.noreply.github.com
-          git add -A src/App.tsx src/audio/referenceAudio.ts src/audio/referenceAudio.test.ts src/components/ReferenceAudioInputPanel.tsx PLAN.md docs/validation/reference-audio-input-software.md .github/workflows/integrate-reference-audio-input.yml
+          git add -A
           git commit -m "feat(audio): integrate local reference audio input"
           git pull --rebase origin main
-          git push origin main
+          git push origin HEAD:main
