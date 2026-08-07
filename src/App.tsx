@@ -10,7 +10,7 @@ import { MidiMonitor } from './components/MidiMonitor'
 import { PatchCatalogBrowser } from './components/PatchCatalogBrowser'
 import { PatchLibrary } from './components/PatchLibrary'
 import { PersistentWorkspace } from './components/PersistentWorkspace'
-import { ReferenceAudioInputPanel } from './components/ReferenceAudioInputPanel'
+import { AudioToFmReferencePanel } from './components/AudioToFmReferencePanel'
 import { SequenceEditor } from './components/SequenceEditor'
 import { SysexToolbar } from './components/SysexToolbar'
 import { TargetVoiceAuditionPanel } from './components/TargetVoiceAuditionPanel'
@@ -58,7 +58,7 @@ function browserStorage(): Storage | null {
 export default function App() {
   const [target, setTargetState] = useState<DeviceTarget>(() => readStoredDeviceTarget(browserStorage()))
   const midi = useMidi(target)
-  const { auditionVoice } = useLocalVoiceAudition()
+  const { auditionVoice, stopAudition } = useLocalVoiceAudition()
   const patchLibrary = usePatchLibrary()
   const [workspace, setWorkspace] = useState<Workspace>('voice')
   const voiceHistory = useUndoableState(() => createInitializedVoice())
@@ -332,7 +332,11 @@ export default function App() {
                     storageKey="voice-audio-to-fm-reference"
                     title="Audio → FM reference"
                   >
-                    <ReferenceAudioInputPanel />
+                    <AudioToFmReferencePanel
+                      onAuditionVoice={auditionVoice}
+                      onLoadVoice={loadCatalogVoice}
+                      onStopAudition={stopAudition}
+                    />
                   </CollapsibleSection>
                   <CollapsibleSection
                     description={fm1Mode ? 'Whole-bank transfer, preset recall and virtual piano' : 'Yamaha single-voice and 32-voice bulk transfer, plus virtual piano'}

@@ -163,7 +163,7 @@ export function NearestPresetPanel({
     void onStopAudition().catch(() => undefined)
     try {
       const buffer = context.createBuffer(1, reference.samples.length, reference.sampleRate)
-      buffer.copyToChannel(reference.samples, 0)
+      buffer.copyToChannel(Float32Array.from(reference.samples), 0)
       const source = context.createBufferSource()
       source.buffer = buffer
       source.connect(context.destination)
