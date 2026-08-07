@@ -23,6 +23,12 @@ export interface LocalVoiceAuditionCallbacks {
 export interface LocalVoiceAuditionManager {
   readonly active: boolean
   readonly activeVoice: Dx7Voice | null
+  /**
+   * Create/resume browser-local audio immediately from a direct user gesture.
+   * The prepared controller is reused by a later audition after asynchronous
+   * catalog/library loading so browser autoplay policy cannot silently block it.
+   */
+  prepare(): Promise<void>
   audition(voice: Dx7Voice, options?: LocalVoiceAuditionOptions): Promise<void>
   stop(): Promise<void>
   dispose(): Promise<void>
@@ -63,6 +69,15 @@ export function createLocalVoiceAuditionManager(
     closeTimer = null
   }
 
+  const controllerUsable = (candidate: MsfaAudioWorkletController | null) => (
+    candidate !== null && candidate.state !== 'closed' && candidate.state !== 'error'
+  )
+
+  const ensureController = (): MsfaAudioWorkletController => {
+    if (!controllerUsable(controller)) controller = createController()
+    return controller as MsfaAudioWorkletController
+  }
+
   const closeController = async (notify: boolean) => {
     const closing = controller
     const stoppedVoice = currentVoice
@@ -84,13 +99,27 @@ export function createLocalVoiceAuditionManager(
     if (notify) callbacks.onStop?.(stoppedVoice)
   }
 
+  const prepare = async () => {
+    // ensureController() intentionally runs before the first await. This makes
+    // AudioContext construction/resume start inside the originating click.
+    const prepared = ensureController()
+    try {
+      await prepared.enable()
+    } catch (cause) {
+      const error = errorOf(cause)
+      if (controller === prepared) await closeController(false)
+      throw error
+    }
+  }
+
   const manager: LocalVoiceAuditionManager = {
     get active() {
-      return controller !== null
+      return currentVoice !== null
     },
     get activeVoice() {
       return currentVoice
     },
+    prepare,
     async audition(voice, options = {}) {
       const midiNote = integerRange(options.midiNote ?? 60, 0, 127, 'midiNote')
       const velocity = integerRange(options.velocity ?? 105, 1, 127, 'velocity')
@@ -99,19 +128,22 @@ export function createLocalVoiceAuditionManager(
       const randomSeed = integerRange(options.randomSeed ?? 42, 0, 0xffff_ffff, 'randomSeed')
       const run = ++generation
 
-      await closeController(false)
-      if (run !== generation) return
-
-      const nextController = createController()
-      controller = nextController
+      clearTimers()
+      // As with prepare(), create/resume audio before the first await. Direct
+      // library audition therefore also retains its click activation.
+      const nextController = ensureController()
       currentVoice = voice
       try {
         await nextController.enable()
-        if (run !== generation) return
+        if (run !== generation || controller !== nextController) return
+        // Reuse a prepared/active controller rather than closing and recreating
+        // it after asynchronous catalog work has already completed.
+        await nextController.allNotesOff()
+        if (run !== generation || controller !== nextController) return
         await nextController.loadVoice(voice, randomSeed)
         await nextController.configurePerformance(createDefaultMsfaLocalPerformanceConfig())
         await nextController.noteOn(midiNote, velocity)
-        if (run !== generation) return
+        if (run !== generation || controller !== nextController) return
         callbacks.onStart?.(voice)
 
         noteTimer = setTimeout(() => {
@@ -128,7 +160,7 @@ export function createLocalVoiceAuditionManager(
       } catch (cause) {
         const error = errorOf(cause)
         callbacks.onError?.(error, voice)
-        if (run === generation) await closeController(false)
+        if (run === generation && controller === nextController) await closeController(false)
         throw error
       }
     },
