@@ -2,6 +2,7 @@
 #include <cstdint>
 #include <cstring>
 #include <iterator>
+#include <new>
 
 #ifdef __EMSCRIPTEN__
 #include <emscripten/emscripten.h>
@@ -29,8 +30,30 @@ constexpr int kOperatorMaskOffset = 155;
 constexpr int kBlockSize = N;
 constexpr int kPitchCenter = 0x2000;
 
+enum SessionStatus {
+    kSessionOk = 0,
+    kSessionInvalidPointer = 1,
+    kSessionNoPatch = 2,
+    kSessionInvalidMidi = 3,
+    kSessionInvalidSampleRate = 4,
+    kSessionInvalidFrames = 5,
+    kSessionInvalidBlockAlignment = 6,
+    kSessionInvalidVoiceByte = 7,
+    kSessionInvalidOperatorMask = 8,
+};
+
 bool supportedSampleRate(int sampleRate) {
     return sampleRate == 44100 || sampleRate == 48000;
+}
+
+void initializeMsfaTables(int sampleRate) {
+    Exp2::init();
+    Sin::init();
+    Freqlut::init(sampleRate);
+    Lfo::init(sampleRate);
+    PitchEnv::init(sampleRate);
+    Env::init_sr(sampleRate);
+    Porta::init_sr(sampleRate);
 }
 
 void initializeControllers(Controllers &controllers, uint8_t operatorMask, FmCore *core) {
@@ -68,6 +91,120 @@ float convertDrySample(int32_t sample) {
     float result = static_cast<float>(clipValue) / static_cast<float>(0x8000);
     return std::clamp(result, -1.0f, 1.0f);
 }
+
+class RealtimeSession {
+public:
+    explicit RealtimeSession(int requestedSampleRate)
+        : sampleRate(requestedSampleRate), note(nullptr) {
+        initializeMsfaTables(sampleRate);
+        initializeControllers(controllers, 0x3f, &core);
+        reconstructNote();
+    }
+
+    ~RealtimeSession() {
+        destroyNote();
+    }
+
+    int loadPatch(const uint8_t *source, int sourceLength, uint32_t randomSeed) {
+        if (source == nullptr) return kSessionInvalidPointer;
+        if (sourceLength != kPatchLength) return kSessionInvalidFrames;
+        for (int index = 0; index < kVoiceLength; ++index) {
+            if (source[index] > 0x7f) return kSessionInvalidVoiceByte;
+        }
+        if (source[kOperatorMaskOffset] > 0x3f) return kSessionInvalidOperatorMask;
+
+        std::memcpy(patch, source, kPatchLength);
+        seed = randomSeed;
+        initializeControllers(controllers, patch[kOperatorMaskOffset], &core);
+        lfo.reset(patch + 137, seed);
+        reconstructNote();
+        hasPatch = true;
+        noteActive = false;
+        return kSessionOk;
+    }
+
+    int noteOn(int midiNote, int velocity) {
+        if (!hasPatch) return kSessionNoPatch;
+        if (midiNote < 0 || midiNote > 127 || velocity < 1 || velocity > 127) return kSessionInvalidMidi;
+
+        reconstructNote();
+        lfo.keydown();
+        const int transposedNote = std::clamp(midiNote + static_cast<int>(patch[144]) - 24, 0, 127);
+        note->init(patch, transposedNote, velocity, 1, &controllers);
+        if (patch[136] != 0) note->oscSync();
+        noteActive = true;
+        return kSessionOk;
+    }
+
+    int noteOff() {
+        if (!hasPatch) return kSessionNoPatch;
+        if (noteActive) note->keyup();
+        return kSessionOk;
+    }
+
+    int allNotesOff() {
+        if (!hasPatch) return kSessionNoPatch;
+        noteActive = false;
+        reconstructNote();
+        return kSessionOk;
+    }
+
+    int render64(float *output) {
+        if (output == nullptr) return kSessionInvalidPointer;
+        if (!hasPatch) {
+            std::fill(output, output + kBlockSize, 0.0f);
+            return kSessionNoPatch;
+        }
+
+        // Advance LFO state for every engine block, even while silent. This
+        // preserves a real free-running LFO when key sync is disabled.
+        const int32_t lfoValue = lfo.getsample();
+        const int32_t lfoDelay = lfo.getdelay();
+        int32_t block[kBlockSize]{};
+
+        if (noteActive) {
+            note->compute(block, lfoValue, lfoDelay, &controllers);
+            if (!note->isPlaying()) noteActive = false;
+        }
+
+        for (int index = 0; index < kBlockSize; ++index) {
+            output[index] = convertDrySample(block[index]);
+        }
+        return kSessionOk;
+    }
+
+    bool isPlaying() const {
+        return noteActive;
+    }
+
+private:
+    int sampleRate;
+    uint32_t seed = 0;
+    uint8_t patch[kPatchLength]{};
+    bool hasPatch = false;
+    bool noteActive = false;
+    FmCore core;
+    Controllers controllers;
+    Lfo lfo;
+    alignas(Dx7Note) unsigned char noteStorage[sizeof(Dx7Note)];
+    Dx7Note *note;
+
+    void destroyNote() {
+        if (note != nullptr) {
+            note->~Dx7Note();
+            note = nullptr;
+        }
+    }
+
+    void reconstructNote() {
+        destroyNote();
+        note = new (noteStorage) Dx7Note();
+    }
+};
+
+RealtimeSession *sessionFromHandle(uintptr_t handle) {
+    return reinterpret_cast<RealtimeSession *>(handle);
+}
 } // namespace
 
 extern "C" {
@@ -84,25 +221,19 @@ FM1_EXPORT int fm1_msfa_render(
     float *output,
     int outputFrames
 ) {
-    if (patch == nullptr || output == nullptr) return 1;
+    if (patch == nullptr || output == nullptr) return kSessionInvalidPointer;
     if (patchLength != kPatchLength) return 2;
-    if (midiNote < 0 || midiNote > 127 || velocity < 1 || velocity > 127) return 3;
-    if (!supportedSampleRate(sampleRate)) return 4;
-    if (noteOnFrames <= 0 || releaseFrames < 0 || outputFrames != noteOnFrames + releaseFrames) return 5;
-    if ((noteOnFrames % kBlockSize) != 0 || (releaseFrames % kBlockSize) != 0) return 6;
+    if (midiNote < 0 || midiNote > 127 || velocity < 1 || velocity > 127) return kSessionInvalidMidi;
+    if (!supportedSampleRate(sampleRate)) return kSessionInvalidSampleRate;
+    if (noteOnFrames <= 0 || releaseFrames < 0 || outputFrames != noteOnFrames + releaseFrames) return kSessionInvalidFrames;
+    if ((noteOnFrames % kBlockSize) != 0 || (releaseFrames % kBlockSize) != 0) return kSessionInvalidBlockAlignment;
 
     for (int index = 0; index < kVoiceLength; ++index) {
-        if (patch[index] > 0x7f) return 7;
+        if (patch[index] > 0x7f) return kSessionInvalidVoiceByte;
     }
-    if (patch[kOperatorMaskOffset] > 0x3f) return 8;
+    if (patch[kOperatorMaskOffset] > 0x3f) return kSessionInvalidOperatorMask;
 
-    Exp2::init();
-    Sin::init();
-    Freqlut::init(sampleRate);
-    Lfo::init(sampleRate);
-    PitchEnv::init(sampleRate);
-    Env::init_sr(sampleRate);
-    Porta::init_sr(sampleRate);
+    initializeMsfaTables(sampleRate);
 
     FmCore core;
     Controllers controllers;
@@ -129,7 +260,58 @@ FM1_EXPORT int fm1_msfa_render(
         }
     }
 
-    return 0;
+    return kSessionOk;
+}
+
+FM1_EXPORT uintptr_t fm1_msfa_session_create(int sampleRate) {
+    if (!supportedSampleRate(sampleRate)) return 0;
+    auto *session = new (std::nothrow) RealtimeSession(sampleRate);
+    return reinterpret_cast<uintptr_t>(session);
+}
+
+FM1_EXPORT void fm1_msfa_session_destroy(uintptr_t handle) {
+    delete sessionFromHandle(handle);
+}
+
+FM1_EXPORT int fm1_msfa_session_load_patch(
+    uintptr_t handle,
+    const uint8_t *patch,
+    int patchLength,
+    uint32_t randomSeed
+) {
+    auto *session = sessionFromHandle(handle);
+    if (session == nullptr) return kSessionInvalidPointer;
+    return session->loadPatch(patch, patchLength, randomSeed);
+}
+
+FM1_EXPORT int fm1_msfa_session_note_on(uintptr_t handle, int midiNote, int velocity) {
+    auto *session = sessionFromHandle(handle);
+    if (session == nullptr) return kSessionInvalidPointer;
+    return session->noteOn(midiNote, velocity);
+}
+
+FM1_EXPORT int fm1_msfa_session_note_off(uintptr_t handle) {
+    auto *session = sessionFromHandle(handle);
+    if (session == nullptr) return kSessionInvalidPointer;
+    return session->noteOff();
+}
+
+FM1_EXPORT int fm1_msfa_session_all_notes_off(uintptr_t handle) {
+    auto *session = sessionFromHandle(handle);
+    if (session == nullptr) return kSessionInvalidPointer;
+    return session->allNotesOff();
+}
+
+FM1_EXPORT int fm1_msfa_session_render64(uintptr_t handle, float *output) {
+    auto *session = sessionFromHandle(handle);
+    if (session == nullptr) return kSessionInvalidPointer;
+    return session->render64(output);
+}
+
+FM1_EXPORT int fm1_msfa_session_is_playing(uintptr_t handle) {
+    auto *session = sessionFromHandle(handle);
+    if (session == nullptr) return 0;
+    return session->isPlaying() ? 1 : 0;
 }
 
 FM1_EXPORT int fm1_msfa_block_size() {
