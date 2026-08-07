@@ -1,0 +1,84 @@
+name: Validate current FM1-inspired FX graph
+
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/validate-fm1-inspired-fx-current.yml']
+
+permissions:
+  contents: write
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - run: npm install --no-audit --no-fund
+      - name: Run FX and repository gate
+        id: gate
+        shell: bash
+        run: |
+          set +e
+          : > /tmp/fx-gate.txt
+          ok=true
+          for stage in typecheck lint focused test build; do
+            echo "=== $stage ===" | tee -a /tmp/fx-gate.txt
+            case "$stage" in
+              typecheck) npm run typecheck 2>&1 | tee -a /tmp/fx-gate.txt ;;
+              lint) npm run lint 2>&1 | tee -a /tmp/fx-gate.txt ;;
+              focused) npm test -- src/audio/fm1InspiredFxGraph.test.ts 2>&1 | tee -a /tmp/fx-gate.txt ;;
+              test) npm run test 2>&1 | tee -a /tmp/fx-gate.txt ;;
+              build) npm run build 2>&1 | tee -a /tmp/fx-gate.txt ;;
+            esac
+            code=${PIPESTATUS[0]}
+            echo "$stage=$code" >> "$GITHUB_OUTPUT"
+            if [ "$code" != 0 ]; then ok=false; fi
+          done
+          echo "ok=$ok" >> "$GITHUB_OUTPUT"
+          exit 0
+      - name: Record evidence and PLAN
+        env:
+          OK: ${{ steps.gate.outputs.ok }}
+          TYPECHECK: ${{ steps.gate.outputs.typecheck }}
+          LINT: ${{ steps.gate.outputs.lint }}
+          FOCUSED: ${{ steps.gate.outputs.focused }}
+          TEST: ${{ steps.gate.outputs.test }}
+          BUILD: ${{ steps.gate.outputs.build }}
+        run: |
+          python - <<'PY'
+          import os
+          from pathlib import Path
+          ok=os.environ.get('OK')=='true'
+          log=Path('/tmp/fx-gate.txt').read_text(encoding='utf-8',errors='replace')
+          Path('docs/validation/fm1-inspired-fx-graph-software.md').write_text('\n'.join([
+            '# FM1-inspired Web Audio effect graph validation','',
+            f"Source commit: `{os.environ['GITHUB_SHA']}`",'',
+            f"Overall software gate: **{'SUCCESS' if ok else 'FAILED'}**",'',
+            '| Stage | Exit code |','| --- | ---: |',
+            f"| typecheck | {os.environ['TYPECHECK']} |",f"| lint | {os.environ['LINT']} |",f"| focused FX tests | {os.environ['FOCUSED']} |",f"| full test suite | {os.environ['TEST']} |",f"| production build | {os.environ['BUILD']} |",'',
+            'Boundary: repository-owned native Web Audio graph maps the documented 24 `Fm1FxState` values to filter, distortion, chorus, phaser, delay and reverb. Dry bypass is explicit and defaults to bypassed. The software routing/scaling is FM-1-inspired and is not claimed to match physical FM-1 firmware algorithms, order, stereo behavior or headroom.','',
+            '```text',log[-14000:],'```',''
+          ]),encoding='utf-8')
+          if ok:
+              plan=Path('PLAN.md'); text=plan.read_text(encoding='utf-8')
+              text=text.replace(
+                '- [ ] Implement a separate FM-1-inspired effect graph for documented CC `0–23`: filter, reverb, delay, distortion, chorus and phaser, using native Web Audio and/or audited MIT-licensed Tone.js components.',
+                '- [x] Implement a separate FM-1-inspired effect graph for documented CC `0–23`: filter, reverb, delay, distortion, chorus and phaser using repository-owned native Web Audio components. Evidence: [`docs/validation/fm1-inspired-fx-graph-software.md`](./docs/validation/fm1-inspired-fx-graph-software.md).',1)
+              text=text.replace(
+                '- [ ] Reuse `Fm1FxState` and the documented value ranges, but keep dry bypass and clearly state that effect algorithms, internal scaling, routing order, stereo behavior and headroom are not known to match physical FM-1 firmware.',
+                '- [x] Reuse `Fm1FxState` and the documented value ranges with explicit dry bypass; the repository documents that software effect algorithms, scaling, routing order, stereo behavior and headroom are not known to match physical FM-1 firmware. Evidence: [`docs/validation/fm1-inspired-fx-graph-software.md`](./docs/validation/fm1-inspired-fx-graph-software.md).',1)
+              plan.write_text(text,encoding='utf-8')
+          Path('.github/workflows/validate-fm1-inspired-fx-current.yml').unlink(missing_ok=True)
+          PY
+      - name: Commit evidence
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git commit -m 'test(ci): record current FM1-inspired FX gate' || true
+          git pull --rebase origin main
+          git push origin HEAD:main
