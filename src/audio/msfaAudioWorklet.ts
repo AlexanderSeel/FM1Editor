@@ -48,7 +48,7 @@ interface WorkletPortLike {
 
 interface AudioWorkletNodeLike {
   readonly port: WorkletPortLike
-  onprocessorerror: ((event: Event) => void) | null
+  onprocessorerror: ((event: ErrorEvent) => void) | null
   connect(destination: AudioNode): unknown
   disconnect(): void
 }
