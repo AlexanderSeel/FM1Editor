@@ -41,7 +41,7 @@ describe('LocalSequenceAudioPanel', () => {
 
     expect(markup).toContain('External MIDI input clock')
     expect(markup).toContain('Arm external local')
-    expect(markup).toContain('selected MIDI input')
+    expect(markup).toContain('selected input')
     expect(markup).toContain('never sends sequence notes or transport to the selected MIDI output')
   })
 })
