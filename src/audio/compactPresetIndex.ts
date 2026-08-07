@@ -134,8 +134,10 @@ export async function buildCompactPresetDescriptorIndex(
 
 function targetProbe(probes: readonly PresetRenderProbe[], referencePitchHz?: number | null): PresetRenderProbe | undefined {
   if (probes.length === 0) return undefined
-  if (!referencePitchHz || !Number.isFinite(referencePitchHz) || referencePitchHz <= 0) return probes.find((probe) => probe.id === 'c4-main') ?? probes[0]
+  const defaultProbe = probes.find((probe) => probe.id === 'c4-main') ?? probes[0]
+  if (!referencePitchHz || !Number.isFinite(referencePitchHz) || referencePitchHz <= 0) return defaultProbe
   const target = frequencyToMidiNote(referencePitchHz)
+  if (target === null) return defaultProbe
   return [...probes].sort((left, right) => Math.abs(left.midiNote - target) - Math.abs(right.midiNote - target))[0]
 }
 
