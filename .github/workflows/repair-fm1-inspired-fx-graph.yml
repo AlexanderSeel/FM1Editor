@@ -1,0 +1,97 @@
+name: Repair and validate FM1-inspired effect graph
+
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/repair-fm1-inspired-fx-graph.yml']
+
+permissions:
+  contents: write
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Repair strict TypeScript and lint findings
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          path = Path('src/audio/fm1InspiredFxGraph.ts')
+          text = path.read_text(encoding='utf-8')
+          old = """  const candidate = state.values[id]
+  if (!Number.isInteger(candidate) || candidate < definition.minimum || candidate > definition.maximum) {
+    throw new RangeError(`${id} must be an integer from ${definition.minimum} through ${definition.maximum}`)
+  }
+  return candidate
+"""
+          new = """  const candidate = state.values[id]
+  if (candidate === undefined || !Number.isInteger(candidate) || candidate < definition.minimum || candidate > definition.maximum) {
+    throw new RangeError(`${id} must be an integer from ${definition.minimum} through ${definition.maximum}`)
+  }
+  return candidate
+"""
+          if old not in text:
+              raise SystemExit('Expected strict-value block was not found')
+          text = text.replace(old, new, 1)
+          text = text.replace("try { chorusLfo.stop() } catch {}", "try { chorusLfo.stop() } catch { /* already stopped */ }", 1)
+          text = text.replace("try { phaserLfo.stop() } catch {}", "try { phaserLfo.stop() } catch { /* already stopped */ }", 1)
+          path.write_text(text, encoding='utf-8')
+          PY
+      - name: Full software gate
+        run: |
+          npm install --no-audit --no-fund
+          npm run audit:virtual-dx7
+          npm run typecheck
+          npm run lint
+          npm run test
+          npm run build
+      - name: Record accepted effect graph and close roadmap items
+        run: |
+          cat > docs/validation/fm1-inspired-fx-graph-software.md <<EOF
+          # FM1-inspired Web Audio effect graph software validation
+
+          Validated source/workflow commit: \`${GITHUB_SHA}\`
+
+          Overall software gate: **SUCCESS**
+
+          ## Accepted boundary
+
+          - The local effect graph is an FM1 Editor **software approximation**, not a measured implementation of M-VAVE FM-1 firmware DSP.
+          - It reuses all 24 documented \`Fm1FxState\` CC-backed values and existing legal ranges; MIDI semantics are unchanged.
+          - Repository-owned software routing is \`filter → distortion → chorus → phaser → delay → reverb\`; this order is not claimed to match firmware.
+          - Filter, reverb, delay, distortion, chorus and phaser use native Web Audio nodes; no third-party DSP dependency is introduced.
+          - Graph-level dry bypass is explicit and enabled by default; effect blocks use software wet/dry routing derived from documented state.
+          - Reverb uses a deterministic repository-owned synthetic impulse; no third-party impulse-response asset is distributed.
+          - The accepted dry DX7/MSFA renderer is not modified by the graph implementation.
+          - Focused mapping/range/claim tests plus source audit, typecheck, lint, full tests and production build passed.
+
+          ## Claim limitation
+
+          Effect algorithms, parameter scaling, routing order, stereo behavior and headroom are not known to match physical FM-1 firmware. Mounted browser integration/effect-isolation measurements remain part of the later Virtual FM-1 integration/regression roadmap item.
+          EOF
+          python - <<'PY'
+          from pathlib import Path
+          plan = Path('PLAN.md')
+          text = plan.read_text(encoding='utf-8')
+          old1 = '- [ ] Implement a separate FM-1-inspired effect graph for documented CC `0–23`: filter, reverb, delay, distortion, chorus and phaser, using native Web Audio and/or audited MIT-licensed Tone.js components.'
+          new1 = '- [x] Implement a separate FM-1-inspired effect graph for documented CC `0–23`: filter, reverb, delay, distortion, chorus and phaser using native Web Audio, without adding a third-party DSP dependency. Evidence: [`docs/validation/fm1-inspired-fx-graph-software.md`](./docs/validation/fm1-inspired-fx-graph-software.md).'
+          old2 = '- [ ] Reuse `Fm1FxState` and the documented value ranges, but keep dry bypass and clearly state that effect algorithms, internal scaling, routing order, stereo behavior and headroom are not known to match physical FM-1 firmware.'
+          new2 = '- [x] Reuse `Fm1FxState` and the documented value ranges with explicit dry bypass and a repository-owned routing/scaling policy; clearly state that algorithms, internal scaling, routing order, stereo behavior and headroom are not known to match physical FM-1 firmware. Evidence: [`docs/validation/fm1-inspired-fx-graph-software.md`](./docs/validation/fm1-inspired-fx-graph-software.md).'
+          if old1 not in text or old2 not in text:
+              raise SystemExit('Expected unresolved FX items were not found in PLAN.md')
+          plan.write_text(text.replace(old1, new1).replace(old2, new2), encoding='utf-8')
+          PY
+          rm -f .github/workflows/repair-fm1-inspired-fx-graph.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git commit -m 'test(audio): accept FM1-inspired effect graph'
+          git pull --rebase origin main
+          git push origin HEAD:main
