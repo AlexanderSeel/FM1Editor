@@ -1,5 +1,5 @@
 name: Validate final local catalog audition
-# retriggered after restoring the mounted browser runner
+# retriggered after App wiring and FX strict-validation repairs
 
 on:
   push:
