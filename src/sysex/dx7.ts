@@ -100,7 +100,6 @@ function normalizeDetune(value: number): number {
   return Math.min(value, 14)
 }
 
-
 /**
  * Keyboard-scaling breakpoint is defined as 0..99. Some legacy or
  * third-party banks contain the reserved 7-bit value 127. Normalize
@@ -135,9 +134,13 @@ function decodeUnpackedOperator(data: Uint8Array, offset: number): Dx7Operator {
 }
 
 function decodePackedOperator(data: Uint8Array, offset: number): Dx7Operator {
-  const curvesAndScaling = data[offset + 11] ?? 0
-  const modulationAndVelocity = data[offset + 12] ?? 0
-  const oscillatorAndCoarse = data[offset + 14] ?? 0
+  // Yamaha's 128-byte bulk format packs the operator tail as:
+  // 11 curves, 12 detune/rate scaling, 13 KVS/AMS, 14 output level,
+  // 15 oscillator mode/coarse and 16 fine frequency.
+  const curves = data[offset + 11] ?? 0
+  const detuneAndRateScaling = data[offset + 12] ?? 0
+  const modulationAndVelocity = data[offset + 13] ?? 0
+  const oscillatorAndCoarse = data[offset + 15] ?? 0
 
   return {
     envelope: {
@@ -148,17 +151,17 @@ function decodePackedOperator(data: Uint8Array, offset: number): Dx7Operator {
       breakPoint: normalizeBreakpoint(data[offset + 8] ?? 0),
       leftDepth: data[offset + 9] ?? 0,
       rightDepth: data[offset + 10] ?? 0,
-      leftCurve: readCurve(curvesAndScaling),
-      rightCurve: readCurve(curvesAndScaling >> 2),
-      rateScaling: (curvesAndScaling >> 4) & 0x07,
+      leftCurve: readCurve(curves),
+      rightCurve: readCurve(curves >> 2),
+      rateScaling: detuneAndRateScaling & 0x07,
     },
     amplitudeModulationSensitivity: modulationAndVelocity & 0x03,
     keyVelocitySensitivity: (modulationAndVelocity >> 2) & 0x07,
-    outputLevel: data[offset + 13] ?? 0,
+    outputLevel: data[offset + 14] ?? 0,
     oscillatorMode: (oscillatorAndCoarse & 0x01) === 0 ? 'ratio' : 'fixed',
     frequencyCoarse: (oscillatorAndCoarse >> 1) & 0x1f,
-    frequencyFine: data[offset + 15] ?? 0,
-    detune: normalizeDetune((data[offset + 16] ?? 0) & 0x0f),
+    frequencyFine: data[offset + 16] ?? 0,
+    detune: normalizeDetune((detuneAndRateScaling >> 3) & 0x0f),
   }
 }
 
@@ -331,21 +334,22 @@ export function encodePackedVoice(voice: Dx7Voice): Uint8Array {
     data[offset + 9] = operator.keyboardScaling.leftDepth
     data[offset + 10] = operator.keyboardScaling.rightDepth
     data[offset + 11] =
-      ((data[offset + 11] ?? 0) & 0x80) |
+      ((data[offset + 11] ?? 0) & 0x70) |
       writeCurve(operator.keyboardScaling.leftCurve) |
-      (writeCurve(operator.keyboardScaling.rightCurve) << 2) |
-      (operator.keyboardScaling.rateScaling << 4)
+      (writeCurve(operator.keyboardScaling.rightCurve) << 2)
     data[offset + 12] =
-      ((data[offset + 12] ?? 0) & 0x60) |
+      (normalizeDetune(operator.detune) << 3) |
+      operator.keyboardScaling.rateScaling
+    data[offset + 13] =
+      ((data[offset + 13] ?? 0) & 0x60) |
       operator.amplitudeModulationSensitivity |
       (operator.keyVelocitySensitivity << 2)
-    data[offset + 13] = operator.outputLevel
-    data[offset + 14] =
-      ((data[offset + 14] ?? 0) & 0x40) |
+    data[offset + 14] = operator.outputLevel
+    data[offset + 15] =
+      ((data[offset + 15] ?? 0) & 0x40) |
       (operator.oscillatorMode === 'fixed' ? 1 : 0) |
       (operator.frequencyCoarse << 1)
-    data[offset + 15] = operator.frequencyFine
-    data[offset + 16] = ((data[offset + 16] ?? 0) & 0x70) | normalizeDetune(operator.detune)
+    data[offset + 16] = operator.frequencyFine
   }
 
   writeRange(data, 102, voice.pitchEnvelope.rates)
