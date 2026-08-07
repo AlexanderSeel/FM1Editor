@@ -12,6 +12,7 @@ export const MSFA_WORKLET_SCRIPT_PATH = 'virtual-dx7/fm1-msfa-worklet.js' as con
 export const MSFA_WORKLET_MANIFEST_PATH = 'virtual-dx7/manifest.json' as const
 export const MSFA_WORKLET_WASM_PATH = 'virtual-dx7/fm1-msfa.wasm' as const
 export const MSFA_WORKLET_READY_TIMEOUT_MS = 5_000 as const
+export const MSFA_WORKLET_POLYPHONY = 16 as const
 
 export type MsfaAudioWorkletState = 'disabled' | 'enabling' | 'ready' | 'error' | 'closed'
 
@@ -25,6 +26,7 @@ interface MsfaWorkletManifest {
   }
   statefulSessionAbi: number
   renderBlockFrames: number
+  workletPolyphony: number
 }
 
 export interface MsfaWorkletPackage {
@@ -68,12 +70,13 @@ export interface MsfaAudioWorkletController {
   readonly engineId: typeof MSFA_OFFLINE_ENGINE_ID
   readonly engineVersion: typeof MSFA_OFFLINE_ENGINE_VERSION
   readonly licenseSpdx: typeof MSFA_OFFLINE_ENGINE_LICENSE
+  readonly polyphony: typeof MSFA_WORKLET_POLYPHONY
   readonly state: MsfaAudioWorkletState
   readonly sampleRate: number | null
   enable(): Promise<void>
   loadVoice(voice: Dx7Voice, randomSeed?: number): Promise<void>
   noteOn(midiNote: number, velocity: number): Promise<void>
-  noteOff(): Promise<void>
+  noteOff(midiNote?: number): Promise<void>
   allNotesOff(): Promise<void>
   close(): Promise<void>
 }
@@ -105,6 +108,9 @@ function parseManifest(value: unknown): MsfaWorkletManifest {
   }
   if (manifest.statefulSessionAbi !== 1) throw new Error('Virtual DX7 stateful session ABI is not supported')
   if (manifest.renderBlockFrames !== 64) throw new Error('Virtual DX7 render block size is not supported')
+  if (manifest.workletPolyphony !== MSFA_WORKLET_POLYPHONY) {
+    throw new Error(`Virtual DX7 manifest polyphony must be ${MSFA_WORKLET_POLYPHONY}`)
+  }
   return manifest as MsfaWorkletManifest
 }
 
@@ -198,11 +204,34 @@ export function createMsfaAudioWorkletController(
   const handleMessage = (event: MessageEvent<unknown>) => {
     const message = event.data
     if (!message || typeof message !== 'object') return
-    const data = message as { type?: unknown; requestId?: unknown; ok?: unknown; error?: unknown }
+    const data = message as {
+      type?: unknown
+      requestId?: unknown
+      ok?: unknown
+      error?: unknown
+      sampleRate?: unknown
+      blockFrames?: unknown
+      polyphony?: unknown
+    }
     if (data.type === 'ready') {
       const resolve = readyResolve
-      clearReadyWaiters()
-      resolve?.()
+      const reject = readyReject
+      try {
+        if (!context || data.sampleRate !== context.sampleRate) {
+          throw new Error('Virtual DX7 AudioWorklet reported an unexpected sample rate')
+        }
+        if (data.blockFrames !== 64) {
+          throw new Error('Virtual DX7 AudioWorklet reported an unexpected block size')
+        }
+        if (data.polyphony !== MSFA_WORKLET_POLYPHONY) {
+          throw new Error(`Virtual DX7 AudioWorklet reported unexpected polyphony ${String(data.polyphony)}`)
+        }
+        clearReadyWaiters()
+        resolve?.()
+      } catch (cause) {
+        clearReadyWaiters()
+        reject?.(cause instanceof Error ? cause : new Error('Virtual DX7 AudioWorklet readiness validation failed'))
+      }
       return
     }
     if (data.type === 'fatal') {
@@ -264,6 +293,7 @@ export function createMsfaAudioWorkletController(
     engineId: MSFA_OFFLINE_ENGINE_ID,
     engineVersion: MSFA_OFFLINE_ENGINE_VERSION,
     licenseSpdx: MSFA_OFFLINE_ENGINE_LICENSE,
+    polyphony: MSFA_WORKLET_POLYPHONY,
     get state() {
       return state
     },
@@ -346,8 +376,13 @@ export function createMsfaAudioWorkletController(
         velocity: validatedVelocity,
       })
     },
-    noteOff() {
-      return sendCommand('noteOff')
+    async noteOff(midiNote) {
+      if (midiNote === undefined) {
+        await sendCommand('noteOff')
+        return
+      }
+      const validatedNote = integerRange(midiNote, 0, 127, 'midiNote')
+      await sendCommand('noteOff', { midiNote: validatedNote })
     },
     allNotesOff() {
       return sendCommand('allNotesOff')
