@@ -1,0 +1,88 @@
+name: Validate one-voice worklet software boundary
+
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/validate-msfa-worklet-software.yml']
+
+permissions:
+  contents: write
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - id: install
+        continue-on-error: true
+        run: npm install --no-audit --no-fund
+      - name: Validate packaged stateful artifact
+        id: artifact
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -o pipefail
+          node scripts/test-msfa-realtime-wasm.mjs \
+            --module public/virtual-dx7/fm1-msfa.mjs \
+            --patch native/virtual-dx7-spike/reference-patch-v1.hex \
+            2>&1 | tee "$RUNNER_TEMP/stateful.json"
+      - id: typecheck
+        if: steps.install.outcome == 'success'
+        continue-on-error: true
+        run: npm run typecheck
+      - id: lint
+        if: steps.install.outcome == 'success'
+        continue-on-error: true
+        run: npm run lint
+      - id: tests
+        if: steps.install.outcome == 'success'
+        continue-on-error: true
+        run: npm run test
+      - id: build
+        if: steps.install.outcome == 'success'
+        continue-on-error: true
+        run: npm run build
+      - name: Record receipt and self-clean
+        if: always()
+        env:
+          ARTIFACT: ${{ steps.artifact.outcome }}
+          TYPECHECK: ${{ steps.typecheck.outcome }}
+          LINT: ${{ steps.lint.outcome }}
+          TESTS: ${{ steps.tests.outcome }}
+          BUILD: ${{ steps.build.outcome }}
+        shell: bash
+        run: |
+          python - <<'PY'
+          import json, os
+          from pathlib import Path
+          keys=['ARTIFACT','TYPECHECK','LINT','TESTS','BUILD']
+          r={k.lower():os.environ[k] for k in keys}; ok=all(v=='success' for v in r.values()); t=Path(os.environ['RUNNER_TEMP'])
+          state=None; p=t/'stateful.json'
+          if p.exists():
+            for line in reversed(p.read_text(errors='replace').splitlines()):
+              try: state=json.loads(line); break
+              except: pass
+          lines=['# One-voice AudioWorklet software-boundary validation','',f"Validated source commit: `{os.environ['GITHUB_SHA']}`",'',f"Overall software gate: **{'SUCCESS' if ok else 'FAILED'}**",'', '| Check | Result |','| --- | --- |']
+          lines += [f"| {k} | **{v.upper()}** |" for k,v in r.items()]
+          lines += ['', '## Scope','', '- Validates the TypeScript AudioWorklet controller, mocked browser lifecycle, local package verification, semantic voice routing and the actual packaged stateful WASM ABI.', '- `public/virtual-dx7/fm1-msfa-worklet.js` remains a dry one-voice processor: queued init, note on/off, all-notes-off, two 64-frame core blocks per standard 128-frame callback, zero-output fallback and explicit disposal.', '- No Web MIDI, SysEx, effects or hardware-send path is introduced.']
+          if state: lines.append(f"- Packaged stateful regression remained `{state['fixedSha256']}` across {state['fixedFrames']} frames; all-notes-off immediate silence={state['allNotesOffImmediateSilence']}.")
+          lines += ['', 'This is not browser AudioWorklet execution evidence. Chrome/Edge execution and soak remain separate required gates.', '', 'The temporary workflow removes itself; normal CI remains read-only.']
+          if not ok and p.exists(): lines += ['', '## Artifact log','```text','\n'.join(p.read_text(errors='replace').splitlines()[-50:]),'```']
+          Path('docs/validation/msfa-audioworklet-software.md').write_text('\n'.join(lines)+'\n')
+          Path('.github/workflows/validate-msfa-worklet-software.yml').unlink(missing_ok=True)
+          PY
+      - name: Commit receipt and cleanup
+        if: always()
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git diff --cached --quiet || git commit -m 'test(ci): record worklet software validation'
+          git pull --rebase origin main
+          git push origin HEAD:main
