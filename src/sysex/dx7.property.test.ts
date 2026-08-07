@@ -148,9 +148,12 @@ describe('DX7 generated codec properties', () => {
 
       for (let block = 0; block < 6; block += 1) {
         const offset = block * 17
-        packed[offset + 12] = (packed[offset + 12] ?? 0) | (((caseIndex + block) & 0x03) << 5)
-        packed[offset + 14] = (packed[offset + 14] ?? 0) | (((caseIndex + block) & 0x01) << 6)
-        packed[offset + 16] = (packed[offset + 16] ?? 0) | (((caseIndex + block) & 0x07) << 4)
+        // Canonical Yamaha spare bits live above the actual fields in bytes
+        // 11, 13 and 15. Bytes 12, 14 and 16 are fully occupied by
+        // detune/rate-scaling, output level and fine frequency respectively.
+        packed[offset + 11] = (packed[offset + 11] ?? 0) | (((caseIndex + block) & 0x07) << 4)
+        packed[offset + 13] = (packed[offset + 13] ?? 0) | (((caseIndex + block) & 0x03) << 5)
+        packed[offset + 15] = (packed[offset + 15] ?? 0) | (((caseIndex + block) & 0x01) << 6)
       }
       packed[111] = (packed[111] ?? 0) | ((caseIndex & 0x07) << 4)
 
