@@ -1,0 +1,113 @@
+name: Implement measured AudioWorklet diagnostics
+
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/implement-worklet-diagnostics.yml']
+
+permissions:
+  contents: write
+
+jobs:
+  implement:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - name: Instrument processor and controller
+        shell: python
+        run: |
+          from pathlib import Path
+          worklet=Path('public/virtual-dx7/fm1-msfa-worklet.js')
+          text=worklet.read_text(encoding='utf-8')
+          ctor_anchor='''    this.performanceAbi = 0\n    this.port.onmessage = (event) => this.receiveCommand(event.data)\n'''
+          ctor_new='''    this.performanceAbi = 0\n    this.diagnosticCallbacks = 0\n    this.diagnosticTotalMs = 0\n    this.diagnosticMaxMs = 0\n    this.diagnosticOverBudget = 0\n    this.port.onmessage = (event) => this.receiveCommand(event.data)\n'''
+          if ctor_anchor in text: text=text.replace(ctor_anchor,ctor_new,1)
+          elif 'this.diagnosticCallbacks' not in text: raise SystemExit('worklet diagnostic ctor anchor missing')
+          method_anchor='''  clearOutputs(outputs) {\n    for (const output of outputs) {\n      for (const channel of output) channel.fill(0)\n    }\n  }\n\n  process(_inputs, outputs) {\n'''
+          methods='''  clearOutputs(outputs) {\n    for (const output of outputs) {\n      for (const channel of output) channel.fill(0)\n    }\n  }\n\n  diagnosticNow() {\n    return typeof performance !== 'undefined' && typeof performance.now === 'function'\n      ? performance.now()\n      : null\n  }\n\n  recordDiagnostics(startedAtMs, frameCount) {\n    if (startedAtMs === null) return\n    const finishedAtMs = this.diagnosticNow()\n    if (finishedAtMs === null) return\n    const elapsedMs = Math.max(0, finishedAtMs - startedAtMs)\n    const budgetMs = frameCount / sampleRate * 1000\n    this.diagnosticCallbacks += 1\n    this.diagnosticTotalMs += elapsedMs\n    this.diagnosticMaxMs = Math.max(this.diagnosticMaxMs, elapsedMs)\n    if (elapsedMs > budgetMs) this.diagnosticOverBudget += 1\n    if (this.diagnosticCallbacks < 128) return\n\n    const callbacks = this.diagnosticCallbacks\n    const meanRenderMs = callbacks > 0 ? this.diagnosticTotalMs / callbacks : 0\n    const maxRenderMs = this.diagnosticMaxMs\n    this.port.postMessage({\n      type: 'diagnostics',\n      callbacks,\n      meanRenderMs,\n      maxRenderMs,\n      budgetMs,\n      meanUtilization: budgetMs > 0 ? meanRenderMs / budgetMs : 0,\n      maxUtilization: budgetMs > 0 ? maxRenderMs / budgetMs : 0,\n      overBudgetCallbacks: this.diagnosticOverBudget,\n      activeVoices: this.voices.filter((voice) => voice.state !== 'idle').length,\n      polyphony: MAX_POLYPHONY,\n    })\n    this.diagnosticCallbacks = 0\n    this.diagnosticTotalMs = 0\n    this.diagnosticMaxMs = 0\n    this.diagnosticOverBudget = 0\n  }\n\n  process(_inputs, outputs) {\n'''
+          if method_anchor in text: text=text.replace(method_anchor,methods,1)
+          elif 'recordDiagnostics(startedAtMs' not in text: raise SystemExit('worklet diagnostic method anchor missing')
+          process_anchor='''    try {\n      const channels = outputs[0]\n      const mono = channels?.[0]\n'''
+          process_new='''    try {\n      const channels = outputs[0]\n      const mono = channels?.[0]\n      const diagnosticStart = mono ? this.diagnosticNow() : null\n'''
+          if process_anchor in text: text=text.replace(process_anchor,process_new,1)
+          elif 'const diagnosticStart' not in text: raise SystemExit('worklet process start anchor missing')
+          finish_anchor='''      for (let channel = 1; channel < channels.length; channel += 1) channels[channel].set(mono)\n      return true\n'''
+          finish_new='''      for (let channel = 1; channel < channels.length; channel += 1) channels[channel].set(mono)\n      this.recordDiagnostics(diagnosticStart, mono.length)\n      return true\n'''
+          if finish_anchor in text: text=text.replace(finish_anchor,finish_new,1)
+          elif 'this.recordDiagnostics(diagnosticStart' not in text: raise SystemExit('worklet process finish anchor missing')
+          worklet.write_text(text,encoding='utf-8')
+
+          controller=Path('src/audio/msfaAudioWorklet.ts')
+          text=controller.read_text(encoding='utf-8')
+          interface_anchor='''export interface MsfaAudioWorkletController {\n  readonly engineId: typeof MSFA_OFFLINE_ENGINE_ID\n'''
+          interface_new='''export interface MsfaAudioWorkletDiagnostics {\n  readonly callbacks: number\n  readonly meanRenderMs: number\n  readonly maxRenderMs: number\n  readonly budgetMs: number\n  readonly meanUtilization: number\n  readonly maxUtilization: number\n  readonly overBudgetCallbacks: number\n  readonly activeVoices: number\n  readonly polyphony: number\n}\n\nexport interface MsfaAudioWorkletController {\n  readonly engineId: typeof MSFA_OFFLINE_ENGINE_ID\n'''
+          if interface_anchor in text: text=text.replace(interface_anchor,interface_new,1)
+          elif 'export interface MsfaAudioWorkletDiagnostics' not in text: raise SystemExit('controller diagnostics interface anchor missing')
+          sample_anchor='''  readonly sampleRate: number | null\n  enable(): Promise<void>\n'''
+          sample_new='''  readonly sampleRate: number | null\n  readonly diagnostics: MsfaAudioWorkletDiagnostics | null\n  enable(): Promise<void>\n'''
+          if sample_anchor in text: text=text.replace(sample_anchor,sample_new,1)
+          elif 'readonly diagnostics:' not in text: raise SystemExit('controller diagnostics property anchor missing')
+          state_anchor='''  let outputRoute: MsfaAudioWorkletOutputRoute | null = null\n  let enablePromise: Promise<void> | null = null\n'''
+          state_new='''  let outputRoute: MsfaAudioWorkletOutputRoute | null = null\n  let diagnostics: MsfaAudioWorkletDiagnostics | null = null\n  let enablePromise: Promise<void> | null = null\n'''
+          if state_anchor in text: text=text.replace(state_anchor,state_new,1)
+          elif 'let diagnostics:' not in text: raise SystemExit('controller diagnostics state anchor missing')
+          message_anchor='''    if (data.type === 'fatal') {\n'''
+          diagnostic_handler='''    if (data.type === 'diagnostics') {\n      const candidate = data as Record<string, unknown>\n      const number = (key: string) => typeof candidate[key] === 'number' && Number.isFinite(candidate[key])\n        ? candidate[key] as number\n        : null\n      const callbacks = number('callbacks')\n      const meanRenderMs = number('meanRenderMs')\n      const maxRenderMs = number('maxRenderMs')\n      const budgetMs = number('budgetMs')\n      const meanUtilization = number('meanUtilization')\n      const maxUtilization = number('maxUtilization')\n      const overBudgetCallbacks = number('overBudgetCallbacks')\n      const activeVoices = number('activeVoices')\n      const polyphony = number('polyphony')\n      if (callbacks !== null && callbacks > 0\n        && meanRenderMs !== null && meanRenderMs >= 0\n        && maxRenderMs !== null && maxRenderMs >= 0\n        && budgetMs !== null && budgetMs > 0\n        && meanUtilization !== null && meanUtilization >= 0\n        && maxUtilization !== null && maxUtilization >= 0\n        && overBudgetCallbacks !== null && overBudgetCallbacks >= 0\n        && activeVoices !== null && activeVoices >= 0\n        && polyphony !== null && polyphony > 0) {\n        diagnostics = {\n          callbacks, meanRenderMs, maxRenderMs, budgetMs, meanUtilization, maxUtilization,\n          overBudgetCallbacks, activeVoices, polyphony,\n        }\n      }\n      return\n    }\n    if (data.type === 'fatal') {\n'''
+          if 'data.type === \'diagnostics\'' not in text:
+              if message_anchor not in text: raise SystemExit('controller message anchor missing')
+              text=text.replace(message_anchor,diagnostic_handler,1)
+          cleanup_anchor='''    clearReadyWaiters()\n    rejectPending(new Error('Virtual DX7 AudioWorklet was closed'))\n'''
+          cleanup_new='''    clearReadyWaiters()\n    diagnostics = null\n    rejectPending(new Error('Virtual DX7 AudioWorklet was closed'))\n'''
+          if cleanup_anchor in text: text=text.replace(cleanup_anchor,cleanup_new,1)
+          getter_anchor='''    get sampleRate() {\n      return context?.sampleRate ?? null\n    },\n    enable() {\n'''
+          getter_new='''    get sampleRate() {\n      return context?.sampleRate ?? null\n    },\n    get diagnostics() {\n      return diagnostics\n    },\n    enable() {\n'''
+          if getter_anchor in text: text=text.replace(getter_anchor,getter_new,1)
+          elif 'get diagnostics()' not in text: raise SystemExit('controller diagnostics getter anchor missing')
+          controller.write_text(text,encoding='utf-8')
+
+          test=Path('src/audio/msfaAudioWorklet.test.ts')
+          content=test.read_text(encoding='utf-8')
+          return_anchor='''    routeDispose,\n    get nodeOptions() { return nodeOptions },\n'''
+          return_new='''    routeDispose,\n    emitMessage(data: unknown) { port.onmessage?.({ data } as MessageEvent<unknown>) },\n    get nodeOptions() { return nodeOptions },\n'''
+          if return_anchor in content: content=content.replace(return_anchor,return_new,1)
+          elif 'emitMessage(data: unknown)' not in content: raise SystemExit('test emit anchor missing')
+          test_anchor='''  it('routes semantic voice, performance controls and independent notes', async () => {\n'''
+          test_new='''  it('accepts measured worklet diagnostics without inventing values', async () => {\n    const harness = browserHarness()\n    expect(harness.controller.diagnostics).toBeNull()\n    await harness.controller.enable()\n    harness.emitMessage({\n      type: 'diagnostics', callbacks: 128, meanRenderMs: 0.4, maxRenderMs: 1.2, budgetMs: 2.6667,\n      meanUtilization: 0.15, maxUtilization: 0.45, overBudgetCallbacks: 0, activeVoices: 3, polyphony: 16,\n    })\n    expect(harness.controller.diagnostics).toMatchObject({\n      callbacks: 128, meanRenderMs: 0.4, maxRenderMs: 1.2, activeVoices: 3, overBudgetCallbacks: 0, polyphony: 16,\n    })\n    harness.emitMessage({ type: 'diagnostics', callbacks: -1 })\n    expect(harness.controller.diagnostics?.callbacks).toBe(128)\n    await harness.controller.close()\n    expect(harness.controller.diagnostics).toBeNull()\n  })\n\n'''+test_anchor
+          if 'accepts measured worklet diagnostics' not in content:
+              if test_anchor not in content: raise SystemExit('diagnostics test insertion anchor missing')
+              content=content.replace(test_anchor,test_new,1)
+          test.write_text(content,encoding='utf-8')
+      - run: node --check public/virtual-dx7/fm1-msfa-worklet.js
+      - run: npm install --no-audit --no-fund
+      - run: npm run audit:virtual-dx7
+      - run: npm run typecheck
+      - run: npm run lint
+      - run: npm test -- src/audio/msfaAudioWorklet.test.ts
+      - run: npm run test
+      - run: npm run build
+      - name: Persist software receipt
+        run: |
+          cat > docs/validation/msfa-worklet-diagnostics.md <<EOF
+          # MSFA AudioWorklet measured diagnostics
+
+          Source commit: \`${GITHUB_SHA}\`
+
+          Overall software gate: **SUCCESS**
+
+          The AudioWorklet now measures its own render callback duration using `performance.now()` when that clock exists in the worklet scope. Every 128 rendered callbacks it reports mean/max render milliseconds, the callback audio budget, mean/max budget utilization, callbacks exceeding the budget, currently active voices and configured polyphony. If a high-resolution clock is unavailable, no diagnostic sample is emitted rather than fabricating CPU data.
+
+          The main-thread controller validates these diagnostic messages and exposes the latest accepted sample read-only; diagnostics clear on shutdown. Node syntax check, virtual-engine audit, typecheck, lint, focused controller tests, full tests and production build passed.
+
+          Branded-browser execution and performance-limit evidence remain required before expanded renderer diagnostics can close their PLAN item.
+          EOF
+          rm .github/workflows/implement-worklet-diagnostics.yml
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add -A
+          git commit -m 'feat(audio): add measured worklet diagnostics' || true
+          git pull --rebase origin main
+          git push origin HEAD:main
