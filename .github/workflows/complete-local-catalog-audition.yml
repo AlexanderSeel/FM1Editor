@@ -1,0 +1,167 @@
+name: Complete local catalog voice audition
+
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/complete-local-catalog-audition.yml']
+
+permissions:
+  contents: write
+
+concurrency:
+  group: complete-local-catalog-audition
+  cancel-in-progress: false
+
+jobs:
+  complete:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Ensure App wiring and add per-bank audition selector
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          app=Path('src/App.tsx')
+          text=app.read_text(encoding='utf-8')
+          import_anchor="import { useMidi } from './hooks/useMidi'\n"
+          hook_import="import { useLocalVoiceAudition } from './hooks/useLocalVoiceAudition'\n"
+          if hook_import not in text:
+              if import_anchor not in text: raise SystemExit('useMidi import anchor missing')
+              text=text.replace(import_anchor,import_anchor+hook_import,1)
+          state_anchor="  const midi = useMidi(target)\n"
+          hook_state="  const { auditionVoice } = useLocalVoiceAudition()\n"
+          if hook_state not in text:
+              if state_anchor not in text: raise SystemExit('midi hook anchor missing')
+              text=text.replace(state_anchor,state_anchor+hook_state,1)
+          if text.count('onAuditionVoice={auditionVoice}') < 1:
+              catalog_anchor="""                    <PatchCatalogBrowser
+                      onImportToLibrary={patchLibrary.importVoices}
+"""
+              catalog_replacement="""                    <PatchCatalogBrowser
+                      onAuditionVoice={auditionVoice}
+                      onImportToLibrary={patchLibrary.importVoices}
+"""
+              if catalog_anchor not in text: raise SystemExit('catalog anchor missing')
+              text=text.replace(catalog_anchor,catalog_replacement,1)
+          if text.count('onAuditionVoice={auditionVoice}') < 2:
+              library_anchor="""                    <PatchLibrary
+                      currentVoice={voice}
+"""
+              library_replacement="""                    <PatchLibrary
+                      currentVoice={voice}
+                      onAuditionVoice={auditionVoice}
+"""
+              if library_anchor not in text: raise SystemExit('library anchor missing')
+              text=text.replace(library_anchor,library_replacement,1)
+          app.write_text(text,encoding='utf-8')
+
+          p=Path('src/components/PatchCatalogBrowser.tsx')
+          text=p.read_text(encoding='utf-8')
+          state_anchor="  const [auditioningEntryId, setAuditioningEntryId] = useState<string | null>(null)\n"
+          slot_state="  const [auditionSlots, setAuditionSlots] = useState<Record<string, number>>({})\n"
+          if slot_state not in text:
+              if state_anchor not in text: raise SystemExit('audition state anchor missing')
+              text=text.replace(state_anchor,state_anchor+slot_state,1)
+
+          old_sig="  const auditionEntry = async (entry: PatchCatalogEntry) => {\n"
+          new_sig="  const auditionEntry = async (entry: PatchCatalogEntry, voiceIndex: number) => {\n"
+          if old_sig in text:
+              text=text.replace(old_sig,new_sig,1)
+
+          old_voice="""      const { voices } = await readEntryVoices(entry)
+      const voice = voices[0]
+      if (!voice) throw new Error('The selected catalog bank contains no auditionable voice.')
+"""
+          new_voice="""      const { voices } = await readEntryVoices(entry)
+      const voice = voices[voiceIndex]
+      if (!voice) throw new Error(`The selected catalog bank has no auditionable voice at slot ${voiceIndex + 1}.`)
+"""
+          if old_voice in text:
+              text=text.replace(old_voice,new_voice,1)
+
+          text=text.replace('Auditioning ${voice.name || \'UNTITLED\'} from ${entry.title} locally.', 'Auditioning ${voice.name || \'UNTITLED\'} (slot ${voiceIndex + 1}) from ${entry.title} locally.',1)
+
+          old_actions='''                  <div className="flex flex-wrap gap-2">
+                    <button
+                      className="rounded-lg border border-violet-300/20 bg-violet-300/5 px-3 py-2 text-xs font-bold text-violet-200 disabled:cursor-not-allowed disabled:opacity-40"
+                      disabled={diagnostic || entryActionBusy}
+                      onClick={() => void auditionEntry(entry)}
+                      type="button"
+                    >
+                      {auditioningEntryId === entry.id ? 'Starting local…' : 'Audition first voice'}
+                    </button>
+'''
+          new_actions='''                  <div className="flex flex-wrap gap-2">
+                    {entry.voices.length > 1 && (
+                      <select
+                        aria-label={`Voice to audition from ${entry.title}`}
+                        className="max-w-[180px] rounded-lg border border-white/10 bg-slate-950 px-2 py-2 text-xs text-slate-200"
+                        disabled={entryActionBusy}
+                        onChange={(event) => setAuditionSlots((current) => ({ ...current, [entry.id]: Number(event.target.value) }))}
+                        value={auditionSlots[entry.id] ?? 0}
+                      >
+                        {entry.voices.map((voiceName, index) => (
+                          <option key={`${entry.id}-audition-${index}`} value={index}>{String(index + 1).padStart(2, '0')} · {voiceName || 'UNTITLED'}</option>
+                        ))}
+                      </select>
+                    )}
+                    <button
+                      className="rounded-lg border border-violet-300/20 bg-violet-300/5 px-3 py-2 text-xs font-bold text-violet-200 disabled:cursor-not-allowed disabled:opacity-40"
+                      disabled={diagnostic || entryActionBusy}
+                      onClick={() => void auditionEntry(entry, auditionSlots[entry.id] ?? 0)}
+                      type="button"
+                    >
+                      {auditioningEntryId === entry.id ? 'Starting local…' : 'Audition selected'}
+                    </button>
+'''
+          if old_actions in text:
+              text=text.replace(old_actions,new_actions,1)
+          elif 'Audition selected' not in text:
+              raise SystemExit('catalog action anchor missing')
+
+          text=text.replace('Browse banks, audition the first valid voice locally without changing the editor, or explicitly load/import a bank.', 'Browse banks, select and audition any named voice locally without changing the editor, or explicitly load/import a bank.',1)
+          p.write_text(text,encoding='utf-8')
+          PY
+      - name: Full software validation
+        run: |
+          npm install --no-audit --no-fund
+          npm run audit:virtual-dx7
+          npm run typecheck
+          npm run lint
+          npm run test
+          npm run build
+      - name: Record receipt and self-clean
+        run: |
+          python - <<'PY'
+          import os
+          from pathlib import Path
+          Path('docs/validation/local-catalog-audition-complete.md').write_text('\n'.join([
+            '# Direct local catalog/library audition completion','',
+            f"Validated source/workflow commit: `{os.environ['GITHUB_SHA']}`",'',
+            'Overall software gate: **SUCCESS**','',
+            '- `App.tsx` uses one shared local audition manager for catalog and local-library preview actions.',
+            '- Catalog cards expose a named voice-slot selector when the manifest contains multiple voice names; the selected semantic slot is parsed from the bank and auditioned without importing/loading it.',
+            '- Local-library cards audition their stored semantic voice directly.',
+            '- Every audition is an explicit short C4 browser-local action, auto-releases/closes, and a new audition cancels the previous controller first.',
+            '- Audition remains distinct from Load, Load bank, library import and all hardware MIDI/SysEx actions.',
+            '- Source audit, typecheck, lint, full tests and production build passed.',
+            '- Mounted Chrome/Edge click/PCM/state evidence remains a separate gate.'
+          ])+'\n',encoding='utf-8')
+          Path('.github/workflows/complete-local-catalog-audition.yml').unlink(missing_ok=True)
+          Path('.github/workflows/integrate-local-catalog-audition.yml').unlink(missing_ok=True)
+          PY
+      - name: Commit validated completion and cleanup
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git commit -m 'feat(library): complete direct local voice audition'
+          git pull --rebase origin main
+          git push origin HEAD:main
