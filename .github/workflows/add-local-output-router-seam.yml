@@ -1,0 +1,50 @@
+name: Add validated local output router seam
+
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/add-local-output-router-seam.yml']
+
+permissions:
+  contents: write
+
+jobs:
+  integrate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Add optional router seam and focused test
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          path = Path('src/audio/msfaAudioWorklet.ts')
+          text = path.read_text()
+          text = text.replace("import type { Dx7Voice } from '../domain/voice'\n", "import type { Dx7Voice } from '../domain/voice'\nimport type { LocalAudioOutputRouter } from './localAudioOutputRouter'\n")
+          text = text.replace("  loadPackage?: () => Promise<MsfaWorkletPackage>\n  readyTimeoutMs?: number\n", "  loadPackage?: () => Promise<MsfaWorkletPackage>\n  createOutputRouter?: () => LocalAudioOutputRouter\n  readyTimeoutMs?: number\n")
+          text = text.replace("  let node: AudioWorkletNodeLike | null = null\n  let enablePromise", "  let node: AudioWorkletNodeLike | null = null\n  let outputRouter: LocalAudioOutputRouter | null = null\n  let enablePromise")
+          text = text.replace("    if (node) {\n      try {\n        node.port.postMessage", "    if (node) {\n      try {\n        outputRouter?.dispose()\n      } catch {\n        // Optional local output routing performs best-effort teardown.\n      }\n      outputRouter = null\n      try {\n        node.port.postMessage")
+          text = text.replace("          node.connect(context.destination)\n          await ready", "          outputRouter = dependencies.createOutputRouter?.() ?? null\n          if (outputRouter) {\n            outputRouter.connect(context as unknown as BaseAudioContext, node as unknown as AudioNode, context.destination)\n          } else {\n            node.connect(context.destination)\n          }\n          await ready")
+          path.write_text(text)
+
+          Path('src/audio/msfaOutputRouter.test.ts').write_text('''import { describe, expect, it, vi } from 'vitest'\nimport {\n  createMsfaAudioWorkletController,\n  MSFA_WORKLET_PERFORMANCE_ABI,\n  MSFA_WORKLET_POLYPHONY,\n  type MsfaWorkletPackage,\n} from './msfaAudioWorklet'\nimport { MSFA_OFFLINE_ENGINE_ID, MSFA_OFFLINE_ENGINE_LICENSE, MSFA_OFFLINE_ENGINE_VERSION } from './msfaOfflineEngine'\n\nconst packageData: MsfaWorkletPackage = {\n  manifest: {\n    engineId: MSFA_OFFLINE_ENGINE_ID, engineVersion: MSFA_OFFLINE_ENGINE_VERSION, licenseSpdx: MSFA_OFFLINE_ENGINE_LICENSE,\n    wasm: { path: 'fm1-msfa.wasm', sha256: 'a'.repeat(64) }, statefulSessionAbi: 1, renderBlockFrames: 64,\n    workletPolyphony: MSFA_WORKLET_POLYPHONY, performanceControlAbi: MSFA_WORKLET_PERFORMANCE_ABI,\n  },\n  wasmBinary: new ArrayBuffer(8),\n}\n\ndescribe('MSFA optional local output router', () => {\n  it('preserves the default dry destination connection when no router is supplied', async () => {\n    const connect = vi.fn()\n    const port = { onmessage: null as ((event: MessageEvent<unknown>) => void) | null, postMessage: vi.fn() }\n    const context = { sampleRate: 48_000, state: 'running' as AudioContextState, destination: {} as AudioNode, audioWorklet: { addModule: vi.fn(async () => {}) }, resume: vi.fn(async () => {}), close: vi.fn(async () => {}) }\n    const controller = createMsfaAudioWorkletController({\n      createAudioContext: () => context,\n      createAudioWorkletNode: () => { queueMicrotask(() => port.onmessage?.({ data: { type: 'ready', sampleRate: 48_000, blockFrames: 64, polyphony: MSFA_WORKLET_POLYPHONY, performanceAbi: MSFA_WORKLET_PERFORMANCE_ABI } } as MessageEvent<unknown>)); return { port, onprocessorerror: null, connect, disconnect: vi.fn() } },\n      loadPackage: async () => packageData,\n    })\n    await controller.enable()\n    expect(connect).toHaveBeenCalledWith(context.destination)\n    await controller.close()\n  })\n\n  it('uses and disposes an explicit router instead of directly connecting the worklet', async () => {\n    const directConnect = vi.fn()\n    const router = { connect: vi.fn(), dispose: vi.fn() }\n    const port = { onmessage: null as ((event: MessageEvent<unknown>) => void) | null, postMessage: vi.fn() }\n    const destination = {} as AudioNode\n    const context = { sampleRate: 48_000, state: 'running' as AudioContextState, destination, audioWorklet: { addModule: vi.fn(async () => {}) }, resume: vi.fn(async () => {}), close: vi.fn(async () => {}) }\n    const node = { port, onprocessorerror: null as ((event: ErrorEvent) => void) | null, connect: directConnect, disconnect: vi.fn() }\n    const controller = createMsfaAudioWorkletController({\n      createAudioContext: () => context,\n      createAudioWorkletNode: () => { queueMicrotask(() => port.onmessage?.({ data: { type: 'ready', sampleRate: 48_000, blockFrames: 64, polyphony: MSFA_WORKLET_POLYPHONY, performanceAbi: MSFA_WORKLET_PERFORMANCE_ABI } } as MessageEvent<unknown>)); return node },\n      loadPackage: async () => packageData,\n      createOutputRouter: () => router,\n    })\n    await controller.enable()\n    expect(directConnect).not.toHaveBeenCalled()\n    expect(router.connect).toHaveBeenCalledWith(context, node, destination)\n    await controller.close()\n    expect(router.dispose).toHaveBeenCalledTimes(1)\n  })\n})\n''')
+          PY
+      - run: npm install
+      - run: npm run typecheck
+      - run: npm run lint
+      - run: npm run test
+      - run: npm run build
+      - name: Commit validated seam
+        run: |
+          rm .github/workflows/add-local-output-router-seam.yml
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add -A src/audio/msfaAudioWorklet.ts src/audio/localAudioOutputRouter.ts src/audio/msfaOutputRouter.test.ts .github/workflows/add-local-output-router-seam.yml
+          git commit -m "feat(audio): add validated local output router seam"
+          git pull --rebase origin main
+          git push origin main
