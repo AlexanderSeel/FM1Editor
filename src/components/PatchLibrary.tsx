@@ -18,6 +18,7 @@ interface PatchLibraryProps {
   error: string | null
   currentVoice: Dx7Voice
   onLoad: (voice: Dx7Voice) => void
+  onAuditionVoice: (voice: Dx7Voice) => Promise<void>
   onSaveCurrent: (voice: Dx7Voice) => Promise<{ added: number; duplicates: number }>
   onExportBackup: () => Promise<string>
   onRestoreBackup: (text: string, mode: PatchLibraryRestoreMode) => Promise<PatchLibraryRestoreSummary>
@@ -32,6 +33,7 @@ export function PatchLibrary({
   error,
   currentVoice,
   onLoad,
+  onAuditionVoice,
   onSaveCurrent,
   onExportBackup,
   onRestoreBackup,
@@ -47,6 +49,7 @@ export function PatchLibrary({
   const [restoreMode, setRestoreMode] = useState<PatchLibraryRestoreMode>('merge')
   const [status, setStatus] = useState<string | null>(null)
   const [actionError, setActionError] = useState<string | null>(null)
+  const [auditioningId, setAuditioningId] = useState<string | null>(null)
   const visible = useMemo(
     () => filterPatchRecords(records, { query, favoritesOnly }),
     [favoritesOnly, query, records],
@@ -87,6 +90,20 @@ export function PatchLibrary({
     }
   }
 
+  const auditionVoice = async (record: PatchRecord) => {
+    setActionError(null)
+    setStatus(null)
+    setAuditioningId(record.id)
+    try {
+      await onAuditionVoice(record.voice)
+      setStatus(`Auditioning ${record.voice.name || 'UNTITLED'} locally. The editor voice and hardware output were not changed.`)
+    } catch (cause) {
+      setActionError(cause instanceof Error ? cause.message : 'The library voice could not be auditioned locally.')
+    } finally {
+      setAuditioningId(null)
+    }
+  }
+
   return (
     <section className="grid gap-5">
       <div className="rounded-2xl border border-white/10 bg-white/[0.025] p-4">
@@ -94,7 +111,7 @@ export function PatchLibrary({
           <div>
             <p className="text-xs font-semibold uppercase tracking-[0.18em] text-cyan-300">Local patch library</p>
             <h3 className="mt-1 text-xl font-bold text-white">{records.length} stored voices</h3>
-            <p className="mt-1 text-xs text-slate-500">IndexedDB schema v2 · portable JSON backup and restore</p>
+            <p className="mt-1 text-xs text-slate-500">IndexedDB schema v2 · portable JSON backup and restore · browser-local audition</p>
           </div>
           <div className="flex flex-wrap gap-2">
             <button
@@ -213,6 +230,9 @@ export function PatchLibrary({
                 placeholder="tags, comma, separated"
               />
               <div className="mt-3 flex flex-wrap gap-2">
+                <button className="rounded-lg border border-violet-300/20 bg-violet-300/5 px-3 py-1.5 text-xs font-bold text-violet-200 disabled:opacity-40" disabled={auditioningId !== null} onClick={() => void auditionVoice(record)} type="button">
+                  {auditioningId === record.id ? 'Starting local…' : 'Audition local'}
+                </button>
                 <button className="rounded-lg bg-cyan-300 px-3 py-1.5 text-xs font-bold text-slate-950" onClick={() => onLoad(record.voice)} type="button">Load</button>
                 <button className="rounded-lg border border-white/10 px-3 py-1.5 text-xs text-slate-300" onClick={() => setCompareA(record.id)} type="button">Set A</button>
                 <button className="rounded-lg border border-white/10 px-3 py-1.5 text-xs text-slate-300" onClick={() => setCompareB(record.id)} type="button">Set B</button>
@@ -222,6 +242,10 @@ export function PatchLibrary({
           ))}
         </div>
       )}
+
+      <p className="text-[11px] leading-5 text-slate-600">
+        **Audition local** uses the shared browser-local renderer for a short semantic C4 preview and does not load the voice into the editor or send it to hardware.
+      </p>
     </section>
   )
 }
