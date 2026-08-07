@@ -11,11 +11,20 @@ import { encodeAllNotesOff, encodeNoteOff, encodeNoteOn } from '../midi/fm1Proto
 import type { MidiOutputTarget } from '../midi/output'
 import { LiveMidiControls } from './LiveMidiControls'
 
+export interface VirtualPianoNoteTarget {
+  readonly label: string
+  noteOn(note: number, velocity: number): void | Promise<void>
+  noteOff(note: number): void | Promise<void>
+  allNotesOff(): void | Promise<void>
+}
+
 interface VirtualPianoProps {
   output: MidiOutputTarget | null
   midiChannel: number
   velocity: number
   baseOctave: number
+  noteTarget?: VirtualPianoNoteTarget | null
+  showMidiControls?: boolean
   disabled?: boolean
   disabledReason?: string
 }
@@ -68,11 +77,17 @@ function currentTarget() {
   }
 }
 
+function errorMessage(cause: unknown, fallback: string): string {
+  return cause instanceof Error ? cause.message : fallback
+}
+
 export function VirtualPiano({
   output,
   midiChannel,
   velocity,
   baseOctave,
+  noteTarget = null,
+  showMidiControls = true,
   disabled = false,
   disabledReason,
 }: VirtualPianoProps) {
@@ -80,49 +95,76 @@ export function VirtualPiano({
   const [activeNotes, setActiveNotes] = useState<ReadonlySet<number>>(() => new Set())
   const [error, setError] = useState<string | null>(null)
   const baseNote = (baseOctave + 1) * 12
-  const unavailable = output === null || disabled
+  const unavailable = disabled || (noteTarget === null && output === null)
   const target = currentTarget()
 
   const refreshActiveNotes = useCallback(() => {
     setActiveNotes(new Set(activeNotesRef.current))
   }, [])
 
-  const noteOn = useCallback((note: number) => {
-    if (!output || disabled || activeNotesRef.current.has(note)) return
-    try {
-      output.send(encodeNoteOn(midiChannel, note, velocity))
-      activeNotesRef.current.add(note)
-      refreshActiveNotes()
+  const observeAsync = useCallback((result: void | Promise<void>, fallback: string, onFailure?: () => void) => {
+    if (!(result instanceof Promise)) {
       setError(null)
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : 'The MIDI note could not be sent.')
+      return
     }
-  }, [disabled, midiChannel, output, refreshActiveNotes, velocity])
+    void result.then(() => setError(null)).catch((cause: unknown) => {
+      onFailure?.()
+      setError(errorMessage(cause, fallback))
+    })
+  }, [])
+
+  const noteOn = useCallback((note: number) => {
+    if (unavailable || activeNotesRef.current.has(note)) return
+    activeNotesRef.current.add(note)
+    refreshActiveNotes()
+    try {
+      if (noteTarget) {
+        observeAsync(noteTarget.noteOn(note, velocity), 'The local note could not be played.', () => {
+          activeNotesRef.current.delete(note)
+          refreshActiveNotes()
+        })
+      } else if (output) {
+        output.send(encodeNoteOn(midiChannel, note, velocity))
+        setError(null)
+      }
+    } catch (cause) {
+      activeNotesRef.current.delete(note)
+      refreshActiveNotes()
+      setError(errorMessage(cause, 'The note could not be played.'))
+    }
+  }, [midiChannel, noteTarget, observeAsync, output, refreshActiveNotes, unavailable, velocity])
 
   const noteOff = useCallback((note: number) => {
     if (!activeNotesRef.current.has(note)) return
+    activeNotesRef.current.delete(note)
+    refreshActiveNotes()
     try {
-      output?.send(encodeNoteOff(midiChannel, note))
+      if (noteTarget) {
+        observeAsync(noteTarget.noteOff(note), 'The local note-off could not be completed.')
+      } else if (output) {
+        output.send(encodeNoteOff(midiChannel, note))
+        setError(null)
+      }
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : 'The MIDI note-off message could not be sent.')
-    } finally {
-      activeNotesRef.current.delete(note)
-      refreshActiveNotes()
+      setError(errorMessage(cause, 'The note-off could not be completed.'))
     }
-  }, [midiChannel, output, refreshActiveNotes])
+  }, [midiChannel, noteTarget, observeAsync, output, refreshActiveNotes])
 
   const releaseAll = useCallback(() => {
-    if (output) {
-      try {
+    try {
+      if (noteTarget) {
+        observeAsync(noteTarget.allNotesOff(), 'Local all-notes-off could not be completed.')
+      } else if (output) {
         for (const note of activeNotesRef.current) output.send(encodeNoteOff(midiChannel, note))
         output.send(encodeAllNotesOff(midiChannel))
-      } catch (cause) {
-        setError(cause instanceof Error ? cause.message : 'All-notes-off could not be sent.')
+        setError(null)
       }
+    } catch (cause) {
+      setError(errorMessage(cause, 'All-notes-off could not be completed.'))
     }
     activeNotesRef.current.clear()
     refreshActiveNotes()
-  }, [midiChannel, output, refreshActiveNotes])
+  }, [midiChannel, noteTarget, observeAsync, output, refreshActiveNotes])
 
   useEffect(() => {
     if (disabled) releaseAll()
@@ -142,12 +184,19 @@ export function VirtualPiano({
   }, [releaseAll])
 
   useEffect(() => () => {
-    if (output) {
-      for (const note of activeNotesRef.current) output.send(encodeNoteOff(midiChannel, note))
-      output.send(encodeAllNotesOff(midiChannel))
+    try {
+      if (noteTarget) {
+        const result = noteTarget.allNotesOff()
+        if (result instanceof Promise) void result.catch(() => undefined)
+      } else if (output) {
+        for (const note of activeNotesRef.current) output.send(encodeNoteOff(midiChannel, note))
+        output.send(encodeAllNotesOff(midiChannel))
+      }
+    } catch {
+      // Best-effort note cleanup during unmount.
     }
     activeNotesRef.current.clear()
-  }, [midiChannel, output])
+  }, [midiChannel, noteTarget, output])
 
   const handleKeyDown = (event: ReactKeyboardEvent<HTMLButtonElement>) => {
     if (event.repeat || event.ctrlKey || event.metaKey || event.altKey) return
@@ -181,18 +230,23 @@ export function VirtualPiano({
 
   return (
     <div className="grid gap-4">
-      <LiveMidiControls
-        disabled={disabled}
-        midiChannel={midiChannel}
-        output={output}
-        target={target}
-      />
+      {showMidiControls && (
+        <LiveMidiControls
+          disabled={disabled}
+          midiChannel={midiChannel}
+          output={output}
+          target={target}
+        />
+      )}
 
       <div className="rounded-2xl border border-white/10 bg-black/20 p-3 sm:p-4">
         <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
           <div>
             <p className="text-xs font-semibold uppercase tracking-[0.16em] text-cyan-300">Virtual piano</p>
-            <p className="mt-1 text-[11px] text-slate-500">Mouse, touch or computer keys A–; · two octaves from C{baseOctave}</p>
+            <p className="mt-1 text-[11px] text-slate-500">
+              Mouse, touch or computer keys A–; · two octaves from C{baseOctave}
+              {noteTarget ? ` · ${noteTarget.label}` : ''}
+            </p>
           </div>
           <div className="flex flex-wrap gap-2">
             <button
@@ -208,7 +262,7 @@ export function VirtualPiano({
             </button>
             <button
               className="rounded-lg border border-white/10 px-3 py-1.5 text-xs font-semibold text-slate-300 hover:bg-white/5 disabled:opacity-40"
-              disabled={output === null}
+              disabled={unavailable}
               onClick={releaseAll}
               type="button"
             >
@@ -261,7 +315,7 @@ export function VirtualPiano({
 
         {unavailable && (
           <p className="mt-2 text-xs text-amber-200">
-            {disabledReason ?? (output ? 'Piano input is temporarily disabled.' : 'Connect and select a MIDI output to play.')}
+            {disabledReason ?? (noteTarget ? 'Piano input is temporarily disabled.' : output ? 'Piano input is temporarily disabled.' : 'Connect and select a MIDI output to play.')}
           </p>
         )}
         {error && <p className="mt-2 text-xs text-rose-300">{error}</p>}
