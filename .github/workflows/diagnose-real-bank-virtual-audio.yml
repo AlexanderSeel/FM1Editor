@@ -1,0 +1,58 @@
+name: Diagnose real-bank virtual audio
+
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/diagnose-real-bank-virtual-audio.yml']
+
+permissions:
+  contents: write
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm install --no-audit --no-fund
+      - name: Render real bundled bank voices
+        id: render
+        shell: bash
+        run: |
+          set +e
+          npm test -- src/audio/libraryVoiceRender.integration.test.ts 2>&1 | tee /tmp/real-bank-render.txt
+          code=${PIPESTATUS[0]}
+          echo "exit_code=$code" >> "$GITHUB_OUTPUT"
+          exit 0
+      - name: Record diagnostic
+        env:
+          EXIT_CODE: ${{ steps.render.outputs.exit_code }}
+        run: |
+          python - <<'PY'
+          import os
+          from pathlib import Path
+          output=Path('/tmp/real-bank-render.txt').read_text(encoding='utf-8',errors='replace')
+          ok=os.environ.get('EXIT_CODE')=='0'
+          lines=[
+            '# Real bundled-bank virtual audio diagnostic','',
+            f"Source commit: `{os.environ['GITHUB_SHA']}`",'',
+            f"Offline real-bank render: **{'SUCCESS' if ok else 'FAILED'}**",'',
+            'This diagnostic renders the first eight voices from the first valid 32-voice bank in the tracked `public/catalog/sysexFinal.zip` through the packaged MSFA WASM using the same semantic decoder and bridge as the browser local-audio path.','',
+            '```text',output[-12000:],'```',''
+          ]
+          Path('docs/validation/real-bank-virtual-audio-diagnostic.md').write_text('\n'.join(lines),encoding='utf-8')
+          Path('.github/workflows/diagnose-real-bank-virtual-audio.yml').unlink(missing_ok=True)
+          PY
+      - name: Commit diagnostic
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git commit -m 'test(ci): record real-bank virtual audio diagnostic' || true
+          git pull --rebase origin main
+          git push origin HEAD:main
