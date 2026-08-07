@@ -26,7 +26,8 @@
   "limitations": [
     "standard-12-TET only",
     "dry engine only",
-    "AudioWorklet browser soak not yet validated",
+    "validated real-time browser path is one voice only",
+    "headless CI soak does not measure audible hardware dropouts",
     "not physical-device validation"
   ],
   "statefulSessionAbi": 1,
