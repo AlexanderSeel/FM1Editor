@@ -193,10 +193,11 @@ try {
   if (titleAfterAudition !== initialVoiceTitle) throw new Error(`Audition implicitly loaded the candidate: ${initialVoiceTitle} -> ${titleAfterAudition}`)
 
   await clickButton(cdp, 'Load into editor', `${nearestRoot}.querySelector('article')`)
+  const normalizedCandidateName = firstCandidateName.split(' ').filter(Boolean).join(' ')
   await waitForExpression(cdp, `(() => {
     const current = (document.querySelector('.fm1-lcd-title')?.textContent ?? '').split(' ').filter(Boolean).join(' ');
-    const candidate = ${JSON.stringify('PLACEHOLDER')}; return current.length > 0 && current !== ${JSON.stringify('INITIAL_PLACEHOLDER')};
-  })()`.replace(${JSON.stringify('PLACEHOLDER')}, JSON.stringify(firstCandidateName.split(' ').filter(Boolean).join(' '))).replace(${JSON.stringify('INITIAL_PLACEHOLDER')}, JSON.stringify(initialVoiceTitle.split(' ').filter(Boolean).join(' '))), 15_000)
+    return current === ${JSON.stringify(normalizedCandidateName)};
+  })()`, 15_000)
   const finalVoiceTitle = await evaluate(cdp, `document.querySelector('.fm1-lcd-title')?.textContent?.trim() ?? ''`)
 
   const diagnosticsJson = await evaluate(cdp, `JSON.stringify({ errors: window.__fm1NearestErrors, rejections: window.__fm1NearestRejections, midiRequests: window.__fm1NearestMidiRequests, fetches: window.__fm1NearestFetches })`)

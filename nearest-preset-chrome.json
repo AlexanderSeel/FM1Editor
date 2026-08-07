@@ -1,0 +1,13 @@
+{
+  "ok": true,
+  "browserName": "chrome",
+  "browserProduct": "Chrome/151.0.7922.72",
+  "initialVoiceTitle": "INIT VOICE",
+  "firstCandidateName": "W.BASS   4",
+  "finalVoiceTitle": "W.BASS   4",
+  "resultCount": 8,
+  "referencePeak": 0.8912509083747864,
+  "candidatePeak": 0.24530029296875,
+  "midiRequests": 0,
+  "localFetchCount": 5
+}

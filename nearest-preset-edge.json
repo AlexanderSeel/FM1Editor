@@ -1,0 +1,13 @@
+{
+  "ok": true,
+  "browserName": "edge",
+  "browserProduct": "Edg/151.0.4129.59",
+  "initialVoiceTitle": "INIT VOICE",
+  "firstCandidateName": "W.BASS   4",
+  "finalVoiceTitle": "W.BASS   4",
+  "resultCount": 8,
+  "referencePeak": 0.8912509083747864,
+  "candidatePeak": 0.24273681640625,
+  "midiRequests": 0,
+  "localFetchCount": 5
+}
