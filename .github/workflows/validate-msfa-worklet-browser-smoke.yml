@@ -1,0 +1,97 @@
+name: Validate MSFA AudioWorklet browser smoke
+
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/validate-msfa-worklet-browser-smoke.yml']
+
+permissions:
+  contents: write
+
+concurrency:
+  group: validate-msfa-worklet-browser-smoke
+  cancel-in-progress: false
+
+jobs:
+  browser:
+    name: ${{ matrix.browser }} smoke
+    runs-on: windows-latest
+    timeout-minutes: 8
+    strategy:
+      fail-fast: false
+      matrix:
+        browser: [chrome, edge]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Execute real AudioWorklet smoke
+        continue-on-error: true
+        shell: pwsh
+        env:
+          BROWSER_NAME: ${{ matrix.browser }}
+        run: |
+          if ($env:BROWSER_NAME -eq 'chrome') {
+            $candidates = @("$env:ProgramFiles\Google\Chrome\Application\chrome.exe", "${env:ProgramFiles(x86)}\Google\Chrome\Application\chrome.exe")
+          } else {
+            $candidates = @("$env:ProgramFiles\Microsoft\Edge\Application\msedge.exe", "${env:ProgramFiles(x86)}\Microsoft\Edge\Application\msedge.exe")
+          }
+          $browser = $candidates | Where-Object { Test-Path $_ } | Select-Object -First 1
+          $result = "browser-smoke-$env:BROWSER_NAME.json"
+          if (-not $browser) {
+            @{ ok = $false; browserName = $env:BROWSER_NAME; requestedSoakSeconds = 20; error = 'Installed browser executable was not found on windows-latest' } | ConvertTo-Json | Set-Content -Encoding utf8 $result
+            exit 1
+          }
+          node scripts/test-msfa-audioworklet-browser.mjs --browser-executable "$browser" --browser-name "$env:BROWSER_NAME" --soak-seconds 20 --result "$result"
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: browser-smoke-${{ matrix.browser }}
+          path: browser-smoke-${{ matrix.browser }}.json
+          if-no-files-found: error
+
+  record:
+    if: always()
+    needs: browser
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: browser-smoke-*
+          path: browser-results
+          merge-multiple: true
+      - name: Record smoke receipt and self-clean
+        shell: bash
+        run: |
+          python - <<'PY'
+          import json, os
+          from pathlib import Path
+          root=Path('browser-results'); results=[]
+          for name in ['chrome','edge']:
+              p=root/f'browser-smoke-{name}.json'
+              if p.exists():
+                  try: d=json.loads(p.read_text(encoding='utf-8-sig'))
+                  except Exception as exc: d={'ok':False,'browserName':name,'error':f'invalid result: {exc}'}
+              else: d={'ok':False,'browserName':name,'error':'result artifact missing'}
+              results.append(d)
+          ok=all(bool(d.get('ok')) for d in results)
+          lines=['# MSFA AudioWorklet real-browser smoke','',f"Validated source commit: `{os.environ['GITHUB_SHA']}`",'',f"Overall smoke gate: **{'SUCCESS' if ok else 'FAILED'}**",'', '| Browser | Result | Version | Sample rate | Duration | Peak | Processor errors |','| --- | --- | --- | ---: | ---: | ---: | ---: |']
+          for d in results:
+              lines.append(f"| {d.get('browserName','?')} | **{'SUCCESS' if d.get('ok') else 'FAILURE'}** | {d.get('browserProduct','n/a')} | {d.get('sampleRate','n/a')} | {d.get('durationMs','n/a')} ms | {d.get('maxPeak','n/a')} | {d.get('processorErrors','n/a')} |")
+          lines += ['', '## Scope','', '- Runs the actual packaged stateful WASM inside the installed branded Chrome and Edge AudioWorklet environments on `windows-latest`.', '- Verifies manifest/WASM identity, initialization, reference voice load, repeated note lifecycle, non-silent graph output, return to silence and zero processor/window/unhandled-rejection errors.', '- Browser audio is headless and muted in CI; this validates graph/processor stability, not audible hardware dropout quality.', '- This 20-second smoke is a prerequisite only; the separate 600-second soak remains required.']
+          for d in results: lines += ['',f"## {d.get('browserName','browser')}",'```json',json.dumps(d,indent=2),'```']
+          Path('docs/validation/msfa-audioworklet-browser-smoke.md').write_text('\n'.join(lines)+'\n',encoding='utf-8')
+          Path('.github/workflows/validate-msfa-worklet-browser-smoke.yml').unlink(missing_ok=True)
+          PY
+      - shell: bash
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git diff --cached --quiet || git commit -m 'test(ci): record real-browser worklet smoke rerun'
+          git pull --rebase origin main
+          git push origin HEAD:main
