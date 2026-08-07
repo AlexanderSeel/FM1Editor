@@ -1,5 +1,5 @@
 {
   "ok": false,
   "browserName": "chrome",
-  "error": "Runtime.evaluate: Object reference chain is too long"
+  "error": "Timed out waiting for browser condition: document.body.textContent.includes('Loaded') && document.body.textContent.includes('ROM1A')"
 }
