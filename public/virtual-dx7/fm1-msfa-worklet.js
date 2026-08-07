@@ -26,7 +26,13 @@ class Fm1MsfaOneVoiceProcessor extends AudioWorkletProcessor {
 
   async initialize(wasmBinary) {
     try {
-      const module = await createFm1MsfaModule({ wasmBinary: new Uint8Array(wasmBinary) })
+      const module = await createFm1MsfaModule({
+        wasmBinary: new Uint8Array(wasmBinary),
+        // AudioWorkletGlobalScope does not expose URL in Chrome/Edge. The WASM
+        // bytes are already supplied above, so prevent Emscripten from resolving
+        // a URL that will never be fetched.
+        locateFile: (path) => path,
+      })
       if (this.disposed) return
       this.assertModule(module)
       const session = module._fm1_msfa_session_create(sampleRate)
