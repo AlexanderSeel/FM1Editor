@@ -8,7 +8,7 @@ import {
 } from './virtualDx7Engine'
 
 export const MSFA_OFFLINE_ENGINE_ID = 'fm1-editor-msfa-compatible' as const
-export const MSFA_OFFLINE_ENGINE_VERSION = 'msfa-2e182b3-fm1-v2-seeded' as const
+export const MSFA_OFFLINE_ENGINE_VERSION = 'msfa-2e182b3-fm1-v3-stateful' as const
 export const MSFA_OFFLINE_ENGINE_LICENSE = 'Apache-2.0' as const
 export const MSFA_OFFLINE_MODULE_PATH = 'virtual-dx7/fm1-msfa.mjs' as const
 
@@ -78,25 +78,26 @@ function assertCompatibleModule(module: MsfaEmscriptenModule): void {
 }
 
 function assertPlanAlignment(plan: VirtualDx7RenderPlan): void {
-  if (plan.noteOnFrames % VIRTUAL_DX7_RENDER_BLOCK_FRAMES !== 0) {
-    throw new Error('Virtual DX7 note-on frames must align to the MSFA render block')
+  if ((plan.noteOnFrames % VIRTUAL_DX7_RENDER_BLOCK_FRAMES) !== 0) {
+    throw new Error(`Virtual DX7 note-on frames must align to ${VIRTUAL_DX7_RENDER_BLOCK_FRAMES}`)
   }
-  if (plan.releaseFrames % VIRTUAL_DX7_RENDER_BLOCK_FRAMES !== 0) {
-    throw new Error('Virtual DX7 release frames must align to the MSFA render block')
+  if ((plan.releaseFrames % VIRTUAL_DX7_RENDER_BLOCK_FRAMES) !== 0) {
+    throw new Error(`Virtual DX7 release frames must align to ${VIRTUAL_DX7_RENDER_BLOCK_FRAMES}`)
   }
 }
 
 export function createMsfaOfflineEngine(options: MsfaOfflineEngineOptions = {}): VirtualDx7OfflineEngine {
   let modulePromise: Promise<MsfaEmscriptenModule> | null = null
 
-  const loadModule = (): Promise<MsfaEmscriptenModule> => {
-    if (modulePromise) return modulePromise
-    modulePromise = (async () => {
-      const factory = options.moduleFactory ?? await importModuleFactory(options.moduleUrl ?? defaultModuleUrl())
-      const module = await factory()
-      assertCompatibleModule(module)
-      return module
-    })()
+  const loadModule = async (): Promise<MsfaEmscriptenModule> => {
+    if (!modulePromise) {
+      modulePromise = (async () => {
+        const factory = options.moduleFactory ?? await importModuleFactory(options.moduleUrl ?? defaultModuleUrl())
+        const module = await factory()
+        assertCompatibleModule(module)
+        return module
+      })()
+    }
     return modulePromise
   }
 
@@ -104,7 +105,7 @@ export function createMsfaOfflineEngine(options: MsfaOfflineEngineOptions = {}):
     engineId: MSFA_OFFLINE_ENGINE_ID,
     engineVersion: MSFA_OFFLINE_ENGINE_VERSION,
     licenseSpdx: MSFA_OFFLINE_ENGINE_LICENSE,
-    async render(plan, signal) {
+    async render(plan, signal): Promise<VirtualDx7PcmRender> {
       throwIfAborted(signal)
       assertPlanAlignment(plan)
       const bridge = createMsfaCompatibleVoiceBridge(plan)
@@ -112,18 +113,20 @@ export function createMsfaOfflineEngine(options: MsfaOfflineEngineOptions = {}):
       throwIfAborted(signal)
 
       const patchPointer = module._malloc(bridge.patchBuffer.byteLength)
-      if (patchPointer === 0) throw new Error('Virtual DX7 WASM could not allocate the voice buffer')
+      const outputBytes = plan.totalFrames * Float32Array.BYTES_PER_ELEMENT
+      const outputPointer = module._malloc(outputBytes)
+      if (!patchPointer || !outputPointer) {
+        if (patchPointer) module._free(patchPointer)
+        if (outputPointer) module._free(outputPointer)
+        throw new Error('Virtual DX7 WASM allocation failed')
+      }
 
-      let outputPointer = 0
       try {
-        outputPointer = module._malloc(plan.totalFrames * Float32Array.BYTES_PER_ELEMENT)
-        if (outputPointer === 0) throw new Error('Virtual DX7 WASM could not allocate the PCM buffer')
-
         module.HEAPU8.set(bridge.patchBuffer, patchPointer)
         throwIfAborted(signal)
         const status = module._fm1_msfa_render(
           patchPointer,
-          bridge.patchBuffer.length,
+          bridge.patchBuffer.byteLength,
           plan.midiNote,
           plan.velocity,
           plan.sampleRate,
@@ -133,16 +136,9 @@ export function createMsfaOfflineEngine(options: MsfaOfflineEngineOptions = {}):
           outputPointer,
           plan.totalFrames,
         )
-        if (status !== 0) {
-          throw new Error(`Virtual DX7 WASM render failed with status ${status}`)
-        }
+        if (status !== 0) throw new Error(`Virtual DX7 WASM render failed with status ${status}`)
         throwIfAborted(signal)
-
-        const firstSample = outputPointer / Float32Array.BYTES_PER_ELEMENT
-        if (!Number.isInteger(firstSample)) {
-          throw new Error('Virtual DX7 WASM returned an unaligned PCM pointer')
-        }
-        const samples = module.HEAPF32.slice(firstSample, firstSample + plan.totalFrames)
+        const samples = new Float32Array(module.HEAPF32.buffer, outputPointer, plan.totalFrames).slice()
         const render: VirtualDx7PcmRender = {
           renderKey: plan.renderKey,
           sampleRate: plan.sampleRate,
@@ -153,7 +149,7 @@ export function createMsfaOfflineEngine(options: MsfaOfflineEngineOptions = {}):
         assertVirtualDx7PcmRender(plan, render)
         return render
       } finally {
-        if (outputPointer !== 0) module._free(outputPointer)
+        module._free(outputPointer)
         module._free(patchPointer)
       }
     },
