@@ -1,58 +1,29 @@
 # One-voice AudioWorklet software-boundary validation
 
-Validated source commit: `ecb60746174833024cb96e9d0f0456036aa9b2bb`
+Validated source commit: `1938e2fb17c5b1b9a93b8265b16109bf9960c6ba`
 
-Overall software gate: **FAILED**
+Overall software gate: **SUCCESS**
 
 | Check | Result |
 | --- | --- |
 | install | **SUCCESS** |
 | artifact | **SUCCESS** |
-| typecheck | **FAILURE** |
+| typecheck | **SUCCESS** |
 | lint | **SUCCESS** |
 | tests | **SUCCESS** |
-| build | **FAILURE** |
+| build | **SUCCESS** |
 
 ## Scope
 
-- Validates the TypeScript AudioWorklet controller, mocked browser lifecycle, local package verification, semantic voice routing and the actual packaged stateful WASM ABI.
-- The public worklet remains dry and one-voice only: two 64-frame engine blocks per standard 128-frame callback, note on/off, all-notes-off, zero-output fallback and disposal.
-- No Web MIDI, SysEx, effects or hardware-send path is introduced.
-- The controller package identity is aligned to `msfa-2e182b3-fm1-v3-stateful`, note validation rejects through the Promise API, and initialization has a bounded ready timeout.
+- Validates the TypeScript AudioWorklet controller, mocked browser lifecycle, local package verification, semantic voice routing and actual packaged stateful WASM ABI.
+- Worklet remains dry and one-voice only with two 64-frame engine blocks per standard 128-frame callback.
+- Package identity is `msfa-2e182b3-fm1-v3-stateful`; activation has a bounded ready timeout and Promise-consistent parameter validation.
 
-This is not browser AudioWorklet execution evidence. Chrome/Edge execution and soak remain separate required gates.
+Chrome/Edge AudioWorklet execution and soak remain separate gates.
 
 The temporary workflow removes itself; normal CI remains read-only.
 
-## typecheck failure log
+## Artifact regression
 ```text
-
-> fm1-editor@0.1.0 typecheck
-> tsc -b --pretty false
-
-src/audio/msfaAudioWorklet.ts(154,3): error TS2322: Type 'AudioWorkletNode' is not assignable to type 'AudioWorkletNodeLike'.
-  Types of property 'onprocessorerror' are incompatible.
-    Type '((this: AudioWorkletNode, ev: ErrorEvent) => any) | null' is not assignable to type '((event: Event) => void) | null'.
-      Type '(this: AudioWorkletNode, ev: ErrorEvent) => any' is not assignable to type '(event: Event) => void'.
-        Types of parameters 'ev' and 'event' are incompatible.
-          Type 'Event' is missing the following properties from type 'ErrorEvent': colno, error, filename, lineno, message
-```
-
-## build failure log
-```text
-
-> fm1-editor@0.1.0 prebuild
-> node scripts/sync-patch-catalog.mjs --best-effort
-
-Patch catalog synchronized: 35 validated website banks merged with the tracked sysexFinal.zip.
-
-> fm1-editor@0.1.0 build
-> tsc -b && vite build && node scripts/inject-service-worker-assets.mjs
-
-src/audio/msfaAudioWorklet.ts(154,3): error TS2322: Type 'AudioWorkletNode' is not assignable to type 'AudioWorkletNodeLike'.
-  Types of property 'onprocessorerror' are incompatible.
-    Type '((this: AudioWorkletNode, ev: ErrorEvent) => any) | null' is not assignable to type '((event: Event) => void) | null'.
-      Type '(this: AudioWorkletNode, ev: ErrorEvent) => any' is not assignable to type '(event: Event) => void'.
-        Types of parameters 'ev' and 'event' are incompatible.
-          Type 'Event' is missing the following properties from type 'ErrorEvent': colno, error, filename, lineno, message
+{"blockFrames":64,"callbackFrames":128,"fixedFrames":72000,"fixedSha256":"313be5ffcb29436e92ecce45b5e1002c72dd810c6999379844b82ce87a18cfc2","allNotesOffImmediateSilence":true,"noteOffReleaseMatchesOfflineReference":true}
 ```
