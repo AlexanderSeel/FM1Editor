@@ -25,6 +25,8 @@ describe('VirtualDx7PreviewPanel / Virtual FM-1 target', () => {
     expect(markup).toContain('LOCAL AUDIO OFF')
     expect(markup).toContain('Dry bypass')
     expect(markup).toContain('Master gain')
+    expect(markup).toContain('Virtual FM-1 render diagnostics')
+    expect(markup).toContain('measurement pending')
     expect(markup).toContain('Reference A/B · offline render')
     expect(markup).toContain('Download note WAV')
     expect(markup).toContain('Download chord WAV')

@@ -5,6 +5,7 @@ import {
   MSFA_WORKLET_PERFORMANCE_ABI,
   MSFA_WORKLET_POLYPHONY,
   type MsfaAudioWorkletController,
+  type MsfaAudioWorkletDiagnostics,
   type MsfaLocalPerformanceConfig,
 } from '../audio/msfaAudioWorklet'
 import { MSFA_OFFLINE_ENGINE_VERSION } from '../audio/msfaOfflineEngine'
@@ -72,6 +73,7 @@ export function VirtualDx7PreviewPanel({
   const [sustain, setSustain] = useState(false)
   const [fxBypassed, setFxBypassed] = useState(true)
   const [masterGainDb, setMasterGainDb] = useState<number>(VIRTUAL_FM1_MASTER_GAIN_DEFAULT_DB)
+  const [diagnostics, setDiagnostics] = useState<MsfaAudioWorkletDiagnostics | null>(null)
   const [status, setStatus] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
 
@@ -94,6 +96,7 @@ export function VirtualDx7PreviewPanel({
     const controller = controllerRef.current
     controllerRef.current = null
     loadedVoiceRef.current = null
+    setDiagnostics(null)
     if (controller) {
       try {
         await controller.close()
@@ -140,6 +143,17 @@ export function VirtualDx7PreviewPanel({
   useEffect(() => { outputRouteRef.current?.setFxState(fxState) }, [fxState])
   useEffect(() => { outputRouteRef.current?.setFxBypass(fxBypassed) }, [fxBypassed])
   useEffect(() => { outputRouteRef.current?.setMasterGainDb(masterGainDb) }, [masterGainDb])
+
+  useEffect(() => {
+    if (state !== 'ready') {
+      setDiagnostics(null)
+      return
+    }
+    const updateDiagnostics = () => setDiagnostics(controllerRef.current?.diagnostics ?? null)
+    updateDiagnostics()
+    const timer = window.setInterval(updateDiagnostics, 500)
+    return () => window.clearInterval(timer)
+  }, [state])
 
   useEffect(() => {
     const controller = controllerRef.current
@@ -336,6 +350,13 @@ export function VirtualDx7PreviewPanel({
           )
         })}
       </details>
+
+      <div className="mt-4 grid gap-3 rounded-xl border border-white/10 bg-black/15 p-3 sm:grid-cols-2 lg:grid-cols-4" aria-label="Virtual FM-1 render diagnostics">
+        <div><p className="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500">Voices</p><p className="mt-1 text-sm font-black text-white">{diagnostics ? `${diagnostics.activeVoices}/${diagnostics.polyphony}` : `0/${MSFA_WORKLET_POLYPHONY}`}</p></div>
+        <div><p className="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500">Mean render</p><p className="mt-1 text-sm font-black text-white">{diagnostics ? `${diagnostics.meanRenderMs.toFixed(3)} ms · ${(diagnostics.meanUtilization * 100).toFixed(1)}%` : 'measurement pending'}</p></div>
+        <div><p className="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500">Max render</p><p className="mt-1 text-sm font-black text-white">{diagnostics ? `${diagnostics.maxRenderMs.toFixed(3)} ms · ${(diagnostics.maxUtilization * 100).toFixed(1)}%` : 'measurement pending'}</p></div>
+        <div><p className="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500">Over budget</p><p className={`mt-1 text-sm font-black ${diagnostics?.overBudgetCallbacks ? 'text-amber-200' : 'text-emerald-200'}`}>{diagnostics ? `${diagnostics.overBudgetCallbacks}/${diagnostics.callbacks}` : '—'}</p></div>
+      </div>
 
       <div className="mt-4">
         <VirtualFm1PreviewExtras
