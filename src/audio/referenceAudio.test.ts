@@ -75,7 +75,7 @@ describe('reference audio preparation', () => {
     const decoded = { sampleRate: 48_000, durationSeconds: 1, channels: [sine(440, 48_000, 1)] }
     expect(() => prepareReferenceAudio(decoded, {
       region: { startSeconds: 0, endSeconds: 0.01 }, trimSilence: false, normalize: false,
-    })).toThrow(/at least 0.05 seconds/)
+    })).toThrow(/shorter than 0.05 seconds/)
     expect(() => prepareReferenceAudio(decoded, {
       region: { startSeconds: 0, endSeconds: 1 }, trimSilence: false, normalize: false, manualPitchHz: 10,
     })).toThrow(/between 20 and 5000 Hz/)
