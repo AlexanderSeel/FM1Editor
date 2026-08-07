@@ -1,0 +1,364 @@
+name: Implement preset descriptor cache
+
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/implement-preset-descriptor-cache.yml']
+
+permissions:
+  contents: write
+
+jobs:
+  implement:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - name: Add local descriptor cache and integrate index builder
+        run: |
+          cat > src/audio/presetDescriptorCache.ts <<'EOF'
+          import {
+            AUDIO_DESCRIPTOR_SCHEMA,
+            type AudioDescriptorConfig,
+            type AudioDescriptorProfile,
+            type AudioSpectralResolutionDescriptor,
+          } from './audioDescriptors'
+
+          export const PRESET_DESCRIPTOR_CACHE_SCHEMA = 'fm1-editor.preset-descriptor-cache.v1' as const
+          export const PRESET_DESCRIPTOR_CACHE_DATABASE = 'fm1-editor-audio-to-fm' as const
+          export const PRESET_DESCRIPTOR_CACHE_STORE = 'preset-descriptors' as const
+
+          export interface PresetDescriptorCacheIdentity {
+            readonly engineId: string
+            readonly engineVersion: string
+            readonly renderKey: string
+            readonly descriptorConfig: AudioDescriptorConfig
+          }
+
+          export interface PresetDescriptorCache {
+            get(key: string): Promise<AudioDescriptorProfile | null>
+            put(key: string, descriptor: AudioDescriptorProfile): Promise<void>
+            clear(): Promise<void>
+          }
+
+          function configIdentity(config: AudioDescriptorConfig): string {
+            return JSON.stringify({
+              envelopeWindowMs: config.envelopeWindowMs,
+              envelopeHopMs: config.envelopeHopMs,
+              fftSizes: [...config.fftSizes],
+              spectralHopRatio: config.spectralHopRatio,
+              melBands: config.melBands,
+              mfccCount: config.mfccCount,
+              rolloffFraction: config.rolloffFraction,
+              maxSpectralFrames: config.maxSpectralFrames,
+              minimumHz: config.minimumHz,
+              maximumHz: config.maximumHz,
+            })
+          }
+
+          export function createPresetDescriptorCacheKey(identity: PresetDescriptorCacheIdentity): string {
+            if (!identity.engineId || !identity.engineVersion || !identity.renderKey) {
+              throw new Error('Preset descriptor cache identity requires engine id, version and render key.')
+            }
+            return [
+              PRESET_DESCRIPTOR_CACHE_SCHEMA,
+              identity.engineId,
+              identity.engineVersion,
+              identity.renderKey,
+              configIdentity(identity.descriptorConfig),
+            ].join('|')
+          }
+
+          function cloneResolution(value: AudioSpectralResolutionDescriptor): AudioSpectralResolutionDescriptor {
+            return {
+              ...value,
+              sampledFrameStarts: new Uint32Array(value.sampledFrameStarts),
+              logMagnitude: new Float32Array(value.logMagnitude),
+              logMelSpectrum: new Float32Array(value.logMelSpectrum),
+              mfcc: new Float32Array(value.mfcc),
+              spectralCentroidHz: new Float32Array(value.spectralCentroidHz),
+              spectralRolloffHz: new Float32Array(value.spectralRolloffHz),
+              spectralFlatness: new Float32Array(value.spectralFlatness),
+              centroidMoments: { ...value.centroidMoments },
+              rolloffMoments: { ...value.rolloffMoments },
+              flatnessMoments: { ...value.flatnessMoments },
+            }
+          }
+
+          export function cloneAudioDescriptorProfile(value: AudioDescriptorProfile): AudioDescriptorProfile {
+            return {
+              ...value,
+              config: { ...value.config, fftSizes: [...value.config.fftSizes] },
+              amplitudeEnvelopeRms: new Float32Array(value.amplitudeEnvelopeRms),
+              amplitudeEnvelopePeak: new Float32Array(value.amplitudeEnvelopePeak),
+              spectral: value.spectral.map(cloneResolution),
+            }
+          }
+
+          function validDescriptor(value: unknown): value is AudioDescriptorProfile {
+            if (!value || typeof value !== 'object') return false
+            const candidate = value as Partial<AudioDescriptorProfile>
+            return candidate.schema === AUDIO_DESCRIPTOR_SCHEMA
+              && typeof candidate.sampleRate === 'number'
+              && Number.isFinite(candidate.sampleRate)
+              && candidate.sampleRate > 0
+              && candidate.amplitudeEnvelopeRms instanceof Float32Array
+              && candidate.amplitudeEnvelopePeak instanceof Float32Array
+              && Array.isArray(candidate.spectral)
+          }
+
+          export function createMemoryPresetDescriptorCache(): PresetDescriptorCache {
+            const values = new Map<string, AudioDescriptorProfile>()
+            return {
+              async get(key) {
+                const value = values.get(key)
+                return value ? cloneAudioDescriptorProfile(value) : null
+              },
+              async put(key, descriptor) {
+                if (!validDescriptor(descriptor)) throw new Error('Preset descriptor cache accepts only versioned audio descriptor profiles.')
+                values.set(key, cloneAudioDescriptorProfile(descriptor))
+              },
+              async clear() {
+                values.clear()
+              },
+            }
+          }
+
+          function requestResult<T>(request: IDBRequest<T>): Promise<T> {
+            return new Promise<T>((resolve, reject) => {
+              request.onsuccess = () => resolve(request.result)
+              request.onerror = () => reject(request.error ?? new Error('IndexedDB request failed.'))
+            })
+          }
+
+          function transactionDone(transaction: IDBTransaction): Promise<void> {
+            return new Promise<void>((resolve, reject) => {
+              transaction.oncomplete = () => resolve()
+              transaction.onerror = () => reject(transaction.error ?? new Error('IndexedDB transaction failed.'))
+              transaction.onabort = () => reject(transaction.error ?? new Error('IndexedDB transaction was aborted.'))
+            })
+          }
+
+          export function createIndexedDbPresetDescriptorCache(options: {
+            readonly indexedDb?: IDBFactory
+            readonly databaseName?: string
+          } = {}): PresetDescriptorCache {
+            const factory = options.indexedDb ?? globalThis.indexedDB
+            if (!factory) throw new Error('IndexedDB is not available for the local descriptor cache.')
+            const databaseName = options.databaseName ?? PRESET_DESCRIPTOR_CACHE_DATABASE
+            let databasePromise: Promise<IDBDatabase> | null = null
+
+            const database = () => {
+              if (databasePromise) return databasePromise
+              databasePromise = new Promise<IDBDatabase>((resolve, reject) => {
+                const request = factory.open(databaseName, 1)
+                request.onupgradeneeded = () => {
+                  const db = request.result
+                  if (!db.objectStoreNames.contains(PRESET_DESCRIPTOR_CACHE_STORE)) {
+                    db.createObjectStore(PRESET_DESCRIPTOR_CACHE_STORE)
+                  }
+                }
+                request.onsuccess = () => resolve(request.result)
+                request.onerror = () => reject(request.error ?? new Error('Unable to open local preset descriptor cache.'))
+                request.onblocked = () => reject(new Error('Local preset descriptor cache upgrade is blocked by another tab.'))
+              })
+              return databasePromise
+            }
+
+            return {
+              async get(key) {
+                const db = await database()
+                const transaction = db.transaction(PRESET_DESCRIPTOR_CACHE_STORE, 'readonly')
+                const value = await requestResult(transaction.objectStore(PRESET_DESCRIPTOR_CACHE_STORE).get(key))
+                await transactionDone(transaction)
+                return validDescriptor(value) ? cloneAudioDescriptorProfile(value) : null
+              },
+              async put(key, descriptor) {
+                if (!validDescriptor(descriptor)) throw new Error('Preset descriptor cache accepts only versioned audio descriptor profiles.')
+                const db = await database()
+                const transaction = db.transaction(PRESET_DESCRIPTOR_CACHE_STORE, 'readwrite')
+                transaction.objectStore(PRESET_DESCRIPTOR_CACHE_STORE).put(cloneAudioDescriptorProfile(descriptor), key)
+                await transactionDone(transaction)
+              },
+              async clear() {
+                const db = await database()
+                const transaction = db.transaction(PRESET_DESCRIPTOR_CACHE_STORE, 'readwrite')
+                transaction.objectStore(PRESET_DESCRIPTOR_CACHE_STORE).clear()
+                await transactionDone(transaction)
+              },
+            }
+          }
+          EOF
+
+          python - <<'PY'
+          from pathlib import Path
+          path=Path('src/audio/nearestPreset.ts')
+          text=path.read_text(encoding='utf-8')
+          import_anchor="import type { Dx7Voice } from '../domain/voice'\n"
+          cache_import="import { createPresetDescriptorCacheKey, type PresetDescriptorCache } from './presetDescriptorCache'\n"
+          if cache_import not in text:
+              if import_anchor not in text: raise SystemExit('nearestPreset import anchor missing')
+              text=text.replace(import_anchor, import_anchor+cache_import, 1)
+          options_anchor='''  readonly descriptorConfig?: AudioDescriptorConfig\n  readonly signal?: AbortSignal\n  readonly onProgress?: (completedRenders: number, totalRenders: number, candidate: PresetIndexCandidate, probe: PresetRenderProbe) => void\n'''
+          options_new='''  readonly descriptorConfig?: AudioDescriptorConfig\n  readonly signal?: AbortSignal\n  readonly descriptorCache?: PresetDescriptorCache\n  readonly onCacheHit?: (candidate: PresetIndexCandidate, probe: PresetRenderProbe, cacheKey: string) => void\n  readonly onProgress?: (completedRenders: number, totalRenders: number, candidate: PresetIndexCandidate, probe: PresetRenderProbe) => void\n'''
+          if options_anchor in text:
+              text=text.replace(options_anchor, options_new, 1)
+          elif 'readonly descriptorCache?: PresetDescriptorCache' not in text:
+              raise SystemExit('nearestPreset options anchor missing')
+          old='''      const render = await engine.render(plan, options.signal)\n      throwIfAborted(options.signal)\n      const descriptor = createAudioDescriptorProfile(render.samples, render.sampleRate, descriptorConfig)\n      indexedProbes.push({ probe: cloneProbe(probe), renderKey: render.renderKey, descriptor })\n'''
+          new='''      const cacheKey = createPresetDescriptorCacheKey({\n        engineId: engine.engineId,\n        engineVersion: engine.engineVersion,\n        renderKey: plan.renderKey,\n        descriptorConfig,\n      })\n      let descriptor = options.descriptorCache ? await options.descriptorCache.get(cacheKey) : null\n      throwIfAborted(options.signal)\n      if (descriptor) {\n        options.onCacheHit?.(candidate, probe, cacheKey)\n      } else {\n        const render = await engine.render(plan, options.signal)\n        throwIfAborted(options.signal)\n        descriptor = createAudioDescriptorProfile(render.samples, render.sampleRate, descriptorConfig)\n        if (options.descriptorCache) await options.descriptorCache.put(cacheKey, descriptor)\n      }\n      indexedProbes.push({ probe: cloneProbe(probe), renderKey: plan.renderKey, descriptor })\n'''
+          if old in text:
+              text=text.replace(old,new,1)
+          elif 'createPresetDescriptorCacheKey({' not in text:
+              raise SystemExit('nearestPreset render block anchor missing')
+          path.write_text(text,encoding='utf-8')
+          PY
+
+          cat > src/audio/presetDescriptorCache.test.ts <<'EOF'
+          import { describe, expect, it, vi } from 'vitest'
+          import { createInitializedVoice } from '../domain/voice'
+          import { type AudioDescriptorConfig } from './audioDescriptors'
+          import { buildPresetDescriptorIndex } from './nearestPreset'
+          import {
+            createMemoryPresetDescriptorCache,
+            createPresetDescriptorCacheKey,
+          } from './presetDescriptorCache'
+          import type { VirtualDx7OfflineEngine, VirtualDx7RenderPlan } from './virtualDx7Engine'
+
+          const CONFIG: AudioDescriptorConfig = {
+            envelopeWindowMs: 20,
+            envelopeHopMs: 10,
+            fftSizes: [256],
+            spectralHopRatio: 0.25,
+            melBands: 12,
+            mfccCount: 6,
+            rolloffFraction: 0.85,
+            maxSpectralFrames: 4,
+            minimumHz: 20,
+            maximumHz: null,
+          }
+
+          describe('preset descriptor cache', () => {
+            it('keys descriptors by engine, render identity and descriptor configuration', () => {
+              const base = {
+                engineId: 'msfa',
+                engineVersion: '1',
+                renderKey: 'render-a',
+                descriptorConfig: CONFIG,
+              }
+              const first = createPresetDescriptorCacheKey(base)
+              expect(createPresetDescriptorCacheKey({ ...base })).toBe(first)
+              expect(createPresetDescriptorCacheKey({ ...base, engineVersion: '2' })).not.toBe(first)
+              expect(createPresetDescriptorCacheKey({ ...base, renderKey: 'render-b' })).not.toBe(first)
+              expect(createPresetDescriptorCacheKey({
+                ...base,
+                descriptorConfig: { ...CONFIG, mfccCount: 5 },
+              })).not.toBe(first)
+            })
+
+            it('reuses cached descriptors without rendering unchanged standardized probes', async () => {
+              const render = vi.fn(async (plan: VirtualDx7RenderPlan) => ({
+                renderKey: plan.renderKey,
+                sampleRate: plan.sampleRate,
+                channelCount: 1 as const,
+                frameCount: plan.totalFrames,
+                samples: new Float32Array(plan.totalFrames),
+              }))
+              const engine: VirtualDx7OfflineEngine = {
+                engineId: 'msfa-test',
+                engineVersion: 'cache-v1',
+                licenseSpdx: 'Apache-2.0',
+                render,
+              }
+              const cache = createMemoryPresetDescriptorCache()
+              const candidate = { id: 'voice-1', voice: createInitializedVoice('CACHE'), sourceLabel: 'catalog' }
+              const probe = { id: 'c4', midiNote: 60, velocity: 100, noteOnSeconds: 0.1, releaseSeconds: 0.1, randomSeed: 42 }
+
+              const first = await buildPresetDescriptorIndex([candidate], engine, {
+                probes: [probe], descriptorConfig: CONFIG, descriptorCache: cache,
+              })
+              expect(render).toHaveBeenCalledTimes(1)
+
+              const onCacheHit = vi.fn()
+              const second = await buildPresetDescriptorIndex([candidate], engine, {
+                probes: [probe], descriptorConfig: CONFIG, descriptorCache: cache, onCacheHit,
+              })
+
+              expect(render).toHaveBeenCalledTimes(1)
+              expect(onCacheHit).toHaveBeenCalledTimes(1)
+              expect(second.entries[0]?.probes[0]?.renderKey).toBe(first.entries[0]?.probes[0]?.renderKey)
+              expect(Array.from(second.entries[0]?.probes[0]?.descriptor.amplitudeEnvelopeRms ?? [])).toEqual(
+                Array.from(first.entries[0]?.probes[0]?.descriptor.amplitudeEnvelopeRms ?? []),
+              )
+            })
+
+            it('returns isolated descriptor snapshots from the memory cache', async () => {
+              const render = vi.fn(async (plan: VirtualDx7RenderPlan) => ({
+                renderKey: plan.renderKey,
+                sampleRate: plan.sampleRate,
+                channelCount: 1 as const,
+                frameCount: plan.totalFrames,
+                samples: new Float32Array(plan.totalFrames),
+              }))
+              const engine: VirtualDx7OfflineEngine = { engineId: 'x', engineVersion: '1', licenseSpdx: 'test', render }
+              const cache = createMemoryPresetDescriptorCache()
+              const candidate = { id: 'one', voice: createInitializedVoice(), sourceLabel: 'catalog' }
+              const probe = { id: 'p', midiNote: 60, velocity: 100, noteOnSeconds: 0.1, releaseSeconds: 0.1, randomSeed: 1 }
+              const index = await buildPresetDescriptorIndex([candidate], engine, { probes: [probe], descriptorConfig: CONFIG, descriptorCache: cache })
+              const stored = index.entries[0]?.probes[0]?.descriptor
+              expect(stored).toBeDefined()
+              if (stored && stored.amplitudeEnvelopeRms.length > 0) stored.amplitudeEnvelopeRms[0] = 0.75
+              const second = await buildPresetDescriptorIndex([candidate], engine, { probes: [probe], descriptorConfig: CONFIG, descriptorCache: cache })
+              expect(second.entries[0]?.probes[0]?.descriptor.amplitudeEnvelopeRms[0]).toBe(0)
+            })
+          })
+          EOF
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - run: npm install --no-audit --no-fund
+      - run: npm run audit:virtual-dx7
+      - run: npm run typecheck
+      - run: npm run lint
+      - run: npm test -- src/audio/presetDescriptorCache.test.ts src/audio/nearestPreset.test.ts src/audio/audioDescriptors.test.ts
+      - run: npm run test
+      - run: npm run build
+      - name: Persist validation and roadmap status
+        run: |
+          cat > docs/validation/preset-descriptor-cache.md <<EOF
+          # Preset descriptor cache and render-index validation
+
+          Source commit: \`${GITHUB_SHA}\`
+
+          Overall software gate: **SUCCESS**
+
+          ## Accepted scope
+
+          - Descriptor cache keys include engine id/version, deterministic semantic render key, descriptor schema and the complete descriptor configuration.
+          - Unchanged standardized preset probes reuse cached descriptors without invoking the synth renderer.
+          - Cache misses render through the validated offline engine and persist the resulting versioned descriptor profile.
+          - A browser IndexedDB adapter stores typed descriptor arrays locally; an isolated memory adapter provides deterministic test coverage.
+          - Cache reads return cloned descriptor snapshots so consumers cannot mutate cached state accidentally.
+          - The existing cancellable standardized preset index workflow now accepts the cache without changing semantic voices, probe definitions or physical-hardware boundaries.
+          - Virtual-DX7 source audit, typecheck, lint, focused cache/index tests, the full test suite and production build all passed.
+
+          No reference audio, descriptor or rendered PCM is uploaded by this cache. Physical FM-1/DX7 timing or fidelity is not part of this validation.
+          EOF
+          python - <<'PY'
+          from pathlib import Path
+          path=Path('PLAN.md')
+          text=path.read_text(encoding='utf-8')
+          old='- [ ] Add a descriptor cache and standardized render-index workflow around the validated deterministic local renderer so matching does not depend on physical FM-1 hardware or real-time playback timing.'
+          new='- [x] Add a local descriptor cache and standardized render-index workflow around the validated deterministic renderer, keyed by engine/render/descriptor identity so unchanged catalog probes avoid rerendering and matching remains independent of physical FM-1 hardware or real-time playback timing. Evidence: [`docs/validation/preset-descriptor-cache.md`](./docs/validation/preset-descriptor-cache.md).'
+          if old not in text: raise SystemExit('Expected descriptor-cache roadmap item not found')
+          path.write_text(text.replace(old,new,1),encoding='utf-8')
+          PY
+          rm .github/workflows/implement-preset-descriptor-cache.yml
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add -A
+          git commit -m 'feat(audio): add local preset descriptor cache'
+          git pull --rebase origin main
+          git push origin HEAD:main
