@@ -4,6 +4,9 @@ import type { VirtualDx7RenderRequest } from './virtualDx7Engine'
 
 export const VIRTUAL_DX7_REFERENCE_FIXTURE_ID = 'fm1-editor-reference-voice-v1' as const
 export const VIRTUAL_DX7_REFERENCE_SYSEX_FILENAME = 'fm1-editor-reference-voice-v1.syx' as const
+export const VIRTUAL_DX7_REFERENCE_SYSEX_SHA256 = '45aa70a4755c802b1657e522c5bbbd6d1162893aef781923676962766d4b8410' as const
+export const VIRTUAL_DX7_REFERENCE_VOICE_DATA_SHA256 = 'd694dafd4a1d5eb7746169fbb0ade7f0a7a53215678f7e47de355cb91da50055' as const
+export const VIRTUAL_DX7_REFERENCE_BRIDGE_SHA256 = 'fd435cb7a1c75c05eccb9d084278244074b1a2c17c0e074f6f7ede0606c67a98' as const
 
 const OPERATOR_SPECS = [
   { outputLevel: 99, coarse: 1, fine: 0, detune: 7, rates: [96, 72, 58, 52], levels: [99, 86, 72, 0] },
