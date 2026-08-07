@@ -30,7 +30,7 @@ describe('LocalSequenceAudioPanel', () => {
     expect(markup).toContain('Internal 120 BPM')
   })
 
-  it('shows external clock as hardware-only instead of substituting browser timing', () => {
+  it('exposes external MIDI input clock as an explicit local-audio route', () => {
     const markup = renderToStaticMarkup(
       <LocalSequenceAudioPanel
         createController={unreachableController}
@@ -39,7 +39,9 @@ describe('LocalSequenceAudioPanel', () => {
       />,
     )
 
-    expect(markup).toContain('External clock · hardware route only')
-    expect(markup).toContain('External MIDI clock remains on the hardware path')
+    expect(markup).toContain('External MIDI input clock')
+    expect(markup).toContain('Arm external local')
+    expect(markup).toContain('selected MIDI input')
+    expect(markup).toContain('never sends sequence notes or transport to the selected MIDI output')
   })
 })
