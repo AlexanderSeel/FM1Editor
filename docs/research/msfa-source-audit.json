@@ -1,0 +1,272 @@
+{
+  "schemaVersion": 1,
+  "reviewedAt": "2026-08-07",
+  "upstream": {
+    "repository": "https://github.com/asb2m10/dexed",
+    "commit": "2e182b3db85c09083ab13c8b9b00565ce7d9ff85",
+    "rootLicense": "GPL-3.0",
+    "msfaProjectStatement": "Dexed README states that the msfa component remains Apache-2.0; file-level headers remain authoritative for the spike admission decision."
+  },
+  "distributionStatus": "not-vendored",
+  "policy": {
+    "publicApi": "semantic-dx7-voice-only",
+    "allowedLicenses": ["Apache-2.0", "FM1-Editor-owned"],
+    "forbiddenPathPrefixes": [
+      "Source/Plugin",
+      "Source/DXComponents",
+      "Source/GlobalEditor",
+      "Source/OperatorEditor",
+      "Source/CartManager",
+      "Source/SysexComm",
+      "libs/JUCE",
+      "libs/vst3sdk",
+      "libs/clap-juce-extensions"
+    ],
+    "forbiddenIncludes": [
+      "../Dexed.h",
+      "juce_",
+      "libMTSClient.h",
+      "Tunings.h"
+    ],
+    "requiredBeforeVendoring": [
+      "materialize the pinned upstream files from the exact commit",
+      "compute and record SHA-256 for every copied or modified upstream file",
+      "retain original copyright and Apache-2.0 headers on derived files",
+      "add Apache-2.0 license text and a project NOTICE/attribution file",
+      "run scripts/verify-msfa-source-audit.mjs against the materialized source set"
+    ]
+  },
+  "boundaryDecisions": {
+    "standardTuning": "Do not copy Source/msfa/tuning.h or tuning.cc. Implement a small FM1 Editor-owned 12-TET adapter matching the standard-tuning arithmetic used by the pinned source. Microtuning is outside the feasibility spike.",
+    "mtsEsp": "Do not compile or copy MTS-ESP in the feasibility spike. Remove MTS-ESP references from the derived note wrapper. Audit an exact MTS-ESP revision only if microtuning is added later.",
+    "controllers": "controllers.h is Apache-2.0-marked but includes GPL-3.0 Source/Dexed.h. A derived spike copy must remove that include and remain limited to controller state required by the renderer.",
+    "envelope": "env.cc is Apache-2.0-marked but includes GPL-3.0 Source/Dexed.h. The include is outside the synthesis algorithm and must be removed in the derived spike copy.",
+    "note": "dx7note.h/.cc are Apache-2.0-marked but currently depend on tuning and MTS-ESP integration. The derived spike must keep standard 12-TET behavior while removing those optional dependencies.",
+    "effects": "No Dexed effects, JUCE audio graph, UI, cartridge, SysEx wrapper or plugin code is part of the dry renderer. FM-1-inspired effects remain a separate later Web Audio layer."
+  },
+  "files": [
+    {
+      "path": "Source/msfa/synth.h",
+      "upstreamBlobSha1": "c64005b4704906c2e421342e7fb65abe4401aa2f",
+      "sha256": null,
+      "licenseConclusion": "Apache-2.0",
+      "action": "copy-unmodified",
+      "forbiddenIncludes": []
+    },
+    {
+      "path": "Source/msfa/aligned_buf.h",
+      "upstreamBlobSha1": "8f7c5b68273b42f22ef9d61c5e4403025649e1cc",
+      "sha256": null,
+      "licenseConclusion": "Apache-2.0",
+      "action": "copy-unmodified",
+      "forbiddenIncludes": []
+    },
+    {
+      "path": "Source/msfa/env.h",
+      "upstreamBlobSha1": "9d426e48238ff4dd2150e09f5b83db76fc4cdb28",
+      "sha256": null,
+      "licenseConclusion": "Apache-2.0",
+      "action": "copy-unmodified",
+      "forbiddenIncludes": []
+    },
+    {
+      "path": "Source/msfa/env.cc",
+      "upstreamBlobSha1": "d48696f636e27520852c842f6e1ec87be681cf0d",
+      "sha256": null,
+      "licenseConclusion": "Apache-2.0",
+      "action": "patch-required",
+      "forbiddenIncludes": ["../Dexed.h"],
+      "requiredEdits": ["remove the GPL-3.0 ../Dexed.h include; retain the Apache-2.0 header and envelope implementation"]
+    },
+    {
+      "path": "Source/msfa/exp2.h",
+      "upstreamBlobSha1": "016ca331de869ca816731ea065d5d22b92eae332",
+      "sha256": null,
+      "licenseConclusion": "Apache-2.0",
+      "action": "copy-unmodified",
+      "forbiddenIncludes": []
+    },
+    {
+      "path": "Source/msfa/exp2.cc",
+      "upstreamBlobSha1": "84feb20540e045107893929964a8ed834b2c10f5",
+      "sha256": null,
+      "licenseConclusion": "Apache-2.0",
+      "action": "copy-unmodified",
+      "forbiddenIncludes": []
+    },
+    {
+      "path": "Source/msfa/freqlut.h",
+      "upstreamBlobSha1": "5cba4af3e238c4d67e4e5e543a338fb5a8335b33",
+      "sha256": null,
+      "licenseConclusion": "Apache-2.0",
+      "action": "copy-unmodified",
+      "forbiddenIncludes": []
+    },
+    {
+      "path": "Source/msfa/freqlut.cc",
+      "upstreamBlobSha1": "931ef672871c6023902ee95a28f7f33dc290496b",
+      "sha256": null,
+      "licenseConclusion": "Apache-2.0",
+      "action": "copy-unmodified",
+      "forbiddenIncludes": []
+    },
+    {
+      "path": "Source/msfa/sin.h",
+      "upstreamBlobSha1": "6605e9964e11b56196de20bc16ddcf77c73a3650",
+      "sha256": null,
+      "licenseConclusion": "Apache-2.0",
+      "action": "copy-unmodified",
+      "forbiddenIncludes": []
+    },
+    {
+      "path": "Source/msfa/sin.cc",
+      "upstreamBlobSha1": "3257dcdf9561d1728edff410178d7c403717c9d5",
+      "sha256": null,
+      "licenseConclusion": "Apache-2.0",
+      "action": "copy-unmodified",
+      "forbiddenIncludes": []
+    },
+    {
+      "path": "Source/msfa/fm_op_kernel.h",
+      "upstreamBlobSha1": "c9739e5e924367fcd93e28e7e986c05c1115f93b",
+      "sha256": null,
+      "licenseConclusion": "Apache-2.0",
+      "action": "copy-unmodified",
+      "forbiddenIncludes": []
+    },
+    {
+      "path": "Source/msfa/fm_op_kernel.cc",
+      "upstreamBlobSha1": "a14ff6a46e1c335e4634fed3fb7ae92e8f6c2844",
+      "sha256": null,
+      "licenseConclusion": "Apache-2.0",
+      "action": "copy-unmodified",
+      "forbiddenIncludes": []
+    },
+    {
+      "path": "Source/msfa/controllers.h",
+      "upstreamBlobSha1": "9049d7f19acbe8851cf80c834430448142d155e3",
+      "sha256": null,
+      "licenseConclusion": "Apache-2.0",
+      "action": "patch-required",
+      "forbiddenIncludes": ["../Dexed.h"],
+      "requiredEdits": ["remove the GPL-3.0 ../Dexed.h include", "keep only controller state used by the dry renderer"]
+    },
+    {
+      "path": "Source/msfa/fm_core.h",
+      "upstreamBlobSha1": "6daef838b9dd4eb2a040853f5d1170b8ea667a58",
+      "sha256": null,
+      "licenseConclusion": "Apache-2.0",
+      "action": "patch-required",
+      "forbiddenIncludes": [],
+      "requiredEdits": ["drop the unused controllers.h include if the derived build no longer needs it through this header"]
+    },
+    {
+      "path": "Source/msfa/fm_core.cc",
+      "upstreamBlobSha1": "8c148bfd8ccf56ec02510bb5f6ef81298b890310",
+      "sha256": null,
+      "licenseConclusion": "Apache-2.0",
+      "action": "copy-unmodified",
+      "forbiddenIncludes": []
+    },
+    {
+      "path": "Source/msfa/pitchenv.h",
+      "upstreamBlobSha1": "e10634105ac666221373e814e232527aaa7fc067",
+      "sha256": null,
+      "licenseConclusion": "Apache-2.0",
+      "action": "copy-unmodified",
+      "forbiddenIncludes": []
+    },
+    {
+      "path": "Source/msfa/pitchenv.cc",
+      "upstreamBlobSha1": "a85b8d4b3682e2f05ecdb65d4488477232102f89",
+      "sha256": null,
+      "licenseConclusion": "Apache-2.0",
+      "action": "copy-unmodified",
+      "forbiddenIncludes": []
+    },
+    {
+      "path": "Source/msfa/lfo.h",
+      "upstreamBlobSha1": "288857dd1b0d82cc510679872055daa3a075e8a3",
+      "sha256": null,
+      "licenseConclusion": "Apache-2.0",
+      "action": "copy-unmodified",
+      "forbiddenIncludes": []
+    },
+    {
+      "path": "Source/msfa/lfo.cc",
+      "upstreamBlobSha1": "1a4311c645b66fc7653378e2021ce455a1efc5bd",
+      "sha256": null,
+      "licenseConclusion": "Apache-2.0",
+      "action": "copy-unmodified",
+      "forbiddenIncludes": []
+    },
+    {
+      "path": "Source/msfa/porta.h",
+      "upstreamBlobSha1": "99614ff407dc948a26ec52cfc76b1802a85a0239",
+      "sha256": null,
+      "licenseConclusion": "Apache-2.0",
+      "action": "copy-unmodified",
+      "forbiddenIncludes": []
+    },
+    {
+      "path": "Source/msfa/porta.cpp",
+      "upstreamBlobSha1": "c585a51044290f58c38b4090602e06345ae31826",
+      "sha256": null,
+      "licenseConclusion": "Apache-2.0",
+      "action": "copy-unmodified",
+      "forbiddenIncludes": []
+    },
+    {
+      "path": "Source/msfa/dx7note.h",
+      "upstreamBlobSha1": "3ba583d5159423dc856afe6a90cfcd038694c4d7",
+      "sha256": null,
+      "licenseConclusion": "Apache-2.0",
+      "action": "patch-required",
+      "forbiddenIncludes": ["libMTSClient.h", "tuning.h"],
+      "requiredEdits": ["replace tuning/MTS-ESP types with the FM1 Editor-owned standard-12-TET adapter", "retain the semantic patch/note/velocity interface"]
+    },
+    {
+      "path": "Source/msfa/dx7note.cc",
+      "upstreamBlobSha1": "272328312e5a83a8d50e284bbecb75b06b35089e",
+      "sha256": null,
+      "licenseConclusion": "Apache-2.0",
+      "action": "patch-required",
+      "forbiddenIncludes": [],
+      "requiredEdits": ["remove MTS_HasMaster/MTS_NoteToFrequency branches", "use the FM1 Editor-owned standard-12-TET log-frequency adapter", "leave microtuning and MPE expansion outside the feasibility acceptance gate"]
+    }
+  ],
+  "excludedUpstreamFiles": [
+    {
+      "path": "Source/Dexed.h",
+      "upstreamBlobSha1": "dec601480732f32f12cb5f49bb309cf25213090b",
+      "licenseConclusion": "GPL-3.0-or-later",
+      "reason": "application-wrapper header; not part of the Apache-only spike"
+    },
+    {
+      "path": "Source/msfa/tuning.h",
+      "upstreamBlobSha1": "cf7f2872e7cebad083b617d8ddc00ca95ef39fd3",
+      "licenseConclusion": "not-approved-for-copy",
+      "reason": "no file-level Apache header in the reviewed file and it requires external Tunings.h; replace with an FM1 Editor-owned standard-12-TET adapter"
+    },
+    {
+      "path": "Source/msfa/tuning.cc",
+      "upstreamBlobSha1": "d90606b1f4106533de9d34338b31fb2c66ac01f6",
+      "licenseConclusion": "not-approved-for-copy",
+      "reason": "no file-level Apache header in the reviewed file; directly depends on JUCE GUI and tuning-library code"
+    }
+  ],
+  "excludedTransitiveComponents": [
+    {
+      "component": "JUCE",
+      "reason": "not required by the dry MSFA feasibility renderer; complete Dexed wrapper remains excluded"
+    },
+    {
+      "component": "MTS-ESP",
+      "reason": "optional microtuning dependency removed from the standard-12-TET feasibility boundary"
+    },
+    {
+      "component": "surge-synthesizer/tuning-library",
+      "reason": "microtuning is outside the feasibility spike; no Tunings.h dependency is admitted"
+    }
+  ]
+}
