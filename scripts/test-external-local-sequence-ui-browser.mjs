@@ -104,7 +104,7 @@ class CdpConnection {
 }
 
 async function evaluate(cdp, expression, awaitPromise = false) {
-  const result = await cdp.send('Runtime.evaluate', { expression, awaitPromise, returnByValue: true })
+  const result = await cdp.send('Runtime.evaluate', { expression, awaitPromise, returnByValue: false })
   if (result.exceptionDetails) throw new Error(result.exceptionDetails.exception?.description ?? result.exceptionDetails.text ?? 'Browser evaluation failed')
   return result.result?.value
 }
@@ -165,7 +165,7 @@ try {
 
   await cdp.send('Page.navigate', { url: pageUrl })
   await waitForExpression(cdp, `document.readyState === 'complete' && document.body.textContent.includes('Voice')`)
-  await evaluate(cdp, `(() => { window.__fm1UiErrors = []; window.__fm1UiRejections = []; addEventListener('error', (event) => window.__fm1UiErrors.push(String(event.error?.message ?? event.message ?? 'window error'))); addEventListener('unhandledrejection', (event) => window.__fm1UiRejections.push(String(event.reason?.message ?? event.reason ?? 'unhandled rejection'))); const Original = window.AudioWorkletNode; window.__fm1TrackedWorkletNodes = []; window.AudioWorkletNode = new Proxy(Original, { construct(target, args, newTarget) { const node = Reflect.construct(target, args, newTarget); window.__fm1TrackedWorkletNodes.push(node); return node; } }); })()`)
+  await evaluate(cdp, `(() => { window.__fm1UiErrors = []; window.__fm1UiRejections = []; addEventListener('error', (event) => window.__fm1UiErrors.push(String(event.error?.message ?? event.message ?? 'window error'))); addEventListener('unhandledrejection', (event) => window.__fm1UiRejections.push(String(event.reason?.message ?? event.reason ?? 'unhandled rejection'))); const Original = window.AudioWorkletNode; window.__fm1TrackedWorkletNodes = []; window.AudioWorkletNode = new Proxy(Original, { construct(target, args, newTarget) { const node = Reflect.construct(target, args, newTarget); window.__fm1TrackedWorkletNodes.push(node); return node; } }); return true; })()`)
 
   await clickButton(cdp, 'Connect FM-1')
   await waitForExpression(cdp, `document.body.textContent.includes('Virtual MIDI Clock') && document.body.textContent.includes('Ready')`)
@@ -179,22 +179,23 @@ try {
   await waitForExpression(cdp, `document.body.textContent.includes('LOCAL AUDIO READY')`, 15_000)
   const workletNodeCount = await evaluate(cdp, `window.__fm1TrackedWorkletNodes.length`)
   if (workletNodeCount !== 1) throw new Error(`Expected exactly one local worklet node, got ${workletNodeCount}`)
-  await evaluate(cdp, `(() => { const node = window.__fm1TrackedWorkletNodes[0]; const context = node.context; const analyser = context.createAnalyser(); analyser.fftSize = 2048; analyser.smoothingTimeConstant = 0; const gain = context.createGain(); gain.gain.value = 0; node.connect(analyser); analyser.connect(gain); gain.connect(context.destination); window.__fm1ExternalAnalyser = analyser; window.__fm1ExternalMonitorGain = gain; })()`)
+  await evaluate(cdp, `(() => { const node = window.__fm1TrackedWorkletNodes[0]; const context = node.context; const analyser = context.createAnalyser(); analyser.fftSize = 2048; analyser.smoothingTimeConstant = 0; const gain = context.createGain(); gain.gain.value = 0; node.connect(analyser); analyser.connect(gain); gain.connect(context.destination); window.__fm1ExternalAnalyser = analyser; window.__fm1ExternalMonitorGain = gain; return true; })()`)
 
   await clickButton(cdp, 'Arm external local')
   await waitForExpression(cdp, `document.body.textContent.includes('External local clock armed')`)
-  await evaluate(cdp, `(() => { window.__fm1EmitMidi([0xfa]); let ticks = 0; window.__fm1ClockTimer = setInterval(() => { window.__fm1EmitMidi([0xf8]); ticks += 1; if (ticks > 60) { clearInterval(window.__fm1ClockTimer); window.__fm1ClockTimer = null; } }, 20); })()`)
+  await evaluate(cdp, `(() => { window.__fm1EmitMidi([0xfa]); let ticks = 0; window.__fm1ClockTimer = setInterval(() => { window.__fm1EmitMidi([0xf8]); ticks += 1; if (ticks > 60) { clearInterval(window.__fm1ClockTimer); window.__fm1ClockTimer = null; } }, 20); return true; })()`)
   await waitForExpression(cdp, `document.body.textContent.includes('sequence follows MIDI Clock') || document.body.textContent.includes('Local playhead')`)
   const activePeak = await samplePeak(cdp, 800)
   if (!(activePeak > 1e-6)) throw new Error(`External-clock local route produced no measurable PCM: ${activePeak}`)
 
-  await evaluate(cdp, `(() => { if (window.__fm1ClockTimer) clearInterval(window.__fm1ClockTimer); window.__fm1ClockTimer = null; window.__fm1EmitMidi([0xfc]); })()`)
+  await evaluate(cdp, `(() => { if (window.__fm1ClockTimer) clearInterval(window.__fm1ClockTimer); window.__fm1ClockTimer = null; window.__fm1EmitMidi([0xfc]); return true; })()`)
   await waitForExpression(cdp, `document.body.textContent.includes('External MIDI Stop received')`)
   await sleep(250)
   const silencePeak = await samplePeak(cdp, 250)
   if (silencePeak >= 1e-4) throw new Error(`External-clock local route did not return to silence: ${silencePeak}`)
 
-  const diagnostics = await evaluate(cdp, `({ errors: window.__fm1UiErrors, rejections: window.__fm1UiRejections, midiPermissionRequests: window.__fm1MidiPermissionRequests, midiOutputSendCount: window.__fm1MidiOutputSendCount, externalArmed: document.body.textContent.includes('External input armed'), ready: document.body.textContent.includes('LOCAL AUDIO READY') })`)
+  const diagnosticsJson = await evaluate(cdp, `JSON.stringify({ errors: window.__fm1UiErrors, rejections: window.__fm1UiRejections, midiPermissionRequests: window.__fm1MidiPermissionRequests, midiOutputSendCount: window.__fm1MidiOutputSendCount, externalArmed: document.body.textContent.includes('External input armed'), ready: document.body.textContent.includes('LOCAL AUDIO READY') })`)
+  const diagnostics = JSON.parse(diagnosticsJson ?? '{}')
   if (diagnostics.errors.length || diagnostics.rejections.length) throw new Error(`UI browser errors: ${JSON.stringify(diagnostics)}`)
   if (diagnostics.midiPermissionRequests !== 1) throw new Error(`Expected one explicit MIDI access request, got ${diagnostics.midiPermissionRequests}`)
   if (diagnostics.midiOutputSendCount !== 0) throw new Error(`External local route unexpectedly sent MIDI output: ${diagnostics.midiOutputSendCount}`)
