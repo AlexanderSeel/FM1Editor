@@ -20,7 +20,6 @@ jobs:
       - run: npm install --no-audit --no-fund
       - run: npm run build
       - name: Run Chrome and Edge exact PCM acceptance
-        id: run
         shell: pwsh
         run: |
           $programFilesX86 = ${env:ProgramFiles(x86)}
@@ -35,27 +34,20 @@ jobs:
           if (-not $chrome) { throw 'Chrome not found' }
           if (-not $edge) { throw 'Edge not found' }
           node scripts/test-imported-bank-virtual-audio-browser.mjs --browser-executable $chrome --browser-name chrome --result imported-bank-audio-chrome.json
-          $chromeExit=$LASTEXITCODE
           node scripts/test-imported-bank-virtual-audio-browser.mjs --browser-executable $edge --browser-name edge --result imported-bank-audio-edge.json
-          $edgeExit=$LASTEXITCODE
-          "chrome_exit=$chromeExit" >> $env:GITHUB_OUTPUT
-          "edge_exit=$edgeExit" >> $env:GITHUB_OUTPUT
-          if ($chromeExit -eq 0 -and $edgeExit -eq 0) { "ok=true" >> $env:GITHUB_OUTPUT } else { "ok=false" >> $env:GITHUB_OUTPUT }
           exit 0
       - name: Record evidence and PLAN status
         shell: pwsh
-        env:
-          OK: ${{ steps.run.outputs.ok }}
         run: |
           @'
           import json, os
           from pathlib import Path
-          ok=os.environ.get('OK')=='true'
           def read(path):
               p=Path(path)
               return json.loads(p.read_text(encoding='utf-8')) if p.exists() else {'ok':False,'error':'result missing'}
           chrome=read('imported-bank-audio-chrome.json')
           edge=read('imported-bank-audio-edge.json')
+          ok=bool(chrome.get('ok')) and bool(edge.get('ok'))
           def row(name,d):
               if not d.get('ok'): return f"| {name} | FAILED | — | — | — | — | {d.get('error','unknown')} |"
               return f"| {name} | {d.get('browserProduct')} | {d.get('loadedVoicePeak'):.8f} | {d.get('catalogAuditionPeak'):.8f} | {d.get('savedAuditionPeak'):.8f} | {d.get('midiRequests')} | PASS |"
