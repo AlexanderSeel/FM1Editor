@@ -39,18 +39,8 @@ function cloneOperator(operator: Dx7Operator, voiceIndex: number, operatorIndex:
   const seed = voiceIndex * 17 + operatorIndex * 13
   return {
     envelope: {
-      rates: [
-        seed % 100,
-        (seed + 19) % 100,
-        (seed + 47) % 100,
-        (seed + 83) % 100,
-      ],
-      levels: [
-        (seed + 99) % 100,
-        (seed + 61) % 100,
-        (seed + 29) % 100,
-        seed % 100,
-      ],
+      rates: [seed % 100, (seed + 19) % 100, (seed + 47) % 100, (seed + 83) % 100],
+      levels: [(seed + 99) % 100, (seed + 61) % 100, (seed + 29) % 100, seed % 100],
     },
     keyboardScaling: {
       breakPoint: (seed * 3) % 100,
@@ -135,7 +125,7 @@ export function buildSyntheticSysexFixtureCorpus(): readonly SyntheticSysexFixtu
 
   const legacyBank = validBank.slice()
   legacyBank[6 + 8] = 127
-  legacyBank[6 + 16] = 0x7f
+  legacyBank[6 + 12] = (15 << 3) | ((legacyBank[6 + 12] ?? 0) & 0x07)
   const normalizedLegacyBank = withBankChecksum(legacyBank)
 
   const badChecksum = validSingle.slice()
@@ -143,10 +133,7 @@ export function buildSyntheticSysexFixtureCorpus(): readonly SyntheticSysexFixtu
 
   const unsupported = Uint8Array.of(0xf0, 0x7d, 0x01, 0x02, 0x03, 0xf7)
   const truncated = validSingle.slice(0, validSingle.length - 1)
-  const nestedStart = concatenate(
-    Uint8Array.of(0xf0, 0x43, 0x00),
-    validSingle,
-  )
+  const nestedStart = concatenate(Uint8Array.of(0xf0, 0x43, 0x00), validSingle)
   const mixed = concatenate(
     Uint8Array.of(0x00, 0x7f, 0xf7),
     validSingle,
@@ -220,13 +207,7 @@ export function buildSyntheticSysexFixtureCorpus(): readonly SyntheticSysexFixtu
       expectation: {
         completeMessageCount: 4,
         supportedMessageCount: 2,
-        diagnosticCodes: [
-          'ignored-bytes',
-          'stray-end',
-          'incomplete-message',
-          'unsupported-message',
-          'decode-error',
-        ],
+        diagnosticCodes: ['ignored-bytes', 'stray-end', 'incomplete-message', 'unsupported-message', 'decode-error'],
       },
     },
   ]
