@@ -4,12 +4,12 @@ import {
   prepareReferenceAudio,
   REFERENCE_AUDIO_MAX_DURATION_SECONDS,
   REFERENCE_AUDIO_MIN_REGION_SECONDS,
-  type DecodedReferenceAudio,
+  type DecodedReferenceAudioFile,
   type PreparedReferenceAudio,
 } from '../audio/referenceAudio'
 
 interface ReferenceAudioInputPanelProps {
-  onPrepared?: (reference: PreparedReferenceAudio | null, decoded: DecodedReferenceAudio | null) => void
+  onPrepared?: (reference: PreparedReferenceAudio | null, decoded: DecodedReferenceAudioFile | null) => void
 }
 
 function compactHash(hash: string): string {
@@ -18,7 +18,7 @@ function compactHash(hash: string): string {
 
 export function ReferenceAudioInputPanel({ onPrepared }: ReferenceAudioInputPanelProps) {
   const inputRef = useRef<HTMLInputElement>(null)
-  const [decoded, setDecoded] = useState<DecodedReferenceAudio | null>(null)
+  const [decoded, setDecoded] = useState<DecodedReferenceAudioFile | null>(null)
   const [prepared, setPrepared] = useState<PreparedReferenceAudio | null>(null)
   const [regionStart, setRegionStart] = useState(0)
   const [regionEnd, setRegionEnd] = useState(0)
