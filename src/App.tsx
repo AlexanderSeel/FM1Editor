@@ -12,6 +12,7 @@ import { PersistentWorkspace } from './components/PersistentWorkspace'
 import { SequenceEditor } from './components/SequenceEditor'
 import { SysexToolbar } from './components/SysexToolbar'
 import { TargetVoiceAuditionPanel } from './components/TargetVoiceAuditionPanel'
+import { VirtualDx7PreviewPanel } from './components/VirtualDx7PreviewPanel'
 import { VoiceEditor } from './components/VoiceEditor'
 import {
   getDeviceTargetDefinition,
@@ -314,6 +315,13 @@ export default function App() {
                       />
                     </CollapsibleSection>
                   )}
+                  <CollapsibleSection
+                    description="Audited dry DX7-compatible AudioWorklet · explicit browser-local enable · no MIDI hardware required"
+                    storageKey="voice-local-virtual-preview"
+                    title="Local virtual preview"
+                  >
+                    <VirtualDx7PreviewPanel voice={voice} />
+                  </CollapsibleSection>
                   <CollapsibleSection
                     description={fm1Mode ? 'Whole-bank transfer, preset recall and virtual piano' : 'Yamaha single-voice and 32-voice bulk transfer, plus virtual piano'}
                     storageKey="voice-bank-audition"
