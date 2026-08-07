@@ -258,17 +258,17 @@ try {
   await clickButton(cdp, 'Library')
   await waitForExpression(cdp, `document.body.textContent.includes('Merged SysEx library browser')`, 25_000)
   await setInput(cdp, 'Search the patch catalog', 'ROM1A')
-  await waitForExpression(cdp, `[...document.querySelectorAll('article')].some((article) => article.textContent?.includes('ROM1A') && [...article.querySelectorAll('button')].some((button) => button.textContent?.includes('Load bank') && !button.disabled))`, 25_000)
+  await waitForExpression(cdp, `[...document.querySelectorAll('article')].some((article) => [...article.querySelectorAll('button')].some((button) => button.textContent?.includes('Load bank') && !button.disabled))`, 25_000)
   const loaded = await evaluate(cdp, `(() => {
-    const article = [...document.querySelectorAll('article')].find((candidate) => candidate.textContent?.includes('ROM1A'));
+    const article = [...document.querySelectorAll('article')].find((candidate) => [...candidate.querySelectorAll('button')].some((button) => button.textContent?.includes('Load bank') && !button.disabled));
     const button = article && [...article.querySelectorAll('button')].find((candidate) => candidate.textContent?.includes('Load bank') && !candidate.disabled);
     if (!button) return false; button.click(); return true;
   })()`)
-  if (!loaded) throw new Error('Could not load ROM1A bank')
-  await waitForExpression(cdp, `[...document.querySelectorAll('article')].some((article) => article.textContent?.includes('ROM1A') && [...article.querySelectorAll('button')].some((button) => button.textContent?.trim() === 'Load bank' && !button.disabled))`, 30_000)
+  if (!loaded) throw new Error('Could not load the ROM1A-filtered bank')
+  await waitForExpression(cdp, `(document.querySelector('.fm1-lcd-title')?.textContent ?? '').replace(/\s+/g, ' ').includes('BRASS 1')`, 30_000)
 
   await clickButton(cdp, 'Voice')
-  await waitForExpression(cdp, `document.querySelector('.fm1-lcd-title')?.textContent?.includes('BRASS 1')`, 10_000)
+  await waitForExpression(cdp, `(document.querySelector('.fm1-lcd-title')?.textContent ?? '').replace(/\s+/g, ' ').includes('BRASS 1')`, 10_000)
   const loadedVoiceTitle = await evaluate(cdp, `document.querySelector('.fm1-lcd-title')?.textContent?.trim() ?? ''`)
 
   await clickButton(cdp, 'Enable local audio')
@@ -293,16 +293,16 @@ try {
   // Catalog audition must start audio before asynchronous ZIP voice resolution.
   await clickButton(cdp, 'Library')
   await setInput(cdp, 'Search the patch catalog', 'ROM1A')
-  await waitForExpression(cdp, `[...document.querySelectorAll('article')].some((article) => article.textContent?.includes('ROM1A') && [...article.querySelectorAll('button')].some((button) => button.textContent?.includes('Audition first voice') && !button.disabled))`, 20_000)
+  await waitForExpression(cdp, `[...document.querySelectorAll('article')].some((article) => [...article.querySelectorAll('button')].some((button) => button.textContent?.includes('Audition first voice') && !button.disabled))`, 20_000)
   const catalogAuditionClicked = await evaluate(cdp, `(() => {
-    const article = [...document.querySelectorAll('article')].find((candidate) => candidate.textContent?.includes('ROM1A'));
+    const article = [...document.querySelectorAll('article')].find((candidate) => [...candidate.querySelectorAll('button')].some((button) => button.textContent?.includes('Audition first voice') && !button.disabled));
     const button = article && [...article.querySelectorAll('button')].find((candidate) => candidate.textContent?.includes('Audition first voice') && !candidate.disabled);
     if (!button) return false; button.click(); return true;
   })()`)
   if (!catalogAuditionClicked) throw new Error('Could not start catalog audition')
   await waitForExpression(cdp, `window.__fm1ImportedBankNodes.length >= 2`, 15_000)
   await attachAnalyser(cdp, 1, '__fm1CatalogAuditionAnalyser')
-  await waitForExpression(cdp, `document.body.textContent.includes('Auditioning BRASS 1') || document.body.textContent.includes('Local audition: BRASS 1')`, 15_000)
+  await waitForExpression(cdp, `(document.body.textContent ?? '').replace(/\s+/g, ' ').includes('Auditioning BRASS 1') || (document.body.textContent ?? '').replace(/\s+/g, ' ').includes('Local audition: BRASS 1')`, 15_000)
   const catalogAuditionPeak = await samplePeak(cdp, '__fm1CatalogAuditionAnalyser', 600)
   if (!(catalogAuditionPeak > 1e-5)) throw new Error(`Catalog audition produced no measurable PCM: ${catalogAuditionPeak}`)
   await sleep(2_100)

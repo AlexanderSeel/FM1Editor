@@ -1,5 +1,5 @@
 {
   "ok": false,
   "browserName": "chrome",
-  "error": "Timed out waiting for browser condition: [...document.querySelectorAll('article')].some((article) => article.textContent?.includes('ROM1A') && [...article.querySelectorAll('button')].some((button) => button.textContent?.trim() === 'Load bank' && !button.disabled))"
+  "error": "Timed out waiting for http://127.0.0.1:56855/json/version: TypeError: fetch failed"
 }

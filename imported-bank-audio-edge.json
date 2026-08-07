@@ -1,5 +1,5 @@
 {
   "ok": false,
   "browserName": "edge",
-  "error": "Timed out waiting for browser condition: [...document.querySelectorAll('article')].some((article) => article.textContent?.includes('ROM1A') && [...article.querySelectorAll('button')].some((button) => button.textContent?.trim() === 'Load bank' && !button.disabled))"
+  "error": "Timed out waiting for browser condition: (document.querySelector('.fm1-lcd-title')?.textContent ?? '').replace(/s+/g, ' ').includes('BRASS 1')"
 }
