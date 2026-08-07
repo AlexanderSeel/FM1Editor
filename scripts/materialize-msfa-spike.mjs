@@ -110,6 +110,12 @@ note = replaceExact(
   'Dx7Note::Dx7Note() {',
   'dx7note.cc constructor',
 )
+note = replaceExact(
+  note,
+  'Dx7Note::Dx7Note() {\n    initialised_ = false;',
+  'Dx7Note::Dx7Note() {\n    initialised_ = false;\n    // The pinned source leaves feedback history uninitialized. Explicitly\n    // reset it so repeated offline renders start from identical state.\n    fb_buf_[0] = 0;\n    fb_buf_[1] = 0;',
+  'dx7note.cc deterministic feedback history',
+)
 note = replaceRegexOnce(
   note,
   /\n    if\( ! tuning_state_->is_standard_tuning\(\) && pb != 0 \)\n    \{[\s\S]*?\n    \}\n    \n    int32_t pitch_base/,
@@ -145,4 +151,4 @@ for (const name of ['env.cc', 'controllers.h', 'fm_core.h', 'dx7note.h', 'dx7not
 }
 
 console.log(`Materialized ${manifest.files.length} audited MSFA candidate files into temporary directory ${outputRoot}.`)
-console.log('Applied only the documented GPL/JUCE/MTS/tuning-boundary removals; no source was written into the FM1 Editor repository.')
+console.log('Applied only the documented GPL/JUCE/MTS/tuning-boundary removals and deterministic feedback reset; no source was written into the FM1 Editor repository.')
