@@ -1,0 +1,246 @@
+name: Validate final local catalog audition
+
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/validate-local-catalog-audition-final.yml']
+
+permissions:
+  contents: write
+
+concurrency:
+  group: validate-local-catalog-audition-final
+  cancel-in-progress: false
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Materialize final audition UI idempotently
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          app=Path('src/App.tsx')
+          text=app.read_text(encoding='utf-8')
+          import_anchor="import { useMidi } from './hooks/useMidi'\n"
+          hook_import="import { useLocalVoiceAudition } from './hooks/useLocalVoiceAudition'\n"
+          if hook_import not in text:
+              if import_anchor not in text: raise SystemExit('useMidi import anchor missing')
+              text=text.replace(import_anchor,import_anchor+hook_import,1)
+          state_anchor="  const midi = useMidi(target)\n"
+          hook_state="  const { auditionVoice } = useLocalVoiceAudition()\n"
+          if hook_state not in text:
+              if state_anchor not in text: raise SystemExit('midi hook anchor missing')
+              text=text.replace(state_anchor,state_anchor+hook_state,1)
+          if text.count('onAuditionVoice={auditionVoice}') < 1:
+              anchor="""                    <PatchCatalogBrowser
+                      onImportToLibrary={patchLibrary.importVoices}
+"""
+              replacement="""                    <PatchCatalogBrowser
+                      onAuditionVoice={auditionVoice}
+                      onImportToLibrary={patchLibrary.importVoices}
+"""
+              if anchor not in text: raise SystemExit('catalog anchor missing')
+              text=text.replace(anchor,replacement,1)
+          if text.count('onAuditionVoice={auditionVoice}') < 2:
+              anchor="""                    <PatchLibrary
+                      currentVoice={voice}
+"""
+              replacement="""                    <PatchLibrary
+                      currentVoice={voice}
+                      onAuditionVoice={auditionVoice}
+"""
+              if anchor not in text: raise SystemExit('library anchor missing')
+              text=text.replace(anchor,replacement,1)
+          app.write_text(text,encoding='utf-8')
+
+          catalog=Path('src/components/PatchCatalogBrowser.tsx')
+          text=catalog.read_text(encoding='utf-8')
+          state_anchor="  const [auditioningEntryId, setAuditioningEntryId] = useState<string | null>(null)\n"
+          slot_state="  const [auditionSlots, setAuditionSlots] = useState<Record<string, number>>({})\n"
+          if slot_state not in text:
+              if state_anchor not in text: raise SystemExit('audition state anchor missing')
+              text=text.replace(state_anchor,state_anchor+slot_state,1)
+          text=text.replace('  const auditionEntry = async (entry: PatchCatalogEntry) => {\n','  const auditionEntry = async (entry: PatchCatalogEntry, voiceIndex: number) => {\n',1)
+          text=text.replace("""      const { voices } = await readEntryVoices(entry)
+      const voice = voices[0]
+      if (!voice) throw new Error('The selected catalog bank contains no auditionable voice.')
+""","""      const { voices } = await readEntryVoices(entry)
+      const voice = voices[voiceIndex]
+      if (!voice) throw new Error(`The selected catalog bank has no auditionable voice at slot ${voiceIndex + 1}.`)
+""",1)
+          text=text.replace("setStatus(`Auditioning ${voice.name || 'UNTITLED'} from ${entry.title} locally. The editor voice and library were not changed.`)","setStatus(`Auditioning ${voice.name || 'UNTITLED'} (slot ${voiceIndex + 1}) from ${entry.title} locally. The editor voice and library were not changed.`)",1)
+          old='''                  <div className="flex flex-wrap gap-2">
+                    <button
+                      className="rounded-lg border border-violet-300/20 bg-violet-300/5 px-3 py-2 text-xs font-bold text-violet-200 disabled:cursor-not-allowed disabled:opacity-40"
+                      disabled={diagnostic || entryActionBusy}
+                      onClick={() => void auditionEntry(entry)}
+                      type="button"
+                    >
+                      {auditioningEntryId === entry.id ? 'Starting local…' : 'Audition first voice'}
+                    </button>
+'''
+          new='''                  <div className="flex flex-wrap gap-2">
+                    {entry.voices.length > 1 && (
+                      <select
+                        aria-label={`Voice to audition from ${entry.title}`}
+                        className="max-w-[180px] rounded-lg border border-white/10 bg-slate-950 px-2 py-2 text-xs text-slate-200"
+                        disabled={entryActionBusy}
+                        onChange={(event) => setAuditionSlots((current) => ({ ...current, [entry.id]: Number(event.target.value) }))}
+                        value={auditionSlots[entry.id] ?? 0}
+                      >
+                        {entry.voices.map((voiceName, index) => (
+                          <option key={`${entry.id}-audition-${index}`} value={index}>{String(index + 1).padStart(2, '0')} · {voiceName || 'UNTITLED'}</option>
+                        ))}
+                      </select>
+                    )}
+                    <button
+                      className="rounded-lg border border-violet-300/20 bg-violet-300/5 px-3 py-2 text-xs font-bold text-violet-200 disabled:cursor-not-allowed disabled:opacity-40"
+                      disabled={diagnostic || entryActionBusy}
+                      onClick={() => void auditionEntry(entry, auditionSlots[entry.id] ?? 0)}
+                      type="button"
+                    >
+                      {auditioningEntryId === entry.id ? 'Starting local…' : 'Audition selected'}
+                    </button>
+'''
+          if old in text:
+              text=text.replace(old,new,1)
+          elif 'Audition selected' not in text:
+              raise SystemExit('final audition action missing')
+          text=text.replace('Browse banks, audition the first valid voice locally without changing the editor, or explicitly load/import a bank.','Browse banks, select and audition any named voice locally without changing the editor, or explicitly load/import a bank.',1)
+          catalog.write_text(text,encoding='utf-8')
+          PY
+      - name: Same-source software gate and production build
+        run: |
+          npm install --no-audit --no-fund
+          npm run audit:virtual-dx7
+          node --check scripts/test-local-catalog-audition-ui-browser.mjs
+          npm run typecheck
+          npm run lint
+          npm run test
+          npm run build
+      - name: Assemble validation artifact
+        run: |
+          mkdir -p validation-source/src/components
+          cp src/App.tsx validation-source/src/App.tsx
+          cp src/components/PatchCatalogBrowser.tsx validation-source/src/components/PatchCatalogBrowser.tsx
+      - uses: actions/upload-artifact@v4
+        with:
+          name: final-catalog-audition-dist
+          path: dist/
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v4
+        with:
+          name: final-catalog-audition-source
+          path: validation-source/
+          if-no-files-found: error
+
+  browser:
+    needs: prepare
+    runs-on: windows-latest
+    timeout-minutes: 12
+    strategy:
+      fail-fast: false
+      matrix:
+        browser: [chrome, edge]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: actions/download-artifact@v4
+        with:
+          name: final-catalog-audition-dist
+          path: dist
+      - name: Execute mounted final catalog audition
+        continue-on-error: true
+        shell: pwsh
+        env:
+          BROWSER_NAME: ${{ matrix.browser }}
+        run: |
+          if ($env:BROWSER_NAME -eq 'chrome') {
+            $candidates=@("$env:ProgramFiles\Google\Chrome\Application\chrome.exe","${env:ProgramFiles(x86)}\Google\Chrome\Application\chrome.exe")
+          } else {
+            $candidates=@("$env:ProgramFiles\Microsoft\Edge\Application\msedge.exe","${env:ProgramFiles(x86)}\Microsoft\Edge\Application\msedge.exe")
+          }
+          $browser=$candidates | Where-Object { Test-Path $_ } | Select-Object -First 1
+          $result="catalog-audition-$env:BROWSER_NAME.json"
+          if(-not $browser){ @{ok=$false;browserName=$env:BROWSER_NAME;error='browser executable missing'} | ConvertTo-Json | Set-Content -Encoding utf8 $result; exit 1 }
+          node scripts/test-local-catalog-audition-ui-browser.mjs --browser-executable "$browser" --browser-name "$env:BROWSER_NAME" --result "$result"
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: catalog-audition-result-${{ matrix.browser }}
+          path: catalog-audition-${{ matrix.browser }}.json
+          if-no-files-found: error
+
+  record:
+    if: always()
+    needs: [prepare,browser]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/download-artifact@v4
+        continue-on-error: true
+        with:
+          name: final-catalog-audition-source
+          path: validation-source
+      - uses: actions/download-artifact@v4
+        continue-on-error: true
+        with:
+          pattern: catalog-audition-result-*
+          path: browser-results
+          merge-multiple: true
+      - name: Publish source only when software + both browsers succeed
+        env:
+          PREPARE_RESULT: ${{ needs.prepare.result }}
+        run: |
+          python - <<'PY'
+          import json,os,shutil
+          from pathlib import Path
+          software_ok=os.environ.get('PREPARE_RESULT')=='success'
+          results=[]
+          for name in ['chrome','edge']:
+              p=Path('browser-results')/f'catalog-audition-{name}.json'
+              if p.exists():
+                  try:d=json.loads(p.read_text(encoding='utf-8-sig'))
+                  except Exception as exc:d={'ok':False,'browserName':name,'error':f'invalid result: {exc}'}
+              else:d={'ok':False,'browserName':name,'error':'result missing'}
+              results.append(d)
+          browser_ok=all(bool(d.get('ok')) and d.get('workletNodeCount')==1 and isinstance(d.get('activePeak'),(int,float)) and d.get('activePeak')>1e-6 and isinstance(d.get('silencePeak'),(int,float)) and d.get('silencePeak')<1e-4 and d.get('midiRequests')==0 and d.get('editorTitleBefore')==d.get('editorTitleAfter') and not d.get('errors') and not d.get('rejections') for d in results)
+          ok=software_ok and browser_ok
+          if ok:
+              shutil.copy2('validation-source/src/App.tsx','src/App.tsx')
+              shutil.copy2('validation-source/src/components/PatchCatalogBrowser.tsx','src/components/PatchCatalogBrowser.tsx')
+          lines=['# Direct local catalog/library audition browser acceptance','',f"Validated source/workflow commit: `{os.environ['GITHUB_SHA']}`",'',f"Overall audition gate: **{'SUCCESS' if ok else 'FAILED'}**",'',f"- Same-source software suite: **{'SUCCESS' if software_ok else 'FAILED'}**",f"- Branded Chrome/Edge mounted catalog audition: **{'SUCCESS' if browser_ok else 'FAILED'}**",'', '| Browser | Result | Version | Selected slot | Worklet nodes | Active peak | Silence peak | MIDI requests | Editor unchanged |','| --- | --- | --- | --- | ---: | ---: | ---: | ---: | --- |']
+          for d in results:
+              selected=d.get('selectedVoice') or {}
+              lines.append(f"| {d.get('browserName','?')} | **{'SUCCESS' if d.get('ok') else 'FAILURE'}** | {d.get('browserProduct','n/a')} | {selected.get('label','n/a')} | {d.get('workletNodeCount','n/a')} | {d.get('activePeak','n/a')} | {d.get('silencePeak','n/a')} | {d.get('midiRequests','n/a')} | {'yes' if d.get('editorTitleBefore')==d.get('editorTitleAfter') and d.get('editorTitleBefore') else 'no'} |")
+          lines += ['', '## Acceptance scope','', '- The production app is opened in the Library workspace and a named catalog voice selector is changed to slot 2 before **Audition selected** is clicked.', '- The selected bank is parsed locally; audition does not load/import that voice into the editor.', '- Exactly one shared local worklet is created; measurable PCM is required during the short C4 audition and silence is required after automatic release/close.', '- `navigator.requestMIDIAccess` is instrumented and must remain at zero requests.', '- The initial editor voice title must be byte-for-byte unchanged after returning to the Voice workspace.', '- Catalog/library audition, editor loading/import and hardware transmission remain separate actions.', '- Headless/muted browser CI validates graph execution and state boundaries, not physical audible output.']
+          for d in results: lines += ['',f"## {d.get('browserName','browser')}",'```json',json.dumps(d,indent=2),'```']
+          Path('docs/validation/local-catalog-library-audition-browser.md').write_text('\n'.join(lines)+'\n',encoding='utf-8')
+          for candidate in [
+              '.github/workflows/validate-local-catalog-audition-final.yml',
+              '.github/workflows/complete-local-catalog-audition.yml',
+              '.github/workflows/integrate-local-catalog-audition.yml',
+          ]:
+              Path(candidate).unlink(missing_ok=True)
+          PY
+      - name: Commit accepted source or failure receipt
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git diff --cached --quiet || git commit -m 'test(ci): record direct local catalog audition acceptance'
+          git pull --rebase origin main
+          git push origin HEAD:main
