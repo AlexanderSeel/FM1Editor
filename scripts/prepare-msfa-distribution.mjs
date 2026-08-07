@@ -29,6 +29,8 @@ const modified = new Map([
   ['Source/msfa/fm_core.h', 'Removed the unnecessary controller-header dependency from the isolated FM core boundary.'],
   ['Source/msfa/dx7note.h', 'Removed MTS-ESP/tuning-library state and constructor dependencies for the standard-12-TET browser engine.'],
   ['Source/msfa/dx7note.cc', 'Removed MTS-ESP/tuning-library branches, retained standard 12-TET behavior, and reset feedback history for deterministic renderer lifecycle.'],
+  ['Source/msfa/lfo.h', 'Extended the private reset contract with an explicit render-plan seed for deterministic offline lifecycle.'],
+  ['Source/msfa/lfo.cc', 'Initialize free-running phase/delay state deterministically and seed sample-and-hold from the render-plan seed.'],
 ])
 
 function sha256(bytes) {
