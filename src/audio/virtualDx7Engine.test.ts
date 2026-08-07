@@ -3,6 +3,7 @@ import { createInitializedVoice, type Dx7Voice } from '../domain/voice'
 import {
   assertVirtualDx7PcmRender,
   createVirtualDx7RenderPlan,
+  VIRTUAL_DX7_RENDER_BLOCK_FRAMES,
   type VirtualDx7RenderRequest,
 } from './virtualDx7Engine'
 
@@ -26,6 +27,20 @@ describe('virtual DX7 renderer boundary', () => {
     expect(first.releaseFrames).toBe(24_000)
     expect(first.totalFrames).toBe(72_000)
     expect(first.renderKey).toMatch(/^dx7-render-v1-[0-9a-f]{8}$/)
+  })
+
+  it('aligns arbitrary requested durations to the 64-frame MSFA render quantum', () => {
+    const plan = createVirtualDx7RenderPlan({
+      ...createRequest(),
+      sampleRate: 44_100,
+      noteOnSeconds: 1,
+      releaseSeconds: 0.1,
+    })
+
+    expect(plan.noteOnFrames).toBe(44_160)
+    expect(plan.releaseFrames).toBe(4_416)
+    expect(plan.noteOnFrames % VIRTUAL_DX7_RENDER_BLOCK_FRAMES).toBe(0)
+    expect(plan.releaseFrames % VIRTUAL_DX7_RENDER_BLOCK_FRAMES).toBe(0)
   })
 
   it('excludes display metadata and imported raw bytes from render identity', () => {
