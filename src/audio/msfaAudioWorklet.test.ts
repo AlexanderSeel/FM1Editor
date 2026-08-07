@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { createInitializedVoice } from '../domain/voice'
 import {
   createMsfaAudioWorkletController,
+  MSFA_WORKLET_POLYPHONY,
   MSFA_WORKLET_PROCESSOR_NAME,
   verifyMsfaWorkletPackage,
   type MsfaWorkletPackage,
@@ -22,6 +23,7 @@ const manifest = {
   },
   statefulSessionAbi: 1,
   renderBlockFrames: 64,
+  workletPolyphony: MSFA_WORKLET_POLYPHONY,
 }
 
 const packageData: MsfaWorkletPackage = {
@@ -29,7 +31,7 @@ const packageData: MsfaWorkletPackage = {
   wasmBinary: new ArrayBuffer(32),
 }
 
-function browserHarness(options: { sampleRate?: number; fatal?: string } = {}) {
+function browserHarness(options: { sampleRate?: number; fatal?: string; readyPolyphony?: number } = {}) {
   const messages: unknown[] = []
   const addModule = vi.fn(async () => {})
   const resume = vi.fn(async () => {})
@@ -67,7 +69,12 @@ function browserHarness(options: { sampleRate?: number; fatal?: string } = {}) {
     queueMicrotask(() => port.onmessage?.({
       data: options.fatal
         ? { type: 'fatal', error: options.fatal }
-        : { type: 'ready', sampleRate: options.sampleRate ?? 48_000, blockFrames: 64 },
+        : {
+            type: 'ready',
+            sampleRate: options.sampleRate ?? 48_000,
+            blockFrames: 64,
+            polyphony: options.readyPolyphony ?? MSFA_WORKLET_POLYPHONY,
+          },
     } as MessageEvent<unknown>))
     return {
       port,
@@ -103,7 +110,7 @@ function browserHarness(options: { sampleRate?: number; fatal?: string } = {}) {
 }
 
 describe('MSFA AudioWorklet package verification', () => {
-  it('accepts the expected stateful manifest and matching WASM digest', async () => {
+  it('accepts the expected stateful polyphonic manifest and matching WASM digest', async () => {
     const verified = await verifyMsfaWorkletPackage(
       manifest,
       packageData.wasmBinary,
@@ -111,6 +118,7 @@ describe('MSFA AudioWorklet package verification', () => {
     )
 
     expect(verified.manifest.engineVersion).toBe(MSFA_OFFLINE_ENGINE_VERSION)
+    expect(verified.manifest.workletPolyphony).toBe(MSFA_WORKLET_POLYPHONY)
     expect(verified.wasmBinary).toBe(packageData.wasmBinary)
   })
 
@@ -121,13 +129,22 @@ describe('MSFA AudioWorklet package verification', () => {
       async () => 'b'.repeat(64),
     )).rejects.toThrow('WASM hash mismatch')
   })
+
+  it('rejects a manifest that does not declare the accepted worklet polyphony', async () => {
+    await expect(verifyMsfaWorkletPackage(
+      { ...manifest, workletPolyphony: 8 },
+      packageData.wasmBinary,
+      async () => manifest.wasm.sha256,
+    )).rejects.toThrow(`polyphony must be ${MSFA_WORKLET_POLYPHONY}`)
+  })
 })
 
-describe('one-voice MSFA AudioWorklet controller', () => {
+describe('polyphonic MSFA AudioWorklet controller', () => {
   it('does not create browser audio until explicitly enabled', async () => {
     const harness = browserHarness()
 
     expect(harness.controller.state).toBe('disabled')
+    expect(harness.controller.polyphony).toBe(MSFA_WORKLET_POLYPHONY)
     expect(harness.createContext).not.toHaveBeenCalled()
 
     await harness.controller.enable()
@@ -148,12 +165,14 @@ describe('one-voice MSFA AudioWorklet controller', () => {
     expect(harness.controller.sampleRate).toBe(48_000)
   })
 
-  it('loads semantic voice state and routes note lifecycle commands', async () => {
+  it('loads semantic voice state and routes independent note lifecycle commands', async () => {
     const harness = browserHarness()
     await harness.controller.enable()
 
     await harness.controller.loadVoice(createInitializedVoice('WORKLET'), 42)
     await harness.controller.noteOn(60, 100)
+    await harness.controller.noteOn(64, 96)
+    await harness.controller.noteOff(60)
     await harness.controller.noteOff()
     await harness.controller.allNotesOff()
 
@@ -164,6 +183,8 @@ describe('one-voice MSFA AudioWorklet controller', () => {
     expect(commands.map((command) => command.command)).toEqual([
       'loadVoice',
       'noteOn',
+      'noteOn',
+      'noteOff',
       'noteOff',
       'allNotesOff',
     ])
@@ -173,6 +194,9 @@ describe('one-voice MSFA AudioWorklet controller', () => {
     expect((loadVoice?.patch as Uint8Array)).toHaveLength(156)
     expect((loadVoice?.patch as Uint8Array)[155]).toBe(0x3f)
     expect(commands[1]).toMatchObject({ midiNote: 60, velocity: 100 })
+    expect(commands[2]).toMatchObject({ midiNote: 64, velocity: 96 })
+    expect(commands[3]).toMatchObject({ midiNote: 60 })
+    expect(commands[4]).not.toHaveProperty('midiNote')
   })
 
   it('closes local audio with best-effort all-notes-off and disposal', async () => {
@@ -198,6 +222,16 @@ describe('one-voice MSFA AudioWorklet controller', () => {
     expect(harness.close).toHaveBeenCalledTimes(1)
   })
 
+  it('rejects a worklet that reports a different polyphony contract', async () => {
+    const harness = browserHarness({ readyPolyphony: 8 })
+
+    await expect(harness.controller.enable()).rejects.toThrow('unexpected polyphony 8')
+
+    expect(harness.controller.state).toBe('error')
+    expect(harness.disconnect).toHaveBeenCalledTimes(1)
+    expect(harness.close).toHaveBeenCalledTimes(1)
+  })
+
   it('surfaces worklet fatal initialization errors and cleans up', async () => {
     const harness = browserHarness({ fatal: 'WASM init failed' })
 
@@ -214,6 +248,7 @@ describe('one-voice MSFA AudioWorklet controller', () => {
 
     await expect(harness.controller.noteOn(128, 100)).rejects.toThrow('midiNote')
     await expect(harness.controller.noteOn(60, 0)).rejects.toThrow('velocity')
+    await expect(harness.controller.noteOff(128)).rejects.toThrow('midiNote')
     await expect(harness.controller.loadVoice(createInitializedVoice(), -1)).rejects.toThrow('randomSeed')
   })
 })
