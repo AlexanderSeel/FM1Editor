@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   createMsfaAudioWorkletController,
+  MSFA_WORKLET_POLYPHONY,
   type MsfaAudioWorkletController,
 } from '../audio/msfaAudioWorklet'
 import { MSFA_OFFLINE_ENGINE_VERSION } from '../audio/msfaOfflineEngine'
@@ -23,7 +24,6 @@ export function VirtualDx7PreviewPanel({
   createController = createMsfaAudioWorkletController,
 }: VirtualDx7PreviewPanelProps) {
   const controllerRef = useRef<MsfaAudioWorkletController | null>(null)
-  const activeNoteRef = useRef<number | null>(null)
   const loadedVoiceRef = useRef<Dx7Voice | null>(null)
   const [state, setState] = useState<PreviewState>('disabled')
   const [velocity, setVelocity] = useState(105)
@@ -34,7 +34,6 @@ export function VirtualDx7PreviewPanel({
   const closeController = useCallback(async () => {
     const controller = controllerRef.current
     controllerRef.current = null
-    activeNoteRef.current = null
     loadedVoiceRef.current = null
     if (controller) {
       try {
@@ -58,7 +57,7 @@ export function VirtualDx7PreviewPanel({
       await controller.loadVoice(voice, 42)
       loadedVoiceRef.current = voice
       setState('ready')
-      setStatus(`Local dry preview enabled at ${controller.sampleRate ?? 'browser'} Hz.`)
+      setStatus(`Local dry preview enabled at ${controller.sampleRate ?? 'browser'} Hz with ${controller.polyphony}-voice polyphony.`)
     } catch (cause) {
       await closeController()
       setState('error')
@@ -80,7 +79,6 @@ export function VirtualDx7PreviewPanel({
     let cancelled = false
     void (async () => {
       try {
-        activeNoteRef.current = null
         await controller.allNotesOff()
         await controller.loadVoice(voice, 42)
         loadedVoiceRef.current = voice
@@ -101,31 +99,25 @@ export function VirtualDx7PreviewPanel({
   useEffect(() => () => {
     const controller = controllerRef.current
     controllerRef.current = null
-    activeNoteRef.current = null
     if (controller) void controller.close().catch(() => undefined)
   }, [])
 
   const noteTarget = useMemo<VirtualPianoNoteTarget>(() => ({
-    label: 'local DX7-compatible dry audio · monophonic',
+    label: `local DX7-compatible dry audio · ${MSFA_WORKLET_POLYPHONY}-voice polyphony`,
     async noteOn(note, noteVelocity) {
       const controller = controllerRef.current
       if (!controller || controller.state !== 'ready') {
         throw new Error('Enable local audio before playing the virtual piano.')
       }
-      const previous = activeNoteRef.current
-      if (previous !== null && previous !== note) await controller.allNotesOff()
       await controller.noteOn(note, noteVelocity)
-      activeNoteRef.current = note
     },
     async noteOff(note) {
       const controller = controllerRef.current
-      if (!controller || controller.state !== 'ready' || activeNoteRef.current !== note) return
-      await controller.noteOff()
-      activeNoteRef.current = null
+      if (!controller || controller.state !== 'ready') return
+      await controller.noteOff(note)
     },
     async allNotesOff() {
       const controller = controllerRef.current
-      activeNoteRef.current = null
       if (!controller || controller.state !== 'ready') return
       await controller.allNotesOff()
     },
@@ -151,7 +143,7 @@ export function VirtualDx7PreviewPanel({
             {ready ? 'LOCAL AUDIO READY' : state === 'enabling' ? 'STARTING AUDIO…' : state === 'error' ? 'LOCAL AUDIO ERROR' : 'LOCAL AUDIO OFF'}
           </p>
           <p className="mt-1">{MSFA_OFFLINE_ENGINE_VERSION}</p>
-          <p className="mt-1">Dry · standard 12-TET · one voice</p>
+          <p className="mt-1">Dry · standard 12-TET · {MSFA_WORKLET_POLYPHONY} voices</p>
         </div>
       </div>
 
@@ -222,7 +214,7 @@ export function VirtualDx7PreviewPanel({
       </div>
 
       <p className="mt-3 text-[11px] leading-5 text-slate-500">
-        The accepted browser engine is currently monophonic. Overlapping local piano notes use deterministic note stealing; hardware MIDI audition remains a separate workflow below.
+        The worklet provides deterministic {MSFA_WORKLET_POLYPHONY}-voice allocation and stealing over the accepted stateful engine sessions. Dry summing uses a safety clamp; hardware MIDI audition remains a separate workflow below.
       </p>
     </section>
   )
