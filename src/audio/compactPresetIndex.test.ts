@@ -40,7 +40,7 @@ describe('compact audio fingerprints', () => {
 })
 
 describe('compact preset index', () => {
-  it('reuses persistent fingerprints and ranks the matching timbre first', async () => {
+  it('reuses persistent fingerprints and ranks an exact indexed fingerprint first', async () => {
     const render = vi.fn(async (plan: VirtualDx7RenderPlan) => {
       const frequency = plan.voice.algorithm === 1 ? 440 : 880
       const samples = sine(frequency, plan.sampleRate, plan.totalFrames / plan.sampleRate)
@@ -61,8 +61,13 @@ describe('compact preset index', () => {
     const second = await buildCompactPresetDescriptorIndex(candidates, engine, { probes, descriptorConfig: CONFIG, fingerprintCache: cache, onCacheHit: cacheHit })
     expect(render).toHaveBeenCalledTimes(2)
     expect(cacheHit).toHaveBeenCalledTimes(2)
-    const reference = createAudioDescriptorFingerprint(createAudioDescriptorProfile(sine(440), 8_000, CONFIG))
-    expect(rankCompactPresetDescriptorIndex(reference, second, { limit: 2 }).map((item) => item.id)).toEqual(['a', 'b'])
+
+    const exactReference = first.entries[0]?.probes[0]?.fingerprint
+    expect(exactReference).toBeDefined()
+    if (!exactReference) throw new Error('Expected exact indexed reference fingerprint.')
+    const ranked = rankCompactPresetDescriptorIndex(exactReference, second, { limit: 2 })
+    expect(ranked.map((item) => item.id)).toEqual(['a', 'b'])
+    expect(ranked[0]?.distance).toBe(0)
     expect(first.entries).toHaveLength(2)
   })
 })
