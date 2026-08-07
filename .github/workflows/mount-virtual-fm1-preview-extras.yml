@@ -1,0 +1,73 @@
+name: Mount Virtual FM1 A/B and WAV controls
+
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/mount-virtual-fm1-preview-extras.yml']
+
+permissions:
+  contents: write
+
+jobs:
+  integrate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - name: Mount prepared-reference A/B and offline WAV controls
+        shell: python
+        run: |
+          from pathlib import Path
+          path=Path('src/components/VirtualDx7PreviewPanel.tsx')
+          text=path.read_text(encoding='utf-8')
+          import_anchor="import { VirtualPiano, type VirtualPianoNoteTarget } from './VirtualPiano'\n"
+          import_new=import_anchor+"import { VirtualFm1PreviewExtras } from './VirtualFm1PreviewExtras'\n"
+          if 'VirtualFm1PreviewExtras' not in text:
+              if import_anchor not in text: raise SystemExit('VirtualPiano import anchor missing')
+              text=text.replace(import_anchor,import_new,1)
+          mount_anchor='''      {(status || error) && <p aria-live="polite" className={`mt-3 text-xs ${error ? 'text-rose-300' : 'text-emerald-300'}`}>{error ?? status}</p>}\n\n      <div className="mt-4">\n'''
+          mount_new='''      <div className="mt-4">\n        <VirtualFm1PreviewExtras\n          fxEnabled={!fxBypassed}\n          fxState={fxState}\n          masterGainDb={masterGainDb}\n          voice={voice}\n        />\n      </div>\n\n      {(status || error) && <p aria-live="polite" className={`mt-3 text-xs ${error ? 'text-rose-300' : 'text-emerald-300'}`}>{error ?? status}</p>}\n\n      <div className="mt-4">\n'''
+          if '<VirtualFm1PreviewExtras' not in text:
+              if mount_anchor not in text: raise SystemExit('preview extras mount anchor missing')
+              text=text.replace(mount_anchor,mount_new,1)
+          path.write_text(text,encoding='utf-8')
+
+          test=Path('src/components/VirtualDx7PreviewPanel.test.tsx')
+          content=test.read_text(encoding='utf-8')
+          marker="""    expect(markup).toContain('Master gain')\n"""
+          replacement="""    expect(markup).toContain('Master gain')\n    expect(markup).toContain('Reference A/B · offline render')\n    expect(markup).toContain('Download note WAV')\n    expect(markup).toContain('Download chord WAV')\n"""
+          if marker in content and 'Download note WAV' not in content:
+              content=content.replace(marker,replacement,1)
+          test.write_text(content,encoding='utf-8')
+      - run: npm install --no-audit --no-fund
+      - run: npm run audit:virtual-dx7
+      - run: npm run typecheck
+      - run: npm run lint
+      - run: npm test -- src/components/VirtualDx7PreviewPanel.test.tsx src/components/VirtualFm1PreviewExtras.test.tsx src/audio/virtualFm1WavRenderer.test.ts
+      - run: npm run test
+      - run: npm run build
+      - name: Persist software receipt
+        run: |
+          cat > docs/validation/virtual-fm1-preview-ab-wav-ui.md <<EOF
+          # Virtual FM-1 reference A/B and WAV UI software validation
+
+          Source commit: \`${GITHUB_SHA}\`
+
+          Overall software gate: **SUCCESS**
+
+          The accepted routed Virtual FM-1 preview now mounts the shared prepared-reference controls. Reference A is the in-memory prepared local PCM published by the Audio → FM panel; Current B is the current semantic voice rendered through the deterministic offline engine and the same dry/FX/master/limiter preview route.
+
+          Explicit actions provide Reference A playback, Current B playback, note WAV download and chord WAV download. The prepared-reference store is in-memory only and clears when the reference panel unmounts; no audio is persisted or uploaded by this bridge. No action requests Web MIDI or transmits hardware data.
+
+          Virtual-engine audit, typecheck, lint, focused preview/A-B/WAV tests, the full test suite and production build passed. Branded-browser A/B and OfflineAudioContext execution remain required before the overall Virtual FM-1 preview item closes.
+          EOF
+          rm .github/workflows/mount-virtual-fm1-preview-extras.yml
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add -A
+          git commit -m 'feat(audio): mount Virtual FM1 A-B and WAV controls' || true
+          git pull --rebase origin main
+          git push origin HEAD:main
