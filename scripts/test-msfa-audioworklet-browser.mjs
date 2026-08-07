@@ -2,7 +2,7 @@
 
 import { spawn } from 'node:child_process'
 import { createServer } from 'node:http'
-import { mkdtemp, readFile, rm } from 'node:fs/promises'
+import { mkdtemp, rm } from 'node:fs/promises'
 import { createReadStream } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { extname, resolve, sep } from 'node:path'
@@ -45,6 +45,7 @@ const smokeHtml = String.raw`<!doctype html>
 <title>FM1 MSFA AudioWorklet smoke</title>
 <script type="module">
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
+const EXPECTED_POLYPHONY = 16
 
 function hexPatch(text) {
   const hex = text.replace(/\s/g, '')
@@ -63,7 +64,6 @@ function peakOf(analyser, buffer) {
 }
 
 window.runMsfaWorkletSmoke = async ({ soakMs }) => {
-  const started = performance.now()
   const errors = []
   const rejections = []
   let processorErrors = 0
@@ -86,6 +86,7 @@ window.runMsfaWorkletSmoke = async ({ soakMs }) => {
   if (wasmSha256 !== manifest.wasm?.sha256) throw new Error('Browser-loaded WASM hash does not match manifest')
   if (manifest.engineVersion !== 'msfa-2e182b3-fm1-v3-stateful') throw new Error('Unexpected browser engine version')
   if (manifest.statefulSessionAbi !== 1 || manifest.renderBlockFrames !== 64) throw new Error('Unexpected stateful engine ABI')
+  if (manifest.workletPolyphony !== EXPECTED_POLYPHONY) throw new Error('Unexpected manifest worklet polyphony')
 
   const context = new AudioContext({ latencyHint: 'interactive', sampleRate: 48000 })
   try {
@@ -146,6 +147,7 @@ window.runMsfaWorkletSmoke = async ({ soakMs }) => {
     const readyData = await ready
     clearTimeout(readyTimeout)
     if (readyData?.blockFrames !== 64) throw new Error('AudioWorklet reported unexpected block size')
+    if (readyData?.polyphony !== EXPECTED_POLYPHONY) throw new Error('AudioWorklet reported unexpected polyphony')
 
     const command = (name, payload = {}) => {
       const id = ++requestId
@@ -163,9 +165,26 @@ window.runMsfaWorkletSmoke = async ({ soakMs }) => {
     }
 
     await command('loadVoice', { patch, randomSeed: 42 })
+
+    const allocationVoiceIndices = []
+    for (let index = 0; index < EXPECTED_POLYPHONY; index += 1) {
+      const allocation = await command('noteOn', { midiNote: 48 + index, velocity: 96 })
+      allocationVoiceIndices.push(allocation?.voiceIndex)
+    }
+    const expectedVoiceIndices = Array.from({ length: EXPECTED_POLYPHONY }, (_, index) => index)
+    if (JSON.stringify(allocationVoiceIndices) !== JSON.stringify(expectedVoiceIndices)) {
+      throw new Error('Initial polyphony allocation was not deterministic 0 through 15')
+    }
+    const stolen = await command('noteOn', { midiNote: 80, velocity: 100 })
+    const stolenVoiceIndex = stolen?.voiceIndex
+    if (stolenVoiceIndex !== 0) throw new Error('The 17th held note did not deterministically steal voice 0')
+    await command('allNotesOff')
+    await sleep(150)
+
     const analyserBuffer = new Float32Array(analyser.fftSize)
     let maxPeak = 0
     let activeSamples = 0
+    let partialChordSamples = 0
     let cycles = 0
     let suspendedObservations = 0
     const soakStarted = performance.now()
@@ -175,16 +194,37 @@ window.runMsfaWorkletSmoke = async ({ soakMs }) => {
         suspendedObservations += 1
         await context.resume()
       }
-      await command('noteOn', { midiNote: 60 + (cycles % 5), velocity: 96 + (cycles % 24) })
-      await sleep(350)
+      const root = 60 + (cycles % 5)
+      const chord = [root, root + 4, root + 7]
+      const chordAllocations = []
+      for (let index = 0; index < chord.length; index += 1) {
+        chordAllocations.push(await command('noteOn', {
+          midiNote: chord[index],
+          velocity: 96 + ((cycles + index * 5) % 24),
+        }))
+      }
+      if (new Set(chordAllocations.map((entry) => entry?.voiceIndex)).size !== chord.length) {
+        throw new Error('Simultaneous chord notes did not receive distinct worklet voices')
+      }
+
+      await sleep(300)
       let peak = peakOf(analyser, analyserBuffer)
       maxPeak = Math.max(maxPeak, peak)
       if (peak > 1e-6) activeSamples += 1
-      await command('noteOff')
-      await sleep(250)
+
+      await command('noteOff', { midiNote: chord[1] })
+      await sleep(120)
+      peak = peakOf(analyser, analyserBuffer)
+      maxPeak = Math.max(maxPeak, peak)
+      if (peak > 1e-6) partialChordSamples += 1
+
+      await command('noteOff', { midiNote: chord[0] })
+      await command('noteOff', { midiNote: chord[2] })
+      await sleep(200)
       peak = peakOf(analyser, analyserBuffer)
       maxPeak = Math.max(maxPeak, peak)
       if (peak > 1e-6) activeSamples += 1
+
       await command('allNotesOff')
       await sleep(150)
       cycles += 1
@@ -201,8 +241,18 @@ window.runMsfaWorkletSmoke = async ({ soakMs }) => {
 
     const durationMs = performance.now() - soakStarted
     const result = {
-      ok: processorErrors === 0 && errors.length === 0 && rejections.length === 0 && maxPeak > 1e-6 && activeSamples > 0 && silencePeak < 1e-4 && durationMs >= soakMs,
+      ok: processorErrors === 0
+        && errors.length === 0
+        && rejections.length === 0
+        && maxPeak > 1e-6
+        && activeSamples > 0
+        && partialChordSamples > 0
+        && silencePeak < 1e-4
+        && durationMs >= soakMs,
       engineVersion: manifest.engineVersion,
+      workletPolyphony: manifest.workletPolyphony,
+      allocationVoiceIndices,
+      stolenVoiceIndex,
       wasmSha256,
       sampleRate: context.sampleRate,
       baseLatency: Number.isFinite(context.baseLatency) ? context.baseLatency : null,
@@ -211,6 +261,7 @@ window.runMsfaWorkletSmoke = async ({ soakMs }) => {
       cycles,
       maxPeak,
       activeSamples,
+      partialChordSamples,
       silencePeak,
       processorErrors,
       windowErrors: errors,
@@ -218,7 +269,7 @@ window.runMsfaWorkletSmoke = async ({ soakMs }) => {
       suspendedObservations,
       audioContextState: context.state,
     }
-    if (!result.ok) throw Object.assign(new Error('AudioWorklet smoke assertions failed'), { smokeResult: result })
+    if (!result.ok) throw Object.assign(new Error('AudioWorklet polyphony smoke assertions failed'), { smokeResult: result })
     return result
   } finally {
     await context.close()
@@ -372,8 +423,6 @@ try {
     smokeUrl,
   ]
   browserProcess = spawn(browserExecutable, browserArgs, { stdio: ['ignore', 'pipe', 'pipe'] })
-  let browserStderr = ''
-  browserProcess.stderr?.on('data', (chunk) => { browserStderr += String(chunk) })
 
   const version = await waitForJson(`http://127.0.0.1:${debuggerPort}/json/version`)
   const targets = await waitForJson(`http://127.0.0.1:${debuggerPort}/json/list`)
