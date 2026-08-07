@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "engineId": "fm1-editor-msfa-compatible",
-  "engineVersion": "msfa-2e182b3-fm1-v2-seeded",
+  "engineVersion": "msfa-2e182b3-fm1-v3-stateful",
   "label": "DX7-compatible dry renderer",
   "licenseSpdx": "Apache-2.0",
   "upstream": {
@@ -14,11 +14,11 @@
   },
   "wasm": {
     "path": "fm1-msfa.wasm",
-    "sha256": "d45658932e6cf8c9c1f670e152ee476f90c4d5e8a63ac08ee0f20acf53f0d442"
+    "sha256": "623cf6f5695184861fd5ca17e6f66723426b6d03cfc81d84c02cd734a00e097a"
   },
   "glue": {
     "path": "fm1-msfa.mjs",
-    "sha256": "1133b1edd73d5af0655e9520239221f32c0499c93b70fb5a7faa037900927497"
+    "sha256": "96d0ac2e9299850463d932a513319ae20d3c7a87b9ddb31b4ef9649ccc7983e1"
   },
   "acceptedReferencePcmSha256": "313be5ffcb29436e92ecce45b5e1002c72dd810c6999379844b82ce87a18cfc2",
   "sourceManifestSha256": "e1ee6348bfadd41de6415a9fde80598deb978179055b75bf782d70d55473033c",
@@ -26,6 +26,9 @@
   "limitations": [
     "standard-12-TET only",
     "dry engine only",
+    "AudioWorklet browser soak not yet validated",
     "not physical-device validation"
-  ]
+  ],
+  "statefulSessionAbi": 1,
+  "renderBlockFrames": 64
 }
