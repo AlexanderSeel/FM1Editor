@@ -80,6 +80,7 @@ FM1_EXPORT int fm1_msfa_render(
     int sampleRate,
     int noteOnFrames,
     int releaseFrames,
+    uint32_t randomSeed,
     float *output,
     int outputFrames
 ) {
@@ -108,7 +109,7 @@ FM1_EXPORT int fm1_msfa_render(
     initializeControllers(controllers, patch[kOperatorMaskOffset], &core);
 
     Lfo lfo;
-    lfo.reset(patch + 137);
+    lfo.reset(patch + 137, randomSeed);
     lfo.keydown();
 
     Dx7Note note;
