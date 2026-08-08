@@ -2,12 +2,12 @@ import { readFileSync, writeFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import type { Dx7Voice } from '../domain/voice'
 import { createAudioDescriptorProfile } from './audioDescriptors'
-import { compareAudioDescriptorFingerprints, createAudioDescriptorFingerprint, type FingerprintMetricBreakdown } from './audioDescriptorFingerprint'
+import { compareAudioDescriptorFingerprints, createAudioDescriptorFingerprint } from './audioDescriptorFingerprint'
 import { COMPACT_PRESET_DESCRIPTOR_CONFIG, COMPACT_PRESET_PROBES, type CompactPresetRankedCandidate } from './compactPresetIndex'
 import { createDx7RendererFingerprintObjective, refineRetrievedDx7Candidates } from './dx7CmaEsRefinement'
 import { createMsfaOfflineEngine, type MsfaEmscriptenModule } from './msfaOfflineEngine'
 import { createMemoryPresetFingerprintCache } from './presetFingerprintCache'
-import { compareReconstructionApproaches, type ReconstructionApproach, type ReconstructionCandidate, type ReconstructionComparisonCase } from './reconstructionComparison'
+import { compareReconstructionApproaches, type ReconstructionApproach, type ReconstructionComparisonCase } from './reconstructionComparison'
 import { createVirtualDx7ReferenceVoice } from './virtualDx7ReferenceFixture'
 import { createVirtualDx7RenderPlan } from './virtualDx7Engine'
 
@@ -26,17 +26,9 @@ function withOutputOffsets(voice: Dx7Voice, offsets: readonly number[], feedback
     ...operator,
     outputLevel: Math.max(0, Math.min(99, operator.outputLevel + (offsets[index] ?? 0))),
   })) as unknown as Dx7Voice['operators']
-  return { ...voice, name, operators, feedback, source: undefined }
-}
-
-const ZERO_METRICS: FingerprintMetricBreakdown = {
-  envelope: 0,
-  mel: 0,
-  mfcc: 0,
-  centroid: 0,
-  rolloff: 0,
-  flatness: 0,
-  total: 0,
+  const { source, ...semantic } = voice
+  void source
+  return { ...semantic, name, operators, feedback }
 }
 
 describe('packaged-engine reconstruction comparison', () => {
