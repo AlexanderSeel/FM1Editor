@@ -1,14 +1,14 @@
 # Renderer-backed CMA-ES browser acceptance
 
-Source commit: `56cb49da90df1c4288e2f4c76c023dff02720cb3`
+Source commit: `eb7f9546a5633702ca97067081ec7d17ca6e83df`
 
-Overall browser gate: **FAILED**
+Overall browser gate: **SUCCESS**
 
 | Browser | Product | Refined candidates | Improved starts | Refined audition peak | Web MIDI requests | Result |
 | --- | --- | ---: | ---: | ---: | ---: | --- |
-| Chrome | FAILED | — | — | — | — | result missing |
-| Edge | FAILED | — | — | — | — | result missing |
+| Chrome | Chrome/151.0.7922.72 | 3 | 3 | 0.13589478 | 0 | PASS |
+| Edge | Edg/151.0.4129.59 | 3 | 3 | 0.13589478 | 0 | PASS |
 
-This clean-state run performs local reference preparation, Quick-scan retrieval and explicit seeded CMA-ES refinement. Raw structural distances are returned to Node, with at least one required improvement, measurable dry refined audition, no implicit editor load, explicit Load refined, zero Web MIDI requests and no external/write fetches.
+This clean run starts from a software-green head, prepares a local reference, performs Quick-scan retrieval and explicit seeded constrained CMA-ES refinement, validates structural numeric distances, refined dry audition PCM, explicit-only load, zero Web MIDI and no external/write fetches.
 
-Browser result JSON is ephemeral validation state and is removed before committing. This validates local semantic optimization only; it does not claim exact source recovery or physical FM-1 equivalence.
+Transient result JSON is ignored and removed. No exact source-recovery or physical FM-1 equivalence is claimed.
