@@ -4,6 +4,7 @@ import type { Fm1FxState } from '../domain/fx'
 import type { PreparedReferenceAudio } from '../audio/referenceAudio'
 import { setPreparedReferenceAudio } from '../audio/preparedReferenceStore'
 import { NearestPresetPanel } from './NearestPresetPanel'
+import { ReconstructionBenchmarkPanel } from './ReconstructionBenchmarkPanel'
 import { ReferenceAudioInputPanel } from './ReferenceAudioInputPanel'
 
 interface AudioToFmReferencePanelProps {
@@ -46,6 +47,7 @@ export function AudioToFmReferencePanel({
         onStopAudition={onStopAudition}
         reference={reference}
       />
+      <ReconstructionBenchmarkPanel reference={reference} />
     </div>
   )
 }
