@@ -1,0 +1,192 @@
+name: Reproduce pinned Magenta DDSP environment v2
+
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/reproduce-ddsp-environment-v2.yml']
+
+permissions:
+  contents: write
+
+jobs:
+  reproduce:
+    runs-on: ubuntu-latest
+    timeout-minutes: 50
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.9'
+
+      - name: Clone and verify exact Apache-2.0 DDSP pin
+        shell: bash
+        run: |
+          rm -rf /tmp/ddsp
+          git clone --filter=blob:none https://github.com/magenta/ddsp.git /tmp/ddsp
+          git -C /tmp/ddsp checkout --detach cf5e62dfe5d5c80aa14761832233a2e68e840e53
+          test "$(git -C /tmp/ddsp rev-parse HEAD)" = "cf5e62dfe5d5c80aa14761832233a2e68e840e53"
+          grep -q 'Apache License' /tmp/ddsp/LICENSE
+          grep -q "'tflite_support<=0.1'" /tmp/ddsp/setup.py
+
+      - name: Reproduce package with prerelease dependency resolution
+        id: smoke
+        shell: bash
+        run: |
+          set +e
+          : >/tmp/ddsp-reproduction-v2.log
+          : >/tmp/ddsp-freeze-v2.txt
+          python -m venv /tmp/ddsp-venv-v2
+          source /tmp/ddsp-venv-v2/bin/activate
+
+          python -m pip install --upgrade 'pip<25' 'setuptools<76' wheel 2>&1 | tee -a /tmp/ddsp-reproduction-v2.log
+          bootstrap=${PIPESTATUS[0]}
+
+          python -m pip install --pre -e /tmp/ddsp 2>&1 | tee -a /tmp/ddsp-reproduction-v2.log
+          install=${PIPESTATUS[0]}
+
+          if [ "$install" -eq 0 ]; then
+            python - <<'PY' 2>&1 | tee -a /tmp/ddsp-reproduction-v2.log
+          import json
+          import ddsp
+          from ddsp import core, synths, effects, losses, processors, spectral_ops
+          import numpy
+          import tensorflow
+          import tensorflow_probability
+          try:
+              import tflite_support
+              tflite_version = getattr(tflite_support, '__version__', 'imported')
+          except Exception as exc:
+              tflite_version = f'import-error:{type(exc).__name__}:{exc}'
+          print('DDSP_IMPORTS=' + json.dumps({
+              'ddsp': getattr(ddsp, '__version__', 'imported'),
+              'numpy': numpy.__version__,
+              'tensorflow': tensorflow.__version__,
+              'tensorflow_probability': tensorflow_probability.__version__,
+              'tflite_support': tflite_version,
+              'core': bool(core),
+              'synths': bool(synths),
+              'effects': bool(effects),
+              'losses': bool(losses),
+              'processors': bool(processors),
+              'spectral_ops': bool(spectral_ops),
+          }, sort_keys=True))
+          PY
+            imports=${PIPESTATUS[0]}
+            python -m pip freeze | sort > /tmp/ddsp-freeze-v2.txt
+          else
+            imports=99
+          fi
+
+          echo "bootstrap=$bootstrap" >> "$GITHUB_OUTPUT"
+          echo "install=$install" >> "$GITHUB_OUTPUT"
+          echo "imports=$imports" >> "$GITHUB_OUTPUT"
+          if [ "$bootstrap" -eq 0 ] && [ "$install" -eq 0 ] && [ "$imports" -eq 0 ]; then
+            echo ok=true >> "$GITHUB_OUTPUT"
+          else
+            echo ok=false >> "$GITHUB_OUTPUT"
+          fi
+          exit 0
+
+      - name: Persist reproduction receipt and consolidate matrix
+        if: always()
+        env:
+          OK: ${{ steps.smoke.outputs.ok }}
+          BOOTSTRAP: ${{ steps.smoke.outputs.bootstrap }}
+          INSTALL: ${{ steps.smoke.outputs.install }}
+          IMPORTS: ${{ steps.smoke.outputs.imports }}
+        shell: python
+        run: |
+          import os
+          import re
+          from pathlib import Path
+
+          log_path = Path('/tmp/ddsp-reproduction-v2.log')
+          freeze_path = Path('/tmp/ddsp-freeze-v2.txt')
+          log = log_path.read_text(encoding='utf-8', errors='replace') if log_path.exists() else 'reproduction log unavailable'
+          freeze = freeze_path.read_text(encoding='utf-8', errors='replace') if freeze_path.exists() else ''
+          match = re.search(r'DDSP_IMPORTS=(\{.*\})', log)
+          versions = match.group(1) if match else 'not resolved'
+          ok = os.environ.get('OK') == 'true'
+
+          rows = ['| Stage | Exit |', '| --- | ---: |']
+          rows.extend([
+              f'| toolchain bootstrap | {os.environ.get("BOOTSTRAP", "?")} |',
+              f'| editable install with prerelease resolution | {os.environ.get("INSTALL", "?")} |',
+              f'| base DSP imports | {os.environ.get("IMPORTS", "?")} |',
+          ])
+          Path('docs/validation/ddsp-isolated-reproduction.md').write_text('\n'.join([
+              '# Magenta DDSP isolated environment reproduction',
+              '',
+              'Pinned upstream: `magenta/ddsp@cf5e62dfe5d5c80aa14761832233a2e68e840e53`',
+              '',
+              'Code license reviewed: **Apache-2.0**',
+              '',
+              f"Environment smoke: **{'SUCCESS' if ok else 'FAILED'}**",
+              '',
+              *rows,
+              '',
+              f'Resolved imports: `{versions}`.',
+              '',
+              'The pinned setup declares `tflite_support<=0.1`, for which the package index exposes matching 0.1.0 alpha prereleases but no matching stable release. This rerun therefore permits prerelease dependency resolution without modifying upstream source.',
+              '',
+              'This reproduction exercises the pinned source package and its differentiable core/synth/effect/loss imports. It downloads no pretrained timbre-transfer model, training dataset or model checkpoint. Any such artifact remains blocked until its own immutable hash and reuse license are recorded.',
+              '',
+              'No DDSP runtime, model, dataset or preprocessing is admitted into FM1 Editor by this research smoke.',
+              '',
+              'Environment snapshot:',
+              '```text',
+              freeze[-12000:],
+              '```',
+              '',
+              'Execution log:',
+              '```text',
+              log[-16000:],
+              '```',
+              '',
+          ]), encoding='utf-8')
+
+          sound_ok = 'Safe reproduction decision: **BLOCKED**' in Path('docs/validation/sound2synth-license-block.md').read_text(encoding='utf-8')
+          spiegel_ok = 'Python 3.7 container smoke: **SUCCESS**' in Path('docs/validation/spiegelib-isolated-reproduction.md').read_text(encoding='utf-8')
+          ddx7_ok = 'Compatibility smoke: **SUCCESS**' in Path('docs/validation/ddx7-numpy-compat-reproduction.md').read_text(encoding='utf-8')
+          overall = sound_ok and spiegel_ok and ddx7_ok and ok
+
+          matrix = [
+              '# Audio reconstruction upstream reproduction matrix',
+              '',
+              f"Overall admission/reproduction gate: **{'SUCCESS' if overall else 'INCOMPLETE'}**",
+              '',
+              '| Approach | Exact pin | Code license | Reproduction outcome | Artifact/data boundary | Production admitted |',
+              '| --- | --- | --- | --- | --- | --- |',
+              '| Sound2Synth core | `44d9176176d794f7fe3ec96573ce758f4a56896c` | no explicit root license | BLOCKED before execution | external presets/datasets/checkpoints unadmitted | no |',
+              '| Sound2Synth Dexed plug-in | `560ba5772118712eca78a3583023c366817fcfa9` | GPL-3.0 | research reference only | GPL wrapper/VST outside MSFA boundary | no |',
+              '| SpiegeLib | `1a3fa1a172c89b869928005874071d0220fc9ccc` | MIT root | SUCCESS | Sound2Synth-derived estimator files blocked; no VST/RenderMan/data/weights | no |',
+              '| DDX7 | `11d04fc16475ff81454f7436f318df9836971a0c` | Apache-2.0 | SUCCESS with NumPy 1.23.5 ABI constraint | URMP/data/checkpoints remain separate | no |',
+              f'| Magenta DDSP | `cf5e62dfe5d5c80aa14761832233a2e68e840e53` | Apache-2.0 | {"SUCCESS with prerelease dependency resolution" if ok else "reproduction still failed; see receipt"} | pretrained models/datasets require separate license+hash | no |',
+              '',
+              'A successful gate means every reviewed external method has an immutable source identity, explicit license/provenance disposition and either a controlled reproduction or an intentional block. It does **not** admit external code, weights, datasets or preprocessing into FM1 Editor. Any future production use requires a separate admission review with file/artifact hashes and licenses.',
+              '',
+              'Evidence: `docs/research/audio-reconstruction-upstreams.json`, `docs/validation/sound2synth-license-block.md`, `docs/validation/spiegelib-isolated-reproduction.md`, `docs/validation/ddx7-numpy-compat-reproduction.md`, and `docs/validation/ddsp-isolated-reproduction.md`.',
+              '',
+          ]
+          Path('docs/research/audio-reconstruction-reproduction-matrix.md').write_text('\n'.join(matrix), encoding='utf-8')
+
+          if overall:
+              plan = Path('PLAN.md')
+              prefix = '- [ ] Reproduce and license-audit Sound2Synth, SpiegeLib/Dexed sound matching, DDX7 and related DDSP approaches before using code, weights, datasets or preprocessing in production.'
+              lines = plan.read_text(encoding='utf-8').splitlines()
+              plan.write_text('\n'.join(line for line in lines if not line.startswith(prefix)).rstrip() + '\n', encoding='utf-8')
+
+          Path('.github/workflows/reproduce-ddsp-environment-v2.yml').unlink(missing_ok=True)
+
+      - name: Commit research evidence
+        if: always()
+        shell: bash
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add -A
+          git commit -m 'docs(research): record DDSP prerelease reproduction' || true
+          git pull --rebase origin main
+          git push origin HEAD:main
