@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { Dx7Voice } from '../domain/voice'
+import { createDx7VoiceSemanticDiff, createDx7VoiceSyxArtifact } from '../audio/dx7CandidateArtifacts'
 import {
   createAudioDescriptorProfile,
 } from '../audio/audioDescriptors'
@@ -122,6 +123,19 @@ function createFingerprintCache(): PresetFingerprintCache {
   return typeof indexedDB === 'undefined'
     ? createMemoryPresetFingerprintCache()
     : createIndexedDbPresetFingerprintCache()
+}
+
+function downloadVoiceSyx(voice: Dx7Voice): void {
+  const artifact = createDx7VoiceSyxArtifact(voice)
+  const blob = new Blob([artifact.bytes as Uint8Array<ArrayBuffer>], { type: artifact.mimeType })
+  const url = URL.createObjectURL(blob)
+  const anchor = document.createElement('a')
+  anchor.href = url
+  anchor.download = artifact.filename
+  document.body.append(anchor)
+  anchor.click()
+  anchor.remove()
+  URL.revokeObjectURL(url)
 }
 
 export function NearestPresetPanel({
@@ -535,6 +549,9 @@ export function NearestPresetPanel({
                   <button className="rounded-lg border border-amber-200/30 px-3 py-2 text-xs font-bold text-amber-100" onClick={() => void auditionRefinedVoice(item.bestVoice)} type="button">
                     ▶ Audition refined
                   </button>
+                  <button className="rounded-lg border border-violet-300/30 px-3 py-2 text-xs font-bold text-violet-100" onClick={() => downloadVoiceSyx(item.bestVoice)} type="button">
+                    Export refined .syx
+                  </button>
                   <button className="rounded-lg bg-emerald-300 px-3 py-2 text-xs font-black text-slate-950" onClick={() => onLoadVoice(item.bestVoice)} type="button">
                     Load refined
                   </button>
@@ -547,6 +564,17 @@ export function NearestPresetPanel({
                 <span>CENT {metric(item.bestMetrics.centroid)}</span>
                 <span>ROLL {metric(item.bestMetrics.rolloff)}</span>
                 <span>FLAT {metric(item.bestMetrics.flatness)}</span>
+              </div>
+              <div className="mt-3 rounded-lg border border-white/8 bg-black/15 p-2">
+                <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500">Semantic changes from retrieved start</p>
+                <div className="mt-2 flex flex-wrap gap-1.5">
+                  {createDx7VoiceSemanticDiff(item.sourceCandidate.voice, item.bestVoice).map((difference) => (
+                    <span className="rounded-md border border-white/8 px-2 py-1 font-mono text-[10px] text-slate-300" key={difference.path}>
+                      {difference.label}: {String(difference.before)} → {String(difference.after)}
+                    </span>
+                  ))}
+                  {createDx7VoiceSemanticDiff(item.sourceCandidate.voice, item.bestVoice).length === 0 && <span className="text-[10px] text-slate-500">No semantic parameter changed.</span>}
+                </div>
               </div>
             </article>
           ))}
