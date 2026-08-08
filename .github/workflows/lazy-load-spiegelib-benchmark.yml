@@ -1,0 +1,170 @@
+name: Lazy-load admitted SpiegeLib benchmark assets
+
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/lazy-load-spiegelib-benchmark.yml']
+
+permissions:
+  contents: write
+
+jobs:
+  optimize:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Require completed learned benchmark block
+        id: precheck
+        shell: bash
+        run: |
+          set +e
+          status=SUCCESS
+          reasons=()
+          grep -Fq 'Acceptance: **SUCCESS**' docs/validation/learned-initializer-benchmark-acceptance.md || { status=FAILED; reasons+=("learned benchmark acceptance is not SUCCESS"); }
+          grep -Fq "label: 'SpiegeLib simple-FM MLP'" src/audio/realReferenceReconstructionBenchmark.ts || { status=FAILED; reasons+=("learned benchmark row not active"); }
+          printf 'status=%s\nreason=%s\n' "$status" "${reasons[*]:-none}" > lazy-precheck.txt
+          cat lazy-precheck.txt
+          echo "status=$status" >> "$GITHUB_OUTPUT"
+          exit 0
+      - name: Convert static learned import to dynamic import
+        if: steps.precheck.outputs.status == 'SUCCESS'
+        shell: python
+        run: |
+          from pathlib import Path
+          path=Path('src/audio/realReferenceReconstructionBenchmark.ts')
+          text=path.read_text(encoding='utf-8')
+          static="import { createSpiegelibSimpleFmCandidate072 } from './spiegelibSimpleFmCandidate072'\n"
+          if static in text:
+              text=text.replace(static,'')
+          anchor="    async run() {\n      const candidate = createSpiegelibSimpleFmCandidate072("
+          replacement="    async run() {\n      const { createSpiegelibSimpleFmCandidate072 } = await import('./spiegelibSimpleFmCandidate072')\n      const candidate = createSpiegelibSimpleFmCandidate072("
+          if anchor in text:
+              text=text.replace(anchor,replacement)
+          elif "await import('./spiegelibSimpleFmCandidate072')" not in text:
+              raise SystemExit('learned run anchor missing')
+          path.write_text(text,encoding='utf-8')
+      - name: Validate lazy learned chunk
+        if: steps.precheck.outputs.status == 'SUCCESS'
+        id: gate
+        shell: bash
+        run: |
+          set +e
+          : > lazy-codes.txt
+          run_stage() {
+            name="$1"
+            shift
+            "$@" > "lazy-$name.log" 2>&1
+            code=$?
+            cat "lazy-$name.log"
+            echo "$name=$code" >> lazy-codes.txt
+          }
+          run_stage install npm install --no-audit --no-fund
+          run_stage audit npm run audit:learned-assets
+          run_stage typecheck npm run typecheck
+          run_stage lint npm run lint
+          run_stage benchmark npm test -- src/audio/realReferenceReconstructionBenchmark.test.ts
+          run_stage candidate npm test -- src/audio/spiegelibSimpleFmCandidate072.test.ts
+          run_stage full-test npm run test
+          run_stage build npm run build
+          if grep -RFl '96f1d58d3190fc7590f62d1293bb5d39d4d1dbde74c1a754ad5c576c26c32c4f' dist/assets > lazy-model-files.txt; then
+            count=$(wc -l < lazy-model-files.txt)
+            echo "model provenance appears in $count emitted asset file(s)" | tee lazy-bundle.log
+            cat lazy-model-files.txt | tee -a lazy-bundle.log
+            # Dynamic chunk must exist; the main HTML entry must not itself contain model provenance.
+            if grep -Fq '96f1d58d3190fc7590f62d1293bb5d39d4d1dbde74c1a754ad5c576c26c32c4f' dist/index.html; then
+              echo 'model provenance unexpectedly embedded in index.html' >> lazy-bundle.log
+              echo 'bundle=1' >> lazy-codes.txt
+            else
+              echo 'bundle=0' >> lazy-codes.txt
+            fi
+          else
+            echo 'learned model provenance missing from production build' | tee lazy-bundle.log
+            echo 'bundle=1' >> lazy-codes.txt
+          fi
+          python - <<'PY'
+          from pathlib import Path
+          codes={}
+          for line in Path('lazy-codes.txt').read_text().splitlines():
+              if '=' in line:
+                  n,v=line.split('=',1)
+                  try:codes[n]=int(v)
+                  except ValueError:codes[n]=999
+          stages=['install','audit','typecheck','lint','benchmark','candidate','full-test','build','bundle']
+          status='SUCCESS' if all(codes.get(s)==0 for s in stages) else 'FAILED'
+          Path('lazy-status.txt').write_text(status+'\n')
+          print(status)
+          PY
+          echo "status=$(cat lazy-status.txt)" >> "$GITHUB_OUTPUT"
+          exit 0
+      - name: Persist lazy-load receipt
+        if: always()
+        shell: python
+        run: |
+          from pathlib import Path
+          import os
+          pre={}
+          if Path('lazy-precheck.txt').exists():
+              for line in Path('lazy-precheck.txt').read_text().splitlines():
+                  if '=' in line:
+                      k,v=line.split('=',1);pre[k]=v
+          codes={}
+          if Path('lazy-codes.txt').exists():
+              for line in Path('lazy-codes.txt').read_text().splitlines():
+                  if '=' in line:
+                      k,v=line.split('=',1)
+                      try:codes[k]=int(v)
+                      except ValueError:codes[k]=999
+          stages=['install','audit','typecheck','lint','benchmark','candidate','full-test','build','bundle']
+          status=Path('lazy-status.txt').read_text().strip() if Path('lazy-status.txt').exists() else 'NOT_RUN'
+          success=pre.get('status')=='SUCCESS' and status=='SUCCESS'
+          rows=['| Stage | Exit |','| --- | ---: |']+[f'| {s} | {codes.get(s,"-")} |' for s in stages]
+          bundle=Path('lazy-bundle.log').read_text(errors='replace') if Path('lazy-bundle.log').exists() else 'not run'
+          Path('docs/validation/spiegelib-lazy-load.md').write_text('\n'.join([
+              '# SpiegeLib learned asset lazy-load acceptance','',
+              f"Source commit: `{os.environ['GITHUB_SHA']}`",'',
+              f"Acceptance: **{'SUCCESS' if success else 'FAILED'}**",'',
+              f"Precheck: `{pre.get('status','missing')}` — {pre.get('reason','missing')}",'',
+              *rows,'',
+              'The admitted SpiegeLib model/scaler path is dynamically imported from the learned benchmark row so ordinary editor startup does not require model execution or initialization. Production build inspection also requires the learned-model provenance to remain present in emitted assets while absent from the HTML entry document.','',
+              '```text',bundle,'```',''
+          ]),encoding='utf-8')
+          Path('.github/workflows/lazy-load-spiegelib-benchmark.yml').unlink(missing_ok=True)
+          for path in Path('.').glob('lazy-*.log'):path.unlink(missing_ok=True)
+          for name in ['lazy-precheck.txt','lazy-codes.txt','lazy-status.txt','lazy-model-files.txt']:
+              Path(name).unlink(missing_ok=True)
+      - name: Commit lazy-load optimization
+        if: steps.precheck.outputs.status == 'SUCCESS' && steps.gate.outputs.status == 'SUCCESS'
+        shell: bash
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add -A
+          git commit -m 'perf(audio): lazy-load SpiegeLib benchmark assets' || true
+          git pull --rebase origin main
+          git push origin HEAD:main
+      - name: Commit lazy-load diagnostic
+        if: steps.precheck.outputs.status != 'SUCCESS' || steps.gate.outputs.status != 'SUCCESS'
+        shell: bash
+        run: |
+          git reset --hard HEAD
+          mkdir -p docs/validation
+          cat > docs/validation/spiegelib-lazy-load.md <<EOF
+          # SpiegeLib learned asset lazy-load acceptance
+
+          Acceptance: **FAILED**
+
+          The optimization was not committed because the admitted benchmark precheck or validation gate did not pass. The existing learned implementation remains unchanged.
+          EOF
+          rm -f .github/workflows/lazy-load-spiegelib-benchmark.yml
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add -A
+          git commit -m 'test(audio): record blocked SpiegeLib lazy-load optimization' || true
+          git pull --rebase origin main
+          git push origin HEAD:main
