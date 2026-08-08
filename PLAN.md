@@ -4,6 +4,8 @@ This file contains unresolved or blocked work only. Completed implementation and
 
 ## 1. FM-1 protocol verification
 
+Use [`docs/validation/fm1-hardware-test-protocol.md`](./docs/validation/fm1-hardware-test-protocol.md) and the validated in-app MIDI-monitor hardware evidence recorder before proposing closure of any physical FM-1 item.
+
 - [ ] Record the tested FM-1 firmware version for the observed silent edit buffer after both rejected single-voice approaches; keep isolated Yamaha voice dumps and byte-index parameter streams disabled.
 - [ ] Verify on physical FM-1 hardware that the merged standard Yamaha DX7 32-voice dump opens the A/B/C/D destination prompt, preserves the other 31 voices from the loaded base bank and produces a playable target preset.
 - [ ] Capture FM-1 MIDI traffic and device-screen behavior for bank imports, destination confirmation, preset recall and any device-originated dump request.
@@ -13,6 +15,8 @@ This file contains unresolved or blocked work only. Completed implementation and
 - [ ] Add bank-transfer timeout, retry and post-save recovery guidance after physical import behavior is verified.
 
 ## 2. Device target modes
+
+Execute [`docs/validation/dx7-hardware-test-protocol.md`](./docs/validation/dx7-hardware-test-protocol.md) against a stock Yamaha DX7 and attach sanitized captures before closing either target-mode item.
 
 - [ ] Hardware-validate stock DX7 single-voice edit-buffer reception and destructive 32-voice bank reception, including MIDI channel matching, System Info, Memory Protect guidance and recovery from interrupted transfers.
 - [ ] Hardware-validate guarded voice parameters `0–155` and function parameters `64–77` on a stock DX7, including operator mask, live-change throttling, mono/poly, pitch bend, portamento and controller assignments. No programmatic dump-request frame is constructed because Yamaha's original MIDI Data Format documents none.
