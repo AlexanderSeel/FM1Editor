@@ -523,7 +523,7 @@ export function NearestPresetPanel({
             <p className="mt-1 text-[11px] text-slate-500">Seed {REFINEMENT_SEED} · six operator output levels + feedback only · each result starts from a ranked catalog voice.</p>
           </div>
           {refinementResults.map((item, index) => (
-            <article className="rounded-xl border border-amber-200/15 bg-amber-200/[0.025] p-3" key={`${item.sourceCandidate.id}:refined`}>
+            <article className="rounded-xl border border-amber-200/15 bg-amber-200/[0.025] p-3" data-best-distance={item.bestDistance} data-initial-distance={item.initialDistance} key={`${item.sourceCandidate.id}:refined`}>
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div className="min-w-0">
                   <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-amber-200">#{index + 1} refined · {item.improvement > 0 ? `improved ${item.improvement.toFixed(5)}` : 'no improvement'}</p>
