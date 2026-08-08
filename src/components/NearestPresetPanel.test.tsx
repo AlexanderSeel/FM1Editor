@@ -22,7 +22,7 @@ function reference(): PreparedReferenceAudio {
 }
 
 describe('NearestPresetPanel', () => {
-  it('keeps indexing explicit and disabled until a prepared reference exists', () => {
+  it('makes recreation primary while keeping similar-preset search explicit and disabled until a reference exists', () => {
     const markup = renderToStaticMarkup(
       <NearestPresetPanel
         onAuditionVoice={vi.fn()}
@@ -31,8 +31,9 @@ describe('NearestPresetPanel', () => {
         reference={null}
       />,
     )
-    expect(markup).toContain('Nearest preset · local retrieval')
-    expect(markup).toContain('Build / search local index')
+    expect(markup).toContain('Recreate sound · local synthesis')
+    expect(markup).toContain('Recreate sound')
+    expect(markup).toContain('Find similar presets')
     expect(markup).toContain('disabled=""')
     expect(markup).toContain('Nothing is uploaded')
     expect(markup).toContain('Full local bundled catalog')

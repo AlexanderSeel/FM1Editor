@@ -251,7 +251,7 @@ export function NearestPresetPanel({
     }
   }, [onAuditionVoice, stopReferencePlayback])
 
-  const search = useCallback(async () => {
+  const search = useCallback(async (recreate = false) => {
     if (!reference) return
     cancelSearch()
     stopReferencePlayback()
@@ -337,14 +337,49 @@ export function NearestPresetPanel({
       })
       setResults(ranked)
       setProgress({ completed: catalogCandidates.length, total: catalogCandidates.length, current: '' })
-      setStatus(`Ranked ${catalogCandidates.length} local voices · ${hitCount} fingerprint cache hits`)
+      if (recreate) {
+        if (ranked.length === 0) throw new Error('No local DX7 seed candidate is available for sound recreation.')
+        setPhase('refining')
+        setRefinementProgress(null)
+        setStatus('Recreating a new DX7 patch from the strongest local seeds · optimizing output, feedback, frequency and envelopes…')
+        const recreated = await refineRetrievedDx7Candidates(ranked, nextReferenceFingerprint, engine, {
+          startCount: Math.min(REFINEMENT_STARTS, ranked.length),
+          groups: ['output-feedback', 'operator-frequency', 'operator-envelope'],
+          seed: REFINEMENT_SEED,
+          sampleRate: INDEX_SAMPLE_RATE,
+          descriptorConfig: COMPACT_PRESET_DESCRIPTOR_CONFIG,
+          fingerprintCache,
+          signal,
+          cmaEs: {
+            populationSize: 10,
+            maxGenerations: 10,
+            sigma: 0.18,
+            targetScore: 0,
+          },
+          onProgress: (item) => {
+            setRefinementProgress({
+              startIndex: item.startIndex,
+              startCount: item.startCount,
+              generation: item.generation,
+              evaluations: item.evaluations,
+              bestDistance: item.bestDistance,
+              sourceName: item.sourceCandidate.voice.name || item.sourceCandidate.sourceLabel,
+            })
+          },
+        })
+        if (recreated.length === 0) throw new Error('DX7 sound recreation produced no optimized candidate.')
+        setRefinementResults(recreated)
+        setStatus(`Recreated ${recreated.length} DX7-compatible candidate${recreated.length === 1 ? '' : 's'} from ${catalogCandidates.length} local seed voices · best distance ${recreated[0]?.bestDistance.toFixed(5) ?? '—'}`)
+      } else {
+        setStatus(`Found ${ranked.length} similar seed presets from ${catalogCandidates.length} local voices · ${hitCount} fingerprint cache hits`)
+      }
       setPhase('ready')
       abortRef.current = null
     } catch (cause) {
       abortRef.current = null
       if (cause instanceof DOMException && cause.name === 'AbortError') {
         setPhase('cancelled')
-        setStatus('Nearest-preset search cancelled. Cached fingerprints remain local for the next run.')
+        setStatus('Sound recreation / preset search cancelled. Cached fingerprints remain local for the next run.')
         return
       }
       setPhase('error')
@@ -415,12 +450,12 @@ export function NearestPresetPanel({
   const progressPercent = progress.total > 0 ? Math.round(progress.completed * 100 / progress.total) : 0
 
   return (
-    <section className="mt-4 rounded-2xl border border-cyan-300/15 bg-cyan-300/[0.035] p-4" aria-label="Nearest preset reconstruction">
+    <section className="mt-4 rounded-2xl border border-cyan-300/15 bg-cyan-300/[0.035] p-4" aria-label="DX7 sound recreation">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-cyan-200">Nearest preset · local retrieval</p>
+          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-cyan-200">Recreate sound · local synthesis</p>
           <p className="mt-1 max-w-3xl text-xs leading-5 text-slate-400">
-            Render checksum-valid bundled DX7 voices through the deterministic local engine and rank compact fingerprints against the prepared reference. After retrieval, an explicit constrained CMA-ES step can refine operator output levels and feedback only. Nothing is uploaded, loaded into the editor, or sent to hardware automatically.
+            Create a new DX7-compatible patch that approaches the prepared reference. Local preset retrieval is only the seed-selection stage; Recreate sound automatically runs constrained synthesis optimization across operator output levels, feedback, operator frequencies and operator envelopes. Similar-preset search remains available separately. Nothing is uploaded or sent to hardware automatically.
           </p>
         </div>
         <span className="rounded-lg border border-white/10 px-2 py-1 text-[10px] uppercase tracking-[0.12em] text-slate-400">
@@ -442,12 +477,20 @@ export function NearestPresetPanel({
           </select>
         </label>
         <button
-          className="rounded-xl bg-cyan-300 px-4 py-2.5 text-sm font-black text-slate-950 disabled:cursor-not-allowed disabled:opacity-40"
+          className="rounded-xl bg-amber-200 px-4 py-2.5 text-sm font-black text-slate-950 disabled:cursor-not-allowed disabled:opacity-40"
           disabled={!reference || working}
-          onClick={() => void search()}
+          onClick={() => void search(true)}
           type="button"
         >
-          {phase === 'ready' ? 'Search again' : 'Build / search local index'}
+          {refinementResults.length > 0 ? 'Recreate sound again' : 'Recreate sound'}
+        </button>
+        <button
+          className="rounded-xl border border-cyan-300/30 px-4 py-2.5 text-sm font-bold text-cyan-100 disabled:cursor-not-allowed disabled:opacity-40"
+          disabled={!reference || working}
+          onClick={() => void search(false)}
+          type="button"
+        >
+          Find similar presets
         </button>
         {!working && results.length > 0 && referenceFingerprint && (
           <button
@@ -455,7 +498,7 @@ export function NearestPresetPanel({
             onClick={() => void refineTopCandidates()}
             type="button"
           >
-            Refine top {Math.min(REFINEMENT_STARTS, results.length)} · output + feedback
+            Quick refine seeds · output + feedback
           </button>
         )}
         {working && (
@@ -504,7 +547,7 @@ export function NearestPresetPanel({
       {results.length > 0 && (
         <div className="mt-4 grid gap-3">
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <h4 className="text-sm font-black uppercase tracking-[0.12em] text-slate-100">Ranked candidates</h4>
+            <h4 className="text-sm font-black uppercase tracking-[0.12em] text-slate-100">Seed candidates · similar presets</h4>
             <p className="text-[11px] text-slate-500">A = prepared reference · B = dry DX7-compatible local audition</p>
           </div>
           {results.map((candidate, index) => (
@@ -541,8 +584,8 @@ export function NearestPresetPanel({
       {refinementResults.length > 0 && (
         <div className="mt-5 grid gap-3" aria-label="CMA-ES refined candidates">
           <div>
-            <h4 className="text-sm font-black uppercase tracking-[0.12em] text-amber-100">CMA-ES refined candidates</h4>
-            <p className="mt-1 text-[11px] text-slate-500">Seed {REFINEMENT_SEED} · six operator output levels + feedback only · each result starts from a ranked catalog voice.</p>
+            <h4 className="text-sm font-black uppercase tracking-[0.12em] text-amber-100">Recreated patch candidates</h4>
+            <p className="mt-1 text-[11px] text-slate-500">Recreate sound uses ranked presets only as starting points and optimizes output levels, feedback, operator frequencies and operator envelopes. The optional Quick refine action remains the smaller output/feedback-only pass. Seed {REFINEMENT_SEED}.</p>
           </div>
           {refinementResults.map((item, index) => (
             <article className="rounded-xl border border-amber-200/15 bg-amber-200/[0.025] p-3" data-best-distance={item.bestDistance} data-initial-distance={item.initialDistance} key={`${item.sourceCandidate.id}:refined`}>
