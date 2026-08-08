@@ -5,7 +5,10 @@ import {
   type PhysicalEvidenceArtifactInput,
   type PhysicalEvidenceTarget,
 } from '../validation/physicalEvidencePackage'
-import { validatePhysicalEvidenceConsistency } from '../validation/physicalEvidenceConsistency'
+import {
+  serializePhysicalEvidenceConsistencyReport,
+  validatePhysicalEvidenceConsistency,
+} from '../validation/physicalEvidenceConsistency'
 
 const JSON_INSPECTION_LIMIT_BYTES = 16 * 1024 * 1024
 
@@ -42,12 +45,12 @@ async function prepareArtifact(file: File): Promise<PhysicalEvidenceArtifactInpu
   }
 }
 
-function saveManifest(text: string): void {
+function saveJson(text: string, stem: string): void {
   const blob = new Blob([text], { type: 'application/json' })
   const url = URL.createObjectURL(blob)
   const anchor = document.createElement('a')
   anchor.href = url
-  anchor.download = `fm1-physical-evidence-package-${new Date().toISOString().replace(/[:.]/g, '-')}.json`
+  anchor.download = `${stem}-${new Date().toISOString().replace(/[:.]/g, '-')}.json`
   anchor.click()
   URL.revokeObjectURL(url)
 }
@@ -178,10 +181,18 @@ export function PhysicalEvidencePackagePanel() {
           <button
             className="rounded-lg bg-emerald-200 px-3 py-2 text-xs font-black text-slate-950 disabled:opacity-40"
             disabled={manifest.artifactCount === 0 || busy}
-            onClick={() => saveManifest(serializePhysicalEvidencePackageManifest(manifest))}
+            onClick={() => saveJson(serializePhysicalEvidencePackageManifest(manifest), 'fm1-physical-evidence-package')}
             type="button"
           >
             Export package index
+          </button>
+          <button
+            className="rounded-lg border border-emerald-200/30 px-3 py-2 text-xs font-semibold text-emerald-100 disabled:opacity-40"
+            disabled={manifest.artifactCount === 0 || busy}
+            onClick={() => saveJson(serializePhysicalEvidenceConsistencyReport(consistency), 'fm1-physical-evidence-correlation')}
+            type="button"
+          >
+            Export correlation receipt
           </button>
           <button
             className="rounded-lg border border-white/10 px-3 py-2 text-xs font-semibold text-slate-300 disabled:opacity-40"
@@ -192,7 +203,7 @@ export function PhysicalEvidencePackagePanel() {
             Clear package
           </button>
         </div>
-        <p className="text-[10px] leading-4 text-slate-500">Warnings describe package coverage only. A complete-looking or structurally consistent file set is not proof that any physical check passed; the target-specific evidence manifests and protocols remain authoritative.</p>
+        <p className="text-[10px] leading-4 text-slate-500">Export both the package index and correlation receipt for closure evidence. Warnings describe package coverage only. A complete-looking or structurally consistent file set is not proof that any physical check passed; the target-specific evidence manifests and protocols remain authoritative.</p>
       </div>
     </details>
   )
