@@ -1,5 +1,0 @@
-{
-  "ok": false,
-  "browserName": "chrome",
-  "error": "Timed out waiting for condition: !document.body.textContent.includes('measurement pending')"
-}
