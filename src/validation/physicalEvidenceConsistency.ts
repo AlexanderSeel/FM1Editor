@@ -53,6 +53,20 @@ interface NamedJsonArtifact {
   readonly value: Record<string, unknown>
 }
 
+interface NamedFm1Manifest {
+  readonly name: string
+  readonly target: 'fm1'
+  readonly manifest: HardwareEvidenceManifest
+}
+
+interface NamedDx7Manifest {
+  readonly name: string
+  readonly target: 'dx7'
+  readonly manifest: Dx7HardwareEvidenceManifest
+}
+
+type NamedHardwareManifest = NamedFm1Manifest | NamedDx7Manifest
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
@@ -132,46 +146,40 @@ function addIssue(
 }
 
 function manifestIdentityWarnings(
-  artifactName: string,
-  target: 'fm1' | 'dx7',
-  manifest: HardwareEvidenceManifest | Dx7HardwareEvidenceManifest,
+  item: NamedHardwareManifest,
   issues: PhysicalEvidenceConsistencyIssue[],
 ): void {
-  const editorCommit = manifest.identity.editorCommit.trim()
+  const editorCommit = item.manifest.identity.editorCommit.trim()
   if (!/^[0-9a-f]{7,40}$/i.test(editorCommit)) {
-    addIssue(issues, 'warning', 'editor-commit-not-pinned', [artifactName], 'Hardware evidence does not contain a 7–40 character hexadecimal editor commit identity.')
+    addIssue(issues, 'warning', 'editor-commit-not-pinned', [item.name], 'Hardware evidence does not contain a 7–40 character hexadecimal editor commit identity.')
   }
-  if (target === 'fm1') {
-    const fm1 = manifest as HardwareEvidenceManifest
-    if (!fm1.identity.firmwareVersion.trim()) addIssue(issues, 'warning', 'fm1-firmware-not-recorded', [artifactName], 'FM-1 firmware identity is empty.')
+  if (item.target === 'fm1') {
+    if (!item.manifest.identity.firmwareVersion.trim()) addIssue(issues, 'warning', 'fm1-firmware-not-recorded', [item.name], 'FM-1 firmware identity is empty.')
   } else {
-    const dx7 = manifest as Dx7HardwareEvidenceManifest
-    if (!dx7.identity.modelRevision.trim()) addIssue(issues, 'warning', 'dx7-model-not-recorded', [artifactName], 'DX7 model/revision identity is empty.')
-    if (!/^[0-9a-f]{64}$/i.test(dx7.identity.recoveryBankSha256.trim())) {
-      addIssue(issues, 'error', 'dx7-recovery-bank-hash-invalid', [artifactName], 'DX7 evidence does not contain a valid 64-character recovery-bank SHA-256.')
+    if (!item.manifest.identity.modelRevision.trim()) addIssue(issues, 'warning', 'dx7-model-not-recorded', [item.name], 'DX7 model/revision identity is empty.')
+    if (!/^[0-9a-f]{64}$/i.test(item.manifest.identity.recoveryBankSha256.trim())) {
+      addIssue(issues, 'error', 'dx7-recovery-bank-hash-invalid', [item.name], 'DX7 evidence does not contain a valid 64-character recovery-bank SHA-256.')
     }
   }
 }
 
 function localManifestInvariantIssues(
-  artifactName: string,
-  target: 'fm1' | 'dx7',
-  manifest: HardwareEvidenceManifest | Dx7HardwareEvidenceManifest,
+  item: NamedHardwareManifest,
   issues: PhysicalEvidenceConsistencyIssue[],
 ): void {
-  if (target === 'fm1') {
-    const fm1 = manifest as HardwareEvidenceManifest
-    if (fm1.target !== 'fm1') addIssue(issues, 'error', 'fm1-target-mismatch', [artifactName], `FM-1 evidence manifest declares target ${String(fm1.target)}.`)
+  if (item.target === 'fm1') {
+    const fm1 = item.manifest
+    if (fm1.target !== 'fm1') addIssue(issues, 'error', 'fm1-target-mismatch', [item.name], `FM-1 evidence manifest declares target ${String(fm1.target)}.`)
     const expectedSysexEnabled = fm1.midiCapture.sysexInputCount + fm1.midiCapture.sysexOutputCount > 0
-    if (fm1.sysexEnabled !== expectedSysexEnabled) addIssue(issues, 'error', 'fm1-sysex-flag-mismatch', [artifactName], 'FM-1 sysexEnabled does not agree with its own MIDI capture summary.')
+    if (fm1.sysexEnabled !== expectedSysexEnabled) addIssue(issues, 'error', 'fm1-sysex-flag-mismatch', [item.name], 'FM-1 sysexEnabled does not agree with its own MIDI capture summary.')
     const expectedInput = fm1.midiCapture.inputPorts.join(' | ') || null
     const expectedOutput = fm1.midiCapture.outputPorts.join(' | ') || null
-    if (fm1.selectedMidiInput !== expectedInput) addIssue(issues, 'error', 'fm1-selected-input-mismatch', [artifactName], 'FM-1 selectedMidiInput does not agree with its own MIDI capture ports.')
-    if (fm1.selectedMidiOutput !== expectedOutput) addIssue(issues, 'error', 'fm1-selected-output-mismatch', [artifactName], 'FM-1 selectedMidiOutput does not agree with its own MIDI capture ports.')
+    if (fm1.selectedMidiInput !== expectedInput) addIssue(issues, 'error', 'fm1-selected-input-mismatch', [item.name], 'FM-1 selectedMidiInput does not agree with its own MIDI capture ports.')
+    if (fm1.selectedMidiOutput !== expectedOutput) addIssue(issues, 'error', 'fm1-selected-output-mismatch', [item.name], 'FM-1 selectedMidiOutput does not agree with its own MIDI capture ports.')
   } else {
-    const dx7 = manifest as Dx7HardwareEvidenceManifest
-    if (!equalStringArray(dx7.selectedMidiInputs, dx7.midiCapture.inputPorts)) addIssue(issues, 'error', 'dx7-selected-input-mismatch', [artifactName], 'DX7 selected MIDI inputs do not agree with its own MIDI capture ports.')
-    if (!equalStringArray(dx7.selectedMidiOutputs, dx7.midiCapture.outputPorts)) addIssue(issues, 'error', 'dx7-selected-output-mismatch', [artifactName], 'DX7 selected MIDI outputs do not agree with its own MIDI capture ports.')
+    const dx7 = item.manifest
+    if (!equalStringArray(dx7.selectedMidiInputs, dx7.midiCapture.inputPorts)) addIssue(issues, 'error', 'dx7-selected-input-mismatch', [item.name], 'DX7 selected MIDI inputs do not agree with its own MIDI capture ports.')
+    if (!equalStringArray(dx7.selectedMidiOutputs, dx7.midiCapture.outputPorts)) addIssue(issues, 'error', 'dx7-selected-output-mismatch', [item.name], 'DX7 selected MIDI outputs do not agree with its own MIDI capture ports.')
   }
 }
 
@@ -192,15 +200,14 @@ export function validatePhysicalEvidenceConsistency(
       summary: summarizeHardwareMidiCapture(artifact.parsed.entries),
     }))
 
-  const manifests = jsonArtifacts.flatMap((artifact) => {
+  const manifests: NamedHardwareManifest[] = []
+  for (const artifact of jsonArtifacts) {
     if (artifact.value.schema === HARDWARE_EVIDENCE_SCHEMA && isRecord(artifact.value.midiCapture) && isRecord(artifact.value.identity)) {
-      return [{ name: artifact.name, target: 'fm1' as const, manifest: artifact.value as unknown as HardwareEvidenceManifest }]
+      manifests.push({ name: artifact.name, target: 'fm1', manifest: artifact.value as unknown as HardwareEvidenceManifest })
+    } else if (artifact.value.schema === DX7_HARDWARE_EVIDENCE_SCHEMA && isRecord(artifact.value.midiCapture) && isRecord(artifact.value.identity)) {
+      manifests.push({ name: artifact.name, target: 'dx7', manifest: artifact.value as unknown as Dx7HardwareEvidenceManifest })
     }
-    if (artifact.value.schema === DX7_HARDWARE_EVIDENCE_SCHEMA && isRecord(artifact.value.midiCapture) && isRecord(artifact.value.identity)) {
-      return [{ name: artifact.name, target: 'dx7' as const, manifest: artifact.value as unknown as Dx7HardwareEvidenceManifest }]
-    }
-    return []
-  })
+  }
 
   const fm1ManifestCount = manifests.filter((manifest) => manifest.target === 'fm1').length
   const dx7ManifestCount = manifests.filter((manifest) => manifest.target === 'dx7').length
@@ -215,8 +222,8 @@ export function validatePhysicalEvidenceConsistency(
   const usedMonitorNames = new Set<string>()
   const links: PhysicalEvidenceManifestLink[] = []
   for (const item of manifests) {
-    manifestIdentityWarnings(item.name, item.target, item.manifest, issues)
-    localManifestInvariantIssues(item.name, item.target, item.manifest, issues)
+    manifestIdentityWarnings(item, issues)
+    localManifestInvariantIssues(item, issues)
 
     const comparisons = monitors.map((monitor) => ({
       monitor,
