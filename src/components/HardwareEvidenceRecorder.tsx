@@ -138,7 +138,7 @@ export function HardwareEvidenceRecorder({ entries }: HardwareEvidenceRecorderPr
           <label className="grid gap-1 text-[10px] text-slate-400">Approx. latency ms<input className="rounded-lg border border-white/10 bg-black/20 px-2 py-1.5 text-xs text-white" inputMode="decimal" value={audio.approximateLatencyMs ?? ''} onChange={(event) => setAudioValue('approximateLatencyMs', asNumber(event.target.value, 0))} /></label>
         </div>
 
-        {(['A', 'B', 'C', 'D', 'E'] as const).map((section) => (
+        {(['A', 'B', 'C', 'D', 'E', 'F'] as const).map((section) => (
           <details className="rounded-lg border border-white/10 bg-black/15 p-2" key={section}>
             <summary className="cursor-pointer text-[10px] font-bold uppercase tracking-[0.12em] text-slate-300">Protocol {section}</summary>
             <div className="mt-2 grid gap-2">
