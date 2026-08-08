@@ -1,0 +1,109 @@
+name: Validate audition provenance in closure evidence
+
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/validate-audition-evidence-markdown.yml']
+
+permissions:
+  contents: write
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Surface exact-winner provenance in closure markdown
+        shell: python
+        run: |
+          from pathlib import Path
+          path=Path('src/audio/realReferenceAggregateEvidenceDocument.ts')
+          text=path.read_text(encoding='utf-8')
+          anchor="    `- Current successful learned rows: **${aggregate.learnedInitializationSuccessCount}/${aggregate.receiptCount}**`,\n"
+          replacement=anchor+"    `- Reproducible exact-winner audition receipts: **${aggregate.auditionEvidenceReceiptCount}/${aggregate.receiptCount}**`,\n"
+          if anchor not in text: raise SystemExit('closure learned-row anchor missing')
+          text=text.replace(anchor,replacement,1)
+          table_header="    '| Reference | SHA-256 | Class | Retrieval | CMA | Learned | Retrieval/CMA listening | Learned listening | Notes |',\n    '| --- | --- | --- | ---: | ---: | ---: | --- | --- | --- |',\n"
+          table_new="    '| Reference | SHA-256 | Class | Retrieval | CMA | Learned | Exact winners | Retrieval/CMA listening | Learned listening | Notes |',\n    '| --- | --- | --- | ---: | ---: | ---: | --- | --- | --- | --- |',\n"
+          if table_header not in text: raise SystemExit('receipt table header anchor missing')
+          text=text.replace(table_header,table_new,1)
+          row="    lines.push(`| ${safeCell(receipt.filename)} | \\`${receipt.referenceSha256}\\` | ${receipt.category} | ${receipt.retrievalDistance.toFixed(5)} | ${receipt.evolutionaryDistance.toFixed(5)} | ${receipt.learnedDistance === null ? '—' : receipt.learnedDistance.toFixed(5)} | ${receipt.listeningAssessment} | ${receipt.learnedListeningAssessment} | ${safeCell(receipt.notes ?? '')} |`)\n"
+          row_new="    lines.push(`| ${safeCell(receipt.filename)} | \\`${receipt.referenceSha256}\\` | ${receipt.category} | ${receipt.retrievalDistance.toFixed(5)} | ${receipt.evolutionaryDistance.toFixed(5)} | ${receipt.learnedDistance === null ? '—' : receipt.learnedDistance.toFixed(5)} | ${receipt.auditionEvidenceComplete ? 'yes' : 'no'} | ${receipt.listeningAssessment} | ${receipt.learnedListeningAssessment} | ${safeCell(receipt.notes ?? '')} |`)\n"
+          if row not in text: raise SystemExit('receipt row anchor missing')
+          text=text.replace(row,row_new,1)
+          old="    'The aggregate JSON and this document contain hashes, classifications, metrics, runtimes, listening assessments and notes only. Raw reference audio is not embedded.',\n"
+          new="    'The aggregate JSON and this document contain hashes, classifications, metrics, runtimes, exact-winner provenance flags, listening assessments and notes only. The semantic winner voices remain in the per-reference receipts for reproducible audition and are not copied into the aggregate. Raw reference audio is not embedded.',\n"
+          if old not in text: raise SystemExit('interpretation privacy anchor missing')
+          text=text.replace(old,new,1)
+          path.write_text(text,encoding='utf-8')
+
+          test=Path('src/audio/realReferenceAggregateEvidenceDocument.test.ts')
+          t=test.read_text(encoding='utf-8')
+          anchor="    expect(output.markdown).toContain('learned-better')\n"
+          replacement=anchor+"    expect(output.markdown).toContain('Reproducible exact-winner audition receipts: **6/6**')\n    expect(output.markdown).toContain('| yes |')\n"
+          if anchor not in t: raise SystemExit('evidence doc test anchor missing')
+          t=t.replace(anchor,replacement,1)
+          test.write_text(t,encoding='utf-8')
+      - name: Run acceptance stages
+        shell: bash
+        run: |
+          set +e
+          : > stages.txt
+          run_stage() { name="$1"; shift; "$@" > "$name.log" 2>&1; code=$?; cat "$name.log"; echo "$name=$code" >> stages.txt; }
+          run_stage install npm install --no-audit --no-fund
+          run_stage typecheck npm run typecheck
+          run_stage lint npm run lint
+          run_stage evidence npm test -- src/audio/realReferenceAggregateEvidenceDocument.test.ts src/audio/realReferenceBenchmarkAggregate.test.ts
+          run_stage full-test npm run test
+          run_stage build npm run build
+          exit 0
+      - name: Persist receipt
+        if: always()
+        shell: python
+        run: |
+          from pathlib import Path
+          import os
+          codes={}
+          p=Path('stages.txt')
+          if p.exists():
+            for line in p.read_text().splitlines():
+              if '=' in line:
+                k,v=line.split('=',1)
+                try: codes[k]=int(v)
+                except ValueError: codes[k]=999
+          stages=['install','typecheck','lint','evidence','full-test','build']
+          ok=all(codes.get(s)==0 for s in stages)
+          rows=['| Stage | Exit |','| --- | ---: |']+[f'| {s} | {codes.get(s,"?")} |' for s in stages]
+          failures=[]
+          if not ok:
+            for s in stages:
+              if codes.get(s)==0: continue
+              log=Path(f'{s}.log'); body=log.read_text(errors='replace') if log.exists() else 'missing log'
+              failures += ['',f'## {s} failure tail','','```text',body[-12000:],'```']
+          Path('docs/validation/real-reference-evidence-document-audition-provenance.md').write_text('\n'.join([
+            '# Real-reference closure document audition provenance acceptance','',
+            f"Source commit: `{os.environ['GITHUB_SHA']}`",'',
+            f"Software acceptance: **{'SUCCESS' if ok else 'FAILED'}**",'',*rows,'',
+            '- closure Markdown now exposes the exact-winner audition receipt count and per-reference provenance flag',
+            '- semantic DX7 winner voices remain only in per-reference receipts; the aggregate JSON/Markdown stays compact and contains no raw audio','',*failures,''
+          ]),encoding='utf-8')
+          Path('.github/workflows/validate-audition-evidence-markdown.yml').unlink(missing_ok=True)
+          for file in Path('.').glob('*.log'): file.unlink(missing_ok=True)
+          Path('stages.txt').unlink(missing_ok=True)
+      - name: Commit result
+        if: always()
+        shell: bash
+        run: |
+          status=$(grep -F 'Software acceptance:' docs/validation/real-reference-evidence-document-audition-provenance.md | grep -oE 'SUCCESS|FAILED' | head -1)
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add -A
+          git commit -m "test(audio): expose audition provenance in closure evidence ($status)" || true
+          git pull --rebase origin main
+          git push origin HEAD:main
