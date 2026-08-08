@@ -1,6 +1,6 @@
 # Support matrix, known limitations and recovery guide
 
-Last reviewed: 2026-08-06
+Last reviewed: 2026-08-08
 
 This document distinguishes application implementation, software validation and physical-device verification. A feature appearing in the UI is not evidence that an FM-1 or Yamaha DX7 accepted it.
 
@@ -18,21 +18,22 @@ This document distinguishes application implementation, software validation and 
 | DX7 `.syx` single-voice and 32-voice parsing/export | Implemented | Covered by codec, checksum, semantic-range, original-import and synthetic-fixture tests recorded elsewhere under `docs/validation/` | File processing does not prove reception by a physical synthesizer. |
 | Local voice library, JSON backup and catalog browsing | Implemented | Library and catalog tests exist; the tracked ZIP has a recorded hash and content audit | Third-party patch ownership varies. Additional providers require explicit data-use permission and stable machine-readable access. |
 | MIDI notes, Program Change, Clock, Start, Continue, Stop and All Notes Off | Implemented | Message encoders and application routing are software-testable | Correct physical response still depends on selected output, channel and device configuration. |
-| Browser sequencer | Implemented | Local scheduling, piano-roll operations, loop state and JSON project behavior have tests | The sequencer controls external MIDI only. It does not read or write FM-1 internal patterns. |
+| Browser sequencer | Implemented | Local scheduling, piano-roll operations, loop state and JSON project behavior have tests | The sequencer controls external MIDI only. It does not read or write FM-1 internal patterns. Section F of the physical protocol now defines discovery evidence required before that boundary can change. |
 | FM-1 documented FX CC `0–23` | Implemented | Range and encoding logic are software-testable | Physical behavior and firmware differences are not fully recorded. The FX channel is separate from the note channel. |
 | FM-1 merged 32-voice bank workflow | Implemented and guarded | Bank construction and preservation of the other 31 app-side voices are software-testable | Destination prompt, A/B/C/D mapping, save completion, persistence and recovery remain physically unverified. |
 | FM-1 isolated single-voice transfer | Disabled | Two physical attempts on 2026-08-05 left the active sound silent | Firmware was not recorded. Standard 163-byte voice dumps and guessed DX7-byte-to-FM-1-parameter streams must remain disabled. |
 | FM-1 individual voice-parameter writes | Blocked | The official frame exists, but no semantic parameter table is published | Do not infer FM-1 meanings from DX7 unpacked byte offsets. |
 | FM-1 device backup/readback | Blocked | No supported bank-request or repeatable device-originated dump workflow is known | The app requires an exact app-side base or recovery bank. |
-| FM-1 internal sequence transfer | Blocked | No stable pattern dump/restore protocol is known | Use the local `.fm1seq.json` project format and external MIDI playback only. |
-| Yamaha DX7 single-voice and 32-voice bulk send | Implemented and guarded | Message construction and application safety routing are software-testable | Reception, interrupted-transfer behavior and recovery remain physically unverified on a stock DX7. |
-| Yamaha DX7 voice parameters `0–155` | Implemented and guarded | Semantic mapping, ranges, diffing and frame construction have tests | Hardware reception, operator-mask behavior and throttled live editing require a stock DX7 test. |
-| Yamaha DX7 function parameters `64–77` | Implemented and guarded | Yamaha group-2 frame construction and semantic ranges have tests | Mono/poly, bend, portamento and controller-assignment behavior require a stock DX7 test. |
+| FM-1 internal sequence transfer | Blocked | No stable pattern dump/restore protocol is known | Use the local `.fm1seq.json` project format and external MIDI playback only; physical protocol section F is discovery-only and does not authorize guessed pattern messages. |
+| Yamaha DX7 single-voice and 32-voice bulk send | Implemented and guarded | Message construction and application safety routing are software-testable; a dedicated stock-DX7 physical protocol is now repository-owned | Reception, interrupted-transfer behavior and recovery remain physically unverified on a stock DX7. |
+| Yamaha DX7 voice parameters `0–155` | Implemented and guarded | Semantic mapping, ranges, diffing and frame construction have tests; physical test coverage is specified in `dx7-hardware-test-protocol.md` | Hardware reception, operator-mask behavior and throttled live editing require a stock DX7 test. |
+| Yamaha DX7 function parameters `64–77` | Implemented and guarded | Yamaha group-2 frame construction and semantic ranges have tests; physical test coverage is specified in `dx7-hardware-test-protocol.md` | Mono/poly, bend, portamento and controller-assignment behavior require a stock DX7 test. |
 | Yamaha DX7 programmatic dump request | Not implemented | Yamaha's reviewed MIDI Data Format defines bulk transmission/reception but no stock-DX7 request frame | Initiate outgoing voice or bank dumps from the DX7 front panel. |
 | Browser-local audio recording | Implemented | Media behavior is validated with mocked browser APIs | `Microphone (FM-1)` is only an endpoint label until audible FM-1 synthesis is recorded from physical hardware. |
-| Chrome/Edge responsive layouts | Permanent FM-1 and DX7 matrices implemented | Current-head execution receipt is still pending | The scripts target installed Chrome and Edge at wide desktop, compact desktop, tablet and mobile viewports. |
+| Chrome/Edge responsive layouts | Permanent FM-1 and DX7 matrices implemented | Same-source Windows receipt is **SUCCESS** in `docs/validation/current-software-browser-gate.md`: Chrome and Edge pass FM-1/DX7 at 1440×900, 1024×768 and 390×844 touch emulation | This is layout/browser evidence only; the smoke intentionally issues no MIDI requests and does not validate physical MIDI/audio. |
 | BLE MIDI | No verified support claim | No recorded browser/platform/device matrix | Test only where the operating system and Chromium Web MIDI implementation expose the BLE device. |
-| GitHub Pages deployment | Not enabled | Secure-context behavior is understood in principle but the deployed MIDI/audio workflow is not verified | Do not publish until routing, asset paths, Web MIDI and Web Audio behavior are checked on the deployed origin. |
+| GitHub Pages deployment | Build/routing readiness implemented; deployment still disabled | `/FM1Editor/` subpath build, PWA/static routing, catalog and virtual-DX7 asset paths are software-validated in `docs/validation/pages-subpath-readiness.md` | Do not publish until Web MIDI/SysEx and USB/Web Audio are physically verified on the intended HTTPS origin. |
+| Physical evidence capture helper | Implemented | Software acceptance recorded under `docs/validation/`; raw MIDI JSON and a sanitized FM-1 evidence manifest can be exported from the MIDI monitor | The helper never converts traffic patterns into hardware PASS results. |
 
 ## Recorded hardware and browser combinations
 
@@ -49,18 +50,17 @@ This observation is enough to keep both methods disabled, but not enough to defi
 
 ### Yamaha DX7
 
-No stock Yamaha DX7 hardware combination is recorded as physically verified.
+No stock Yamaha DX7 hardware combination is recorded as physically verified. Use `docs/validation/dx7-hardware-test-protocol.md` for the first stock-DX7 evidence package.
 
 ### Browser layout automation
 
-The permanent browser scripts are configured for installed Google Chrome and Microsoft Edge on Windows with these viewports:
+The recorded same-source Windows browser gate passed for installed Google Chrome and Microsoft Edge, for both FM-1 and DX7 targets, at:
 
-- `1440 × 900` wide desktop;
-- `1100 × 900` compact desktop;
-- `820 × 1180` tablet;
-- `390 × 844` mobile.
+- `1440 × 900` desktop;
+- `1024 × 768` narrow desktop;
+- `390 × 844` mobile touch emulation.
 
-The current repository still requires an execution receipt for typecheck, lint, tests, production build and both browser matrices.
+The receipt also records successful audit, typecheck, lint, full tests and production build from the same checkout. It is not physical MIDI/audio evidence.
 
 ## Recovery playbooks
 
@@ -132,7 +132,7 @@ No timeout, acknowledgement, retry or completion-detection behavior should be in
 2. Record the selected output, MIDI channel, System Info state and Memory Protect state.
 3. Do not assume that a failed 32-voice transfer left the internal bank unchanged.
 4. Initiate backups and outgoing dumps from the DX7 front panel; the app has no programmatic dump-request frame.
-5. Restore only from a known backup and verify all 32 voices after the physical restore procedure is established.
+5. Restore only from a known backup and verify all 32 voices using `dx7-hardware-test-protocol.md`.
 6. Lock voice/function writes in the app before changing ports, channels or device settings.
 
 Memory Protect should be disabled only for the intended operation and restored according to the DX7 operating procedure afterward.
@@ -156,15 +156,16 @@ Legacy breakpoint `127` and detune `15` are normalized only at the import bounda
 
 ## Evidence required to change a physical status
 
-Use `fm1-hardware-test-protocol.md` and record at minimum:
+For FM-1 use `docs/validation/fm1-hardware-test-protocol.md`; for stock DX7 use `docs/validation/dx7-hardware-test-protocol.md`. Record at minimum:
 
 - date, tester and application commit;
-- exact device and firmware;
+- exact device and firmware/ROM identity where available;
 - Windows, browser and driver versions;
 - direct USB or hub/cable topology;
 - selected MIDI/audio endpoint labels and channels;
 - original and transmitted files with SHA-256 hashes;
-- MIDI monitor export;
+- raw MIDI monitor JSON export;
+- the sanitized in-app FM-1 hardware evidence manifest when applicable;
 - device-screen timeline;
 - audible recordings where audio is involved;
 - exact recovery result after an intentional or observed failure.
