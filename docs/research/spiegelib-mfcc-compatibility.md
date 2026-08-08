@@ -1,6 +1,6 @@
 # SpiegeLib MFCC preprocessing compatibility
 
-FM1 Editor source commit: `1381d840a626f58cc0ad272999f61fa8fb150b88`
+FM1 Editor source commit: `e43907c19352e5e76cb5e5c6893cfb9d82d929f1`
 
 Compatibility status: **FAILED**
 
@@ -9,16 +9,16 @@ Compatibility status: **FAILED**
 | reference | 1 |
 | compare | 1 |
 
-- oracle: Python 3.7.7 + Librosa 0.7.2; Numba JIT disabled only to avoid old cache initialization
+- oracle: Python 3.7.7 + Librosa 0.7.2; Numba JIT disabled; native soundfile IO stubbed because the oracle receives an in-memory array
 - settings: 44.1 kHz, 2048 FFT, 1024 hop, 13 MFCC, one-second input
 
-The historical container writes only its JSON oracle to stdout. A SUCCESS means the TypeScript extractor matches all 572 Librosa coefficients within the recorded tolerance.
+The soundfile stub cannot load or write audio and is unused by the in-memory MFCC calculation. A SUCCESS means the TypeScript extractor matches all 572 Librosa coefficients within the recorded tolerance.
 
 
 ## reference failure tail
 
 ```text
-sha256:0aec1bb092e0759c8ad02d76339b4dd4c85f7dfbe9ea962e5fd315e7567c8609
+sha256:26a6780e2d63eadb8270db4911187cb8b56549618ca86bc323ee83658aa5e6de
 Traceback (most recent call last):
   File "/opt/generate.py", line 2, in <module>
     import librosa,numpy as np,scipy
@@ -26,11 +26,15 @@ Traceback (most recent call last):
     from . import core
   File "/usr/local/lib/python3.7/site-packages/librosa/core/__init__.py", line 126, in <module>
     from .audio import *  # pylint: disable=wildcard-import
-  File "/usr/local/lib/python3.7/site-packages/librosa/core/audio.py", line 10, in <module>
-    import soundfile as sf
-  File "/usr/local/lib/python3.7/site-packages/soundfile.py", line 142, in <module>
-    raise OSError('sndfile library not found')
-OSError: sndfile library not found
+  File "/usr/local/lib/python3.7/site-packages/librosa/core/audio.py", line 14, in <module>
+    import resampy
+  File "/usr/local/lib/python3.7/site-packages/resampy/__init__.py", line 7, in <module>
+    from .core import *
+  File "/usr/local/lib/python3.7/site-packages/resampy/core.py", line 11, in <module>
+    from .interpn import resample_f_s, resample_f_p
+  File "/usr/local/lib/python3.7/site-packages/resampy/interpn.py", line 75, in <module>
+    nopython=True,
+TypeError: guvectorize() missing 1 required positional argument: 'signature'
 
 ```
 
