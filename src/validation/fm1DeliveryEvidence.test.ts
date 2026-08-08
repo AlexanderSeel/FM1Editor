@@ -129,4 +129,26 @@ describe('FM-1 delivery evidence gate', () => {
     expect(gate.ready).toBe(false)
     expect(gate.blockers).toContain('Expected deployment origin must be HTTPS.')
   })
+
+  it('fails closed on a top-level schema match with malformed nested fields', () => {
+    const malformed = {
+      schema: HARDWARE_EVIDENCE_SCHEMA,
+      target: 'fm1',
+      createdAt: '2026-08-08T09:00:00.000Z',
+      midiPermission: 'traffic-captured',
+      sysexEnabled: true,
+      selectedMidiInput: null,
+      selectedMidiOutput: 'FM-1 MIDI OUT',
+      identity: { firmwareVersion: '1.0.0' },
+      browser: {},
+      audio: {},
+      midiCapture: { yamahaBankOutputCount: 1 },
+      checks: {},
+    }
+
+    expect(() => evaluateFm1DeliveryEvidence([malformed], { expectedOrigin: ORIGIN })).not.toThrow()
+    const gate = evaluateFm1DeliveryEvidence([malformed], { expectedOrigin: ORIGIN })
+    expect(gate.ready).toBe(false)
+    expect(gate.manifests[0]?.blockers[0]).toContain('is not an FM-1')
+  })
 })
