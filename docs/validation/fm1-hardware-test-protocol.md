@@ -6,6 +6,8 @@ This protocol records the evidence required to close the hardware-dependent item
 
 Open **MIDI monitor → Hardware evidence session** during a physical session. The helper records the test identity, browser/secure-context metadata, audio measurements and explicit PASS/FAIL observations while summarizing the current MIDI monitor capture. It recognizes outgoing standard Yamaha 4,104-byte bank messages and 163-byte single-voice messages by framing/length, but those detections are metadata only and never turn a physical check into a pass.
 
+The MIDI monitor also shows a **Latest SysEx delta** after two same-direction SysEx captures exist. It reports message lengths, common prefix/suffix lengths and changed byte offsets/values. Use it only for controlled one-property-at-a-time comparisons; a changed offset is a candidate field, not proof of its semantic meaning.
+
 Export both artifacts when MIDI evidence is relevant:
 
 1. **Export JSON** from the MIDI monitor for the raw captured bytes.
@@ -131,7 +133,7 @@ Do not send guessed sequencer SysEx. This section is discovery-first and must es
 1. Create a minimal pattern on the FM-1: one active step, fixed note, fixed velocity, no ties/accents/automation where the device permits.
 2. Start MIDI capture and exercise every front-panel operation that could plausibly send/export/copy the pattern. Record whether any MIDI or SysEx appears.
 3. Change exactly one pattern property at a time—step position, note, velocity, gate/tie, accent, pattern length and tempo where stored in-pattern—and repeat the capture.
-4. Compare message lengths and byte deltas between captures. Record stable header/footer bytes, candidate length fields, checksums and the byte positions that correlate with each single changed property.
+4. Use the raw JSON exports as the authoritative capture and the in-app **Latest SysEx delta** as a convenience view. Record message lengths, common prefix/suffix boundaries and candidate changed offsets; confirm every candidate against repeated captures before assigning semantics.
 5. Repeat the same source pattern in at least two pattern slots to determine whether slot identity is embedded in the payload or selected separately on the device.
 6. If a complete device-originated pattern message is found, capture at least three distinct patterns and verify the framing/checksum rule repeats.
 7. Only after a stable format is identified, replay one previously captured unmodified device-originated message to a sacrificial pattern slot and verify exact round-trip behavior.
