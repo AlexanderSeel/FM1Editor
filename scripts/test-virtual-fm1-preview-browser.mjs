@@ -185,6 +185,8 @@ try {
 
   const masterSliderChanged = await evaluate(cdp, `(() => { const input=document.querySelector('#virtual-fm1-master-gain'); if(!input) return false; const setter=Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value')?.set; setter?.call(input,'-18'); input.dispatchEvent(new Event('input',{bubbles:true})); input.dispatchEvent(new Event('change',{bubbles:true})); return true; })()`)
   if (!masterSliderChanged) throw new Error('Unable to change Virtual FM-1 master gain')
+  await waitForExpression(cdp, `document.querySelector('#virtual-fm1-master-gain')?.value === '-18' && document.body.textContent.includes('-18 dB')`, 5_000)
+  await sleep(100)
   if (!(await pianoKey(cdp, 'keydown'))) throw new Error('Unable to start attenuated preview note')
   const attenuatedPeak = await samplePeak(cdp, 'window.__fm1PreviewLimiterAnalyser', 650)
   await pianoKey(cdp, 'keyup')

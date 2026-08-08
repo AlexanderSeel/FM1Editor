@@ -1,14 +1,14 @@
 # Complete Virtual FM-1 preview browser acceptance
 
-Source commit: `f73c8a3a1211a4fd4ab45d79554f53da68af0431`
+Source commit: `a01fbe2658c1e766aa5098833a5092cf82b3ac74`
 
-Overall browser gate: **FAILED**
+Overall browser gate: **SUCCESS**
 
 | Browser | Product | Dry peak | FX peak | Attenuated peak | Reference A peak | Current B peak | WAV downloads | Measured utilization | Result |
 | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | --- | --- |
-| Chrome | FAILED | — | — | — | — | — | — | — | Master gain did not attenuate output enough: fx=0.07193171232938766, attenuated=0.07192932814359665 |
-| Edge | FAILED | — | — | — | — | — | — | — | Master gain did not attenuate output enough: fx=0.07193171232938766, attenuated=0.07193083316087723 |
+| Chrome | Chrome/151.0.7922.72 | 0.06689654 | 0.07193171 | 0.01806843 | 0.89125091 | 0.00180026 | 2 | 0.30%, 37.50% | PASS |
+| Edge | Edg/151.0.4129.59 | 0.06689649 | 0.07193171 | 0.01806843 | 0.89125091 | 0.00180026 | 2 | 0.60%, 37.50% | PASS |
 
-This clean-state branded-browser run exercises the mounted Virtual FM-1 preview after the measured worklet clock fallback: local software FX, post-limiter dry/FX/master output, measured worklet diagnostics, prepared-reference A/current-B playback and valid note/chord RIFF/WAVE export.
+This run waits for the controlled React master-gain state to commit before measuring post-limiter attenuation. It also validates dry/FX output, measured worklet diagnostics, prepared-reference A/current-B playback, valid note/chord RIFF/WAVE export, zero Web MIDI and no external/write fetches.
 
-Acceptance requires zero Web MIDI requests and no external/write fetches. This is DX7-compatible / FM-1-inspired browser evidence only; no physical FM-1 equivalence is claimed.
+No physical FM-1 equivalence is claimed.
