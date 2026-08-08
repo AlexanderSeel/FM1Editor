@@ -4,6 +4,7 @@ import {
   parseRealReferenceBenchmarkReceipt,
   REAL_REFERENCE_BENCHMARK_AGGREGATE_SCHEMA,
   type RealReferenceEvidenceCategory,
+  type RealReferenceLearnedListeningAssessment,
   type RealReferenceListeningAssessment,
 } from './realReferenceBenchmarkAggregate'
 import {
@@ -126,11 +127,29 @@ function item(
     report: receipt(hashCharacter, retrievalDistance, evolutionaryDistance),
     category,
     listeningAssessment,
-  } as const
+    learnedListeningAssessment: 'unavailable' as const,
+  }
+}
+
+function currentItem(
+  hashCharacter: string,
+  category: RealReferenceEvidenceCategory,
+  listeningAssessment: RealReferenceListeningAssessment,
+  learnedListeningAssessment: RealReferenceLearnedListeningAssessment,
+  retrievalDistance: number,
+  evolutionaryDistance: number,
+  learnedDistance: number,
+) {
+  return {
+    report: receipt(hashCharacter, retrievalDistance, evolutionaryDistance, 10, 30, { distance: learnedDistance, runtimeMs: 4 }),
+    category,
+    listeningAssessment,
+    learnedListeningAssessment,
+  }
 }
 
 describe('real-reference benchmark evidence aggregation', () => {
-  it('summarizes a complete mixed 2+2+2 evidence set and preserves legacy blocked learned receipts', () => {
+  it('preserves legacy 2+2+2 receipts but does not treat them as current three-way closure evidence', () => {
     const aggregate = aggregateRealReferenceBenchmarkEvidence([
       item('a', 'fm-friendly-electronic', 'cma-better', 0.5, 0.3),
       item('b', 'fm-friendly-electronic', 'similar', 0.4, 0.35),
@@ -147,57 +166,72 @@ describe('real-reference benchmark evidence aggregation', () => {
       'pitched-acoustic': 2,
       'difficult-transient-noisy': 2,
     })
-    expect(aggregate.closureReadiness).toEqual({
+    expect(aggregate.closureReadiness).toMatchObject({
       mixedSetComplete: true,
       listeningAssessmentsComplete: true,
-      readyForAggregateEvidence: true,
-      missing: [],
+      learnedListeningAssessmentsComplete: true,
+      currentThreeWayComplete: false,
+      readyForAggregateEvidence: false,
     })
+    expect(aggregate.closureReadiness.missing.join(' ')).toMatch(/rerun with the admitted learned row/)
     expect(aggregate.cmaMetricImprovedCount).toBe(5)
     expect(aggregate.cmaListeningBetterCount).toBe(2)
     expect(aggregate.metricImprovedButListeningNotBetterCount).toBe(3)
     expect(aggregate.learnedInitializationSuccessCount).toBe(0)
     expect(aggregate.learnedInitializationUnavailableCount).toBe(6)
     expect(aggregate.learnedInitializationFailedCount).toBe(0)
+    expect(aggregate.learnedListeningCounts.unavailable).toBe(6)
     expect(aggregate.learnedDistance).toBeNull()
     expect(aggregate.learnedRuntimeMs).toBeNull()
-    expect(aggregate.retrievalDistance).toMatchObject({ count: 6, minimum: 0.4, maximum: 1.2 })
-    expect(aggregate.evolutionaryDistance).toMatchObject({ count: 6, minimum: 0.3, maximum: 1.1 })
     expect(JSON.stringify(aggregate)).not.toContain('"samples"')
   })
 
-  it('aggregates successful learned rows without breaking blocked historical receipts', () => {
+  it('marks a complete current 2+2+2 three-way evidence set ready only after both listening assessments are complete', () => {
     const aggregate = aggregateRealReferenceBenchmarkEvidence([
-      {
-        report: receipt('a', 0.5, 0.3, 10, 30, { distance: 0.42, runtimeMs: 4 }),
-        category: 'fm-friendly-electronic',
-        listeningAssessment: 'similar',
-      },
-      {
-        report: receipt('b', 0.6, 0.45, 11, 32, { distance: 0.38, runtimeMs: 5 }),
-        category: 'pitched-acoustic',
-        listeningAssessment: 'cma-better',
-      },
-      item('c', 'difficult-transient-noisy', 'both-poor', 1.1, 0.9),
+      currentItem('a', 'fm-friendly-electronic', 'cma-better', 'learned-similar', 0.5, 0.3, 0.4),
+      currentItem('b', 'fm-friendly-electronic', 'similar', 'learned-better', 0.4, 0.35, 0.31),
+      currentItem('c', 'pitched-acoustic', 'retrieval-better', 'learned-worse', 0.6, 0.65, 0.8),
+      currentItem('d', 'pitched-acoustic', 'cma-better', 'learned-similar', 0.8, 0.5, 0.52),
+      currentItem('e', 'difficult-transient-noisy', 'both-poor', 'learned-poor', 1.2, 1.1, 1.4),
+      currentItem('f', 'difficult-transient-noisy', 'similar', 'learned-worse', 1.0, 0.9, 1.2),
     ])
 
-    expect(aggregate.learnedInitializationSuccessCount).toBe(2)
-    expect(aggregate.learnedInitializationUnavailableCount).toBe(1)
-    expect(aggregate.learnedInitializationFailedCount).toBe(0)
-    expect(aggregate.learnedDistance).toMatchObject({ count: 2, minimum: 0.38, maximum: 0.42 })
-    expect(aggregate.learnedRuntimeMs).toMatchObject({ count: 2, minimum: 4, maximum: 5 })
-    expect(aggregate.receipts[0]?.learnedDistance).toBe(0.42)
-    expect(aggregate.receipts[2]?.learnedDistance).toBeNull()
+    expect(aggregate.closureReadiness).toEqual({
+      mixedSetComplete: true,
+      listeningAssessmentsComplete: true,
+      learnedListeningAssessmentsComplete: true,
+      currentThreeWayComplete: true,
+      readyForAggregateEvidence: true,
+      missing: [],
+    })
+    expect(aggregate.learnedInitializationSuccessCount).toBe(6)
+    expect(aggregate.learnedInitializationUnavailableCount).toBe(0)
+    expect(aggregate.learnedListeningCounts['learned-better']).toBe(1)
+    expect(aggregate.learnedListeningCounts['learned-poor']).toBe(1)
+    expect(aggregate.learnedDistance).toMatchObject({ count: 6, minimum: 0.31, maximum: 1.4 })
+    expect(aggregate.learnedRuntimeMs).toMatchObject({ count: 6, minimum: 4, maximum: 4 })
   })
 
-  it('reports missing categories and listening assessments', () => {
+  it('reports missing learned listening assessments on otherwise current receipts', () => {
     const aggregate = aggregateRealReferenceBenchmarkEvidence([
-      item('a', 'fm-friendly-electronic', 'not-assessed', 0.5, 0.3),
-      item('b', 'pitched-acoustic', 'similar', 0.6, 0.55),
+      currentItem('a', 'fm-friendly-electronic', 'similar', 'not-assessed', 0.5, 0.4, 0.45),
+      currentItem('b', 'pitched-acoustic', 'similar', 'learned-similar', 0.6, 0.55, 0.58),
     ])
     expect(aggregate.closureReadiness.readyForAggregateEvidence).toBe(false)
-    expect(aggregate.closureReadiness.missing.join(' ')).toMatch(/difficult-transient-noisy/)
-    expect(aggregate.closureReadiness.missing.join(' ')).toMatch(/listening assessment/)
+    expect(aggregate.closureReadiness.learnedListeningAssessmentsComplete).toBe(false)
+    expect(aggregate.closureReadiness.missing.join(' ')).toMatch(/learned listening assessment/)
+  })
+
+  it('rejects inconsistent learned listening status for blocked or successful rows', () => {
+    expect(() => aggregateRealReferenceBenchmarkEvidence([{
+      ...item('a', 'fm-friendly-electronic', 'similar', 0.5, 0.4),
+      learnedListeningAssessment: 'learned-better',
+    }])).toThrow(/must use the unavailable/)
+
+    expect(() => aggregateRealReferenceBenchmarkEvidence([{
+      ...currentItem('b', 'pitched-acoustic', 'similar', 'learned-similar', 0.6, 0.5, 0.45),
+      learnedListeningAssessment: 'unavailable',
+    }])).toThrow(/successful learned row/)
   })
 
   it('rejects duplicate source hashes', () => {
