@@ -1,0 +1,65 @@
+name: Integrate DX7 candidate artifacts v2
+
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/integrate-dx7-candidate-artifacts-v2.yml']
+
+permissions:
+  contents: write
+
+jobs:
+  integrate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - name: Mount candidate diff and syx controls
+        shell: python
+        run: |
+          from pathlib import Path
+          p=Path('src/components/NearestPresetPanel.tsx');t=p.read_text(encoding='utf-8')
+          anchor="import type { Dx7Voice } from '../domain/voice'\n"
+          if 'createDx7VoiceSemanticDiff' not in t:t=t.replace(anchor,anchor+"import { createDx7VoiceSemanticDiff, createDx7VoiceSyxArtifact } from '../audio/dx7CandidateArtifacts'\n",1)
+          helper_anchor="""function createFingerprintCache(): PresetFingerprintCache {\n  return typeof indexedDB === 'undefined'\n    ? createMemoryPresetFingerprintCache()\n    : createIndexedDbPresetFingerprintCache()\n}\n\n"""
+          if 'function downloadVoiceSyx' not in t:
+            t=t.replace(helper_anchor,helper_anchor+"""function downloadVoiceSyx(voice: Dx7Voice): void {\n  const artifact = createDx7VoiceSyxArtifact(voice)\n  const blob = new Blob([artifact.bytes as Uint8Array<ArrayBuffer>], { type: artifact.mimeType })\n  const url = URL.createObjectURL(blob)\n  const anchor = document.createElement('a')\n  anchor.href = url\n  anchor.download = artifact.filename\n  document.body.append(anchor)\n  anchor.click()\n  anchor.remove()\n  URL.revokeObjectURL(url)\n}\n\n""",1)
+          old="""                  <button className=\"rounded-lg bg-emerald-300 px-3 py-2 text-xs font-black text-slate-950\" onClick={() => onLoadVoice(item.bestVoice)} type=\"button\">\n                    Load refined\n                  </button>\n"""
+          if 'Export refined .syx' not in t:
+            t=t.replace(old,"""                  <button className=\"rounded-lg border border-violet-300/30 px-3 py-2 text-xs font-bold text-violet-100\" onClick={() => downloadVoiceSyx(item.bestVoice)} type=\"button\">\n                    Export refined .syx\n                  </button>\n"""+old,1)
+          metric="""              <div className=\"mt-3 grid grid-cols-3 gap-2 text-[10px] text-slate-500 sm:grid-cols-6\">\n                <span>ENV {metric(item.bestMetrics.envelope)}</span>\n                <span>MEL {metric(item.bestMetrics.mel)}</span>\n                <span>MFCC {metric(item.bestMetrics.mfcc)}</span>\n                <span>CENT {metric(item.bestMetrics.centroid)}</span>\n                <span>ROLL {metric(item.bestMetrics.rolloff)}</span>\n                <span>FLAT {metric(item.bestMetrics.flatness)}</span>\n              </div>\n"""
+          if 'Semantic changes from retrieved start' not in t:
+            t=t.replace(metric,metric+"""              <div className=\"mt-3 rounded-lg border border-white/8 bg-black/15 p-2\">\n                <p className=\"text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500\">Semantic changes from retrieved start</p>\n                <div className=\"mt-2 flex flex-wrap gap-1.5\">\n                  {createDx7VoiceSemanticDiff(item.sourceCandidate.voice, item.bestVoice).map((difference) => (\n                    <span className=\"rounded-md border border-white/8 px-2 py-1 font-mono text-[10px] text-slate-300\" key={difference.path}>\n                      {difference.label}: {String(difference.before)} → {String(difference.after)}\n                    </span>\n                  ))}\n                  {createDx7VoiceSemanticDiff(item.sourceCandidate.voice, item.bestVoice).length === 0 && <span className=\"text-[10px] text-slate-500\">No semantic parameter changed.</span>}\n                </div>\n              </div>\n""",1)
+          if 'Export refined .syx' not in t or 'Semantic changes from retrieved start' not in t:raise SystemExit('candidate artifact UI patch incomplete')
+          p.write_text(t,encoding='utf-8')
+      - run: npm install --no-audit --no-fund
+      - run: npm run audit:virtual-dx7
+      - run: npm run typecheck
+      - run: npm run lint
+      - run: npm test -- src/audio/dx7CandidateArtifacts.test.ts src/audio/dx7CmaEsRefinement.test.ts src/components/NearestPresetPanel.test.tsx
+      - run: npm run test
+      - run: npm run build
+      - name: Persist source and receipt
+        shell: bash
+        run: |
+          cat > docs/validation/dx7-candidate-artifacts-ui.md <<EOF
+          # Audio → FM candidate artifacts UI validation
+
+          Source commit: \`${GITHUB_SHA}\`
+
+          Overall software gate: **SUCCESS**
+
+          Refined candidates expose semantic parameter differences from their retrieved initialization and a checksum-valid Yamaha DX7 single-voice \`.syx\` export. Packed/unpacked provenance bytes are ignored by semantic diffing. Export, audition and editor load remain separate explicit actions and do not open Web MIDI or transmit hardware data.
+
+          Engine audit, strict typecheck, lint, focused artifact/refinement/UI tests, full tests and production build passed.
+          EOF
+          rm -f .github/workflows/integrate-dx7-candidate-artifacts.yml .github/workflows/integrate-dx7-candidate-artifacts-v2.yml
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add -A
+          git commit -m 'feat(audio): expose candidate diffs and syx export'
+          git pull --rebase origin main
+          git push origin HEAD:main
