@@ -1,0 +1,57 @@
+{
+  "schema": "fm1-editor.audio-reconstruction-upstreams.v1",
+  "entries": [
+    {
+      "id": "sound2synth-core",
+      "repository": "Sound2Synth/Sound2Synth",
+      "commit": "44d9176176d794f7fe3ec96573ce758f4a56896c",
+      "codeLicense": null,
+      "status": "blocked-license",
+      "productionAdmitted": false,
+      "artifacts": {
+        "checkpoints": "not-admitted-no-explicit-artifact-license",
+        "datasets": "not-admitted-external-dexed-community-sources"
+      }
+    },
+    {
+      "id": "sound2synth-dexed-plugin",
+      "repository": "Sound2Synth/Sound2Synth-Plug-Ins",
+      "commit": "560ba5772118712eca78a3583023c366817fcfa9",
+      "codeLicense": "GPL-3.0",
+      "status": "research-only-copyleft-wrapper",
+      "productionAdmitted": false
+    },
+    {
+      "id": "spiegelib",
+      "repository": "hjdeheer/spiegelib",
+      "commit": "1a3fa1a172c89b869928005874071d0220fc9ccc",
+      "codeLicense": "MIT",
+      "status": "research-file-provenance-required",
+      "productionAdmitted": false,
+      "notes": "Pinned HEAD includes Sound2Synth-related integration; audit copied/imported files and RenderMan separately before reuse."
+    },
+    {
+      "id": "ddx7",
+      "repository": "fcaspe/ddx7",
+      "commit": "11d04fc16475ff81454f7436f318df9836971a0c",
+      "codeLicense": "Apache-2.0",
+      "status": "research-reproduction-eligible",
+      "productionAdmitted": false,
+      "artifacts": {
+        "datasets": "URMP-separate-license-audit-required",
+        "checkpoints": "no-admitted-checkpoint"
+      }
+    },
+    {
+      "id": "magenta-ddsp",
+      "repository": "magenta/ddsp",
+      "commit": "cf5e62dfe5d5c80aa14761832233a2e68e840e53",
+      "codeLicense": "Apache-2.0",
+      "status": "research-reproduction-eligible",
+      "productionAdmitted": false,
+      "artifacts": {
+        "pretrainedModels": "artifact-specific-license-and-hash-required"
+      }
+    }
+  ]
+}
