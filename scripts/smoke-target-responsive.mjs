@@ -3,6 +3,7 @@ import { readFile, stat, writeFile, mkdtemp, rm } from 'node:fs/promises'
 import { spawn } from 'node:child_process'
 import { tmpdir } from 'node:os'
 import { extname, join, normalize } from 'node:path'
+import { fileURLToPath } from 'node:url'
 
 const argv = process.argv.slice(2)
 const arg = (name, fallback = null) => {
@@ -105,7 +106,7 @@ let browser
 let profile
 let cdp
 try {
-  server = await startServer(new URL('../dist/', import.meta.url).pathname)
+  server = await startServer(fileURLToPath(new URL('../dist/', import.meta.url)))
   profile = await mkdtemp(join(tmpdir(), `fm1-target-${targetId}-`))
   const debugPort = 9800 + Math.floor(Math.random() * 300)
   browser = spawn(browserExecutable, [
