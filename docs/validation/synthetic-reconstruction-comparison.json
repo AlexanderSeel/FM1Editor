@@ -1,0 +1,80 @@
+{
+  "schema": "fm1-editor.reconstruction-comparison.v1",
+  "createdAt": "2026-08-08T06:57:06.756Z",
+  "results": [
+    {
+      "caseId": "repo-synthetic-fm1-ref-v1",
+      "caseLabel": "Repository synthetic FM1 REF V1",
+      "caseKind": "synthetic-ground-truth",
+      "approachId": "retrieval",
+      "approachLabel": "Retrieval only",
+      "runtimeMs": 0.6675430000000233,
+      "candidateCount": 3,
+      "bestDistance": 0.04095621432849238,
+      "bestCandidateIndex": 0,
+      "sourceInitialization": "Repository-owned synthetic start 1",
+      "metrics": {
+        "envelope": 0.009824010975660945,
+        "mel": 0.07157848845415667,
+        "mfcc": 0.07206818758426563,
+        "centroid": 0.0006440008969583143,
+        "rolloff": 0.002685651277823425,
+        "flatness": 0.0011851195190832277,
+        "total": 0.04095621432849238
+      },
+      "failure": null
+    },
+    {
+      "caseId": "repo-synthetic-fm1-ref-v1",
+      "caseLabel": "Repository synthetic FM1 REF V1",
+      "caseKind": "synthetic-ground-truth",
+      "approachId": "evolutionary",
+      "approachLabel": "Seeded constrained CMA-ES",
+      "runtimeMs": 1081.270994,
+      "candidateCount": 2,
+      "bestDistance": 0.007513576893987815,
+      "bestCandidateIndex": 0,
+      "sourceInitialization": "CMA from Repository-owned synthetic start 1",
+      "metrics": {
+        "envelope": 0.000426140955899594,
+        "mel": 0.015334085397118209,
+        "mfcc": 0.011084346079072544,
+        "centroid": 0.0005077742092144908,
+        "rolloff": 0.00030142240881309235,
+        "flatness": 0.00013110494561679133,
+        "total": 0.007513576893987815
+      },
+      "failure": null
+    },
+    {
+      "caseId": "repo-synthetic-fm1-ref-v1",
+      "caseLabel": "Repository synthetic FM1 REF V1",
+      "caseKind": "synthetic-ground-truth",
+      "approachId": "learned-initialization",
+      "approachLabel": "Learned initialization",
+      "runtimeMs": 0.09470000000010259,
+      "candidateCount": 0,
+      "bestDistance": null,
+      "bestCandidateIndex": null,
+      "sourceInitialization": null,
+      "metrics": null,
+      "failure": "No license-admitted learned initializer/checkpoint is available yet."
+    }
+  ],
+  "benchmark": {
+    "engineId": "fm1-editor-msfa-compatible",
+    "engineVersion": "msfa-2e182b3-fm1-v3-stateful",
+    "sampleRate": 48000,
+    "probe": {
+      "id": "c4-main",
+      "midiNote": 60,
+      "velocity": 108,
+      "noteOnSeconds": 1,
+      "releaseSeconds": 0.5,
+      "randomSeed": 42
+    },
+    "retrievalVsEvolutionaryDelta": 0.03344263743450456,
+    "learnedStatus": "No license-admitted learned initializer/checkpoint is available yet.",
+    "note": "Repository-owned synthetic ground truth only; no real isolated-sound claim."
+  }
+}
