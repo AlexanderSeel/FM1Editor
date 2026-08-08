@@ -8,7 +8,7 @@ export type HardwareDestinationBank = 'A' | 'B' | 'C' | 'D' | ''
 
 export interface HardwareValidationCheckDefinition {
   readonly id: string
-  readonly section: 'A' | 'B' | 'C' | 'D' | 'E'
+  readonly section: 'A' | 'B' | 'C' | 'D' | 'E' | 'F'
   readonly label: string
 }
 
@@ -28,6 +28,7 @@ export const HARDWARE_VALIDATION_CHECKS: readonly HardwareValidationCheckDefinit
   { id: 'dump-completion-signal', section: 'D', label: 'Bank acknowledgement/completion/error response semantics determined' },
   { id: 'live-parameter-framing', section: 'E', label: 'FM-1 live voice-parameter framing and semantic map verified' },
   { id: 'performance-controls', section: 'E', label: 'FM-1 performance-control MIDI semantics verified' },
+  { id: 'sequencer-protocol', section: 'F', label: 'FM-1 sequencer pattern dump/restore framing and round-trip semantics determined' },
 ])
 
 export interface HardwareCheckEvidence {
