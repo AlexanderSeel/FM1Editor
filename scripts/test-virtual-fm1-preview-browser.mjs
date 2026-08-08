@@ -226,17 +226,23 @@ try {
   const wavDetails = await evaluate(cdp, `(async () => Promise.all(window.__fm1PreviewBlobs.slice(-2).map(async (blob) => { const bytes=new Uint8Array(await blob.arrayBuffer()); return { size: bytes.length, riff: String.fromCharCode(...bytes.slice(0,4)), wave: String.fromCharCode(...bytes.slice(8,12)) }; })))()`, true)
   if (!Array.isArray(wavDetails) || wavDetails.length !== 2 || wavDetails.some((item) => item.size <= 44 || item.riff !== 'RIFF' || item.wave !== 'WAVE')) throw new Error(`Invalid preview WAV downloads: ${JSON.stringify(wavDetails)}`)
 
-  const diagnosticsJson = await evaluate(cdp, `JSON.stringify({ errors:window.__fm1PreviewErrors,rejections:window.__fm1PreviewRejections,midiRequests:window.__fm1PreviewMidiRequests,fetches:window.__fm1PreviewFetches,downloads:window.__fm1PreviewDownloads,diagnosticsText:document.querySelector('[aria-label="Virtual FM-1 render diagnostics"]')?.textContent??'' })`)
+  const diagnosticsJson = await evaluate(cdp, `(() => { const root=document.querySelector('[aria-label="Virtual FM-1 render diagnostics"]'); return JSON.stringify({ errors:window.__fm1PreviewErrors,rejections:window.__fm1PreviewRejections,midiRequests:window.__fm1PreviewMidiRequests,fetches:window.__fm1PreviewFetches,downloads:window.__fm1PreviewDownloads,diagnosticsText:root?.textContent??'',performance:root?{meanUtilization:Number(root.dataset.meanUtilization),maxUtilization:Number(root.dataset.maxUtilization),overBudgetCallbacks:Number(root.dataset.overBudgetCallbacks),callbacks:Number(root.dataset.callbacks),meanLimit:Number(root.dataset.meanUtilizationLimit),maxLimit:Number(root.dataset.maxUtilizationLimit),overBudgetLimit:Number(root.dataset.overBudgetLimit)}:null }); })()`)
   const diagnostics = JSON.parse(diagnosticsJson ?? '{}')
   if (diagnostics.errors.length || diagnostics.rejections.length) throw new Error(`Browser errors: ${JSON.stringify(diagnostics)}`)
   if (diagnostics.midiRequests !== 0) throw new Error(`Virtual FM-1 preview requested Web MIDI ${diagnostics.midiRequests} time(s)`)
+  const performanceSample = diagnostics.performance
+  if (!performanceSample || ![performanceSample.meanUtilization,performanceSample.maxUtilization,performanceSample.overBudgetCallbacks,performanceSample.callbacks,performanceSample.meanLimit,performanceSample.maxLimit,performanceSample.overBudgetLimit].every(Number.isFinite)) throw new Error(`Invalid structural performance diagnostics: ${JSON.stringify(performanceSample)}`)
+  if (!(performanceSample.callbacks > 0)) throw new Error(`Invalid diagnostic callback count: ${performanceSample.callbacks}`)
+  if (performanceSample.meanUtilization > performanceSample.meanLimit) throw new Error(`Mean render utilization ${(performanceSample.meanUtilization*100).toFixed(2)}% exceeds ${(performanceSample.meanLimit*100).toFixed(2)}%`)
+  if (performanceSample.maxUtilization > performanceSample.maxLimit) throw new Error(`Max render utilization ${(performanceSample.maxUtilization*100).toFixed(2)}% exceeds ${(performanceSample.maxLimit*100).toFixed(2)}%`)
+  if (performanceSample.overBudgetCallbacks > performanceSample.overBudgetLimit) throw new Error(`Over-budget callbacks ${performanceSample.overBudgetCallbacks} exceed ${performanceSample.overBudgetLimit}`)
   const origin = new URL(pageUrl).origin
   const externalOrWrite = diagnostics.fetches.filter((entry) => new URL(entry.url).origin !== origin || entry.method !== 'GET')
   if (externalOrWrite.length) throw new Error(`Virtual FM-1 preview made external/write fetches: ${JSON.stringify(externalOrWrite)}`)
 
   const utilizationMatches = diagnostics.diagnosticsText.match(/([0-9]+(?:\.[0-9]+)?)%/g) ?? []
   const utilization = utilizationMatches.map((value) => Number(value.replace('%',''))).filter(Number.isFinite)
-  const result = { ok:true,browserName,browserProduct:version.Browser??null,dryPeak,fxPeak,attenuatedPeak,referencePeak,currentBPeak,downloadCount:diagnostics.downloads.length,wavDetails,midiRequests:diagnostics.midiRequests,utilization,diagnosticsText:diagnostics.diagnosticsText }
+  const result = { ok:true,browserName,browserProduct:version.Browser??null,dryPeak,fxPeak,attenuatedPeak,referencePeak,currentBPeak,downloadCount:diagnostics.downloads.length,wavDetails,midiRequests:diagnostics.midiRequests,utilization,performance:performanceSample,diagnosticsText:diagnostics.diagnosticsText }
   await writeFile(resultPath, `${JSON.stringify(result,null,2)}\n`,'utf8'); process.stdout.write(`${JSON.stringify(result)}\n`)
 } catch (error) {
   const result={ok:false,browserName,error:error instanceof Error?error.message:String(error)}; await writeFile(resultPath,`${JSON.stringify(result,null,2)}\n`,'utf8'); console.error(result.error); process.exitCode=1

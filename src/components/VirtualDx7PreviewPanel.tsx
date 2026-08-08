@@ -10,6 +10,7 @@ import {
 } from '../audio/msfaAudioWorklet'
 import { MSFA_OFFLINE_ENGINE_VERSION } from '../audio/msfaOfflineEngine'
 import { createVirtualFm1OutputRoute, VIRTUAL_FM1_LIMITER, VIRTUAL_FM1_MASTER_GAIN_DEFAULT_DB, VIRTUAL_FM1_MASTER_GAIN_MAX_DB, VIRTUAL_FM1_MASTER_GAIN_MIN_DB, type VirtualFm1OutputRoute } from '../audio/virtualFm1OutputRoute'
+import { VIRTUAL_FM1_BROWSER_PERFORMANCE_LIMITS } from '../audio/virtualFm1PerformanceLimits'
 import type { Dx7ControllerAssignment } from '../domain/dx7FunctionState'
 import { createInitializedFxState, type Fm1FxState } from '../domain/fx'
 import type { Dx7Voice } from '../domain/voice'
@@ -351,7 +352,17 @@ export function VirtualDx7PreviewPanel({
         })}
       </details>
 
-      <div className="mt-4 grid gap-3 rounded-xl border border-white/10 bg-black/15 p-3 sm:grid-cols-2 lg:grid-cols-4" aria-label="Virtual FM-1 render diagnostics">
+      <div
+        aria-label="Virtual FM-1 render diagnostics"
+        className="mt-4 grid gap-3 rounded-xl border border-white/10 bg-black/15 p-3 sm:grid-cols-2 lg:grid-cols-4"
+        data-callbacks={diagnostics?.callbacks ?? ''}
+        data-max-utilization={diagnostics?.maxUtilization ?? ''}
+        data-max-utilization-limit={VIRTUAL_FM1_BROWSER_PERFORMANCE_LIMITS.maxUtilization}
+        data-mean-utilization={diagnostics?.meanUtilization ?? ''}
+        data-mean-utilization-limit={VIRTUAL_FM1_BROWSER_PERFORMANCE_LIMITS.meanUtilization}
+        data-over-budget-callbacks={diagnostics?.overBudgetCallbacks ?? ''}
+        data-over-budget-limit={VIRTUAL_FM1_BROWSER_PERFORMANCE_LIMITS.overBudgetCallbacks}
+      >
         <div><p className="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500">Voices</p><p className="mt-1 text-sm font-black text-white">{diagnostics ? `${diagnostics.activeVoices}/${diagnostics.polyphony}` : `0/${MSFA_WORKLET_POLYPHONY}`}</p></div>
         <div><p className="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500">Mean render</p><p className="mt-1 text-sm font-black text-white">{diagnostics ? `${diagnostics.meanRenderMs.toFixed(3)} ms · ${(diagnostics.meanUtilization * 100).toFixed(1)}%` : 'measurement pending'}</p><p className="mt-1 text-[9px] uppercase tracking-[0.1em] text-slate-600">{diagnostics?.clock === 'date' ? '1 ms fallback clock' : diagnostics?.clock === 'performance' ? 'high-resolution clock' : 'clock pending'}</p></div>
         <div><p className="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500">Max render</p><p className="mt-1 text-sm font-black text-white">{diagnostics ? `${diagnostics.maxRenderMs.toFixed(3)} ms · ${(diagnostics.maxUtilization * 100).toFixed(1)}%` : 'measurement pending'}</p></div>
