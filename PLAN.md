@@ -47,6 +47,8 @@ Execute sections C and D of [`docs/validation/fm1-hardware-test-protocol.md`](./
 
 ## 7. Sequencer
 
+Execute section F of [`docs/validation/fm1-hardware-test-protocol.md`](./docs/validation/fm1-hardware-test-protocol.md). App-side pattern transfer remains disabled until a repeatable device-originated payload boundary, field mapping, checksum/length rule, target-slot semantic and successful captured-message round trip are demonstrated.
+
 - [ ] Add FM-1 internal pattern transfer only after a stable protocol is verified.
 
 ## 8. Validation and delivery
