@@ -56,7 +56,7 @@ Known limitations, current evidence and conservative recovery procedures are mai
 
 The staged technical decision and reviewed libraries/research are documented in [`docs/research/audio-to-fm-and-virtual-synth.md`](./docs/research/audio-to-fm-and-virtual-synth.md).
 
-- [ ] Compare retrieval-only, evolutionary and learned-initialization approaches using synthetic ground-truth patches and real isolated sounds; report similarity metrics, runtime and failure cases rather than promising exact reconstruction.
+- [ ] Run the implemented local comparison receipt on a documented set of real isolated WAV/MP3 references and preserve the exported hash/metrics/runtime evidence. Synthetic ground-truth retrieval/CMA comparison and the real-reference benchmark harness are implemented; learned initialization remains explicitly unavailable until a separately license-admitted implementation/checkpoint exists.
 - [ ] Add optional server/Python acceleration only behind explicit upload consent, documented retention/deletion, model/version metadata and a fully local fallback for normal editing and audition.
 
 ## 10. Virtual DX7 / FM-1-inspired synthesizer
