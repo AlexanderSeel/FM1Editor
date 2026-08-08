@@ -1,5 +1,5 @@
 {
   "ok": false,
   "browserName": "edge",
-  "error": "Unable to enable software Filter state"
+  "error": "Timed out waiting for condition: document.body.textContent.includes('Reference A/B · offline render') && document.body.textContent.includes('Virtual FM-1 render diagnostics')"
 }

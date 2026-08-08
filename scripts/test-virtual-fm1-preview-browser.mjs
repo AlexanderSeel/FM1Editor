@@ -143,8 +143,9 @@ try {
   // Configure a clearly audible local software filter without enabling hardware live-send.
   await clickButton(cdp, 'Effects')
   await waitForExpression(cdp, `document.body.textContent.includes('Filter and effects controls')`)
-  const filterEnabled = await evaluate(cdp, `(() => { const section=[...document.querySelectorAll('section')].find((node)=>node.querySelector('h4')?.textContent?.trim()==='Filter'); const checkbox=section?.querySelector('input[type=checkbox]'); if(!checkbox) return false; if(!checkbox.checked) checkbox.click(); return checkbox.checked; })()`)
-  if (!filterEnabled) throw new Error('Unable to enable software Filter state')
+  const filterControlFound = await evaluate(cdp, `(() => { const heading=[...document.querySelectorAll('h4')].find((node)=>node.textContent?.trim()==='Filter'); const section=heading?.closest('section'); const checkbox=section?.querySelector('input[type=checkbox]'); if(!checkbox) return false; if(!checkbox.checked) checkbox.click(); return true; })()`)
+  if (!filterControlFound) throw new Error('Unable to locate software Filter state control')
+  await waitForExpression(cdp, `(() => { const heading=[...document.querySelectorAll('h4')].find((node)=>node.textContent?.trim()==='Filter'); return Boolean(heading?.closest('section')?.querySelector('input[type=checkbox]')?.checked); })()`, 5_000)
   await setRange(cdp, 'Cutoff', 22)
   const liveSendChecked = await evaluate(cdp, `Boolean([...document.querySelectorAll('label')].find((node)=>node.textContent?.includes('Live send'))?.querySelector('input')?.checked)`)
   if (liveSendChecked) throw new Error('Effects Live send unexpectedly enabled')
