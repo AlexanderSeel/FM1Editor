@@ -32,8 +32,8 @@ This document distinguishes application implementation, software validation and 
 | Browser-local audio recording | Implemented | Media behavior is validated with mocked browser APIs | `Microphone (FM-1)` is only an endpoint label until audible FM-1 synthesis is recorded from physical hardware. |
 | Chrome/Edge responsive layouts | Permanent FM-1 and DX7 matrices implemented | Same-source Windows receipt is **SUCCESS** in `docs/validation/current-software-browser-gate.md`: Chrome and Edge pass FM-1/DX7 at 1440×900, 1024×768 and 390×844 touch emulation | This is layout/browser evidence only; the smoke intentionally issues no MIDI requests and does not validate physical MIDI/audio. |
 | BLE MIDI | No verified support claim | No recorded browser/platform/device matrix | Test only where the operating system and Chromium Web MIDI implementation expose the BLE device. |
-| GitHub Pages deployment | Build/routing readiness implemented; deployment still disabled | `/FM1Editor/` subpath build, PWA/static routing, catalog and virtual-DX7 asset paths are software-validated in `docs/validation/pages-subpath-readiness.md` | Do not publish until Web MIDI/SysEx and USB/Web Audio are physically verified on the intended HTTPS origin. |
-| Physical evidence capture and protocol discovery helpers | Implemented | Raw MIDI JSON, FM-1 and stock-DX7 sanitized evidence manifests, and structural latest-SysEx byte deltas are available in the MIDI monitor | No helper converts traffic patterns or outgoing message structure into hardware PASS results or protocol semantics. |
+| GitHub Pages deployment | Build/routing readiness plus a deterministic physical-evidence gate are implemented; deployment remains disabled | `/FM1Editor/` subpath/PWA/static routing is software-validated, and the in-app delivery gate can verify matching sanitized Chrome+Edge FM-1 manifests for one HTTPS origin/firmware/editor/Windows tuple | Do not treat Pages as delivery-ready until the gate is READY from real physical sessions on the intended HTTPS origin. A READY gate still does not enable deployment automatically. |
+| Physical evidence capture and protocol discovery helpers | Implemented | Raw MIDI JSON, FM-1 and stock-DX7 sanitized evidence manifests, structural latest-SysEx byte deltas and an FM-1 Chrome/Edge delivery evidence gate are available in the MIDI monitor | No helper converts traffic patterns, outgoing message structure or software validation into hardware PASS results or protocol semantics. |
 
 ## Recorded hardware and browser combinations
 
@@ -166,8 +166,9 @@ For FM-1 use `docs/validation/fm1-hardware-test-protocol.md`; for stock DX7 use 
 - original and transmitted files with SHA-256 hashes;
 - raw MIDI monitor JSON export;
 - the matching sanitized in-app FM-1 or stock-DX7 evidence manifest;
+- the exported FM-1 delivery evidence gate receipt when proposing the Chrome/Edge delivery or Pages prerequisite complete;
 - device-screen timeline;
 - audible recordings where audio is involved;
 - exact recovery result after an intentional or observed failure.
 
-A screenshot of an endpoint name, a successful software build, a structural SysEx delta or an emitted MIDI frame is not physical-device verification.
+A screenshot of an endpoint name, a successful software build, a structural SysEx delta, a delivery-gate implementation or an emitted MIDI frame is not physical-device verification.
