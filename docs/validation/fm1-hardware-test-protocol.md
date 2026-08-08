@@ -8,10 +8,14 @@ Open **MIDI monitor → Hardware evidence session** during a physical session. T
 
 The MIDI monitor also shows a **Latest SysEx delta** after two same-direction SysEx captures exist. It reports message lengths, common prefix/suffix lengths and changed byte offsets/values. Use it only for controlled one-property-at-a-time comparisons; a changed offset is a candidate field, not proof of its semantic meaning.
 
+For delivery validation, **FM-1 delivery evidence gate** imports sanitized Chrome and Edge hardware manifests and checks the specific physical evidence needed by the delivery/Pages roadmap item. It requires matching FM-1 firmware, editor commit, Windows build and intended HTTPS origin, plus physical USB-audio, bank, note-off recovery and channel-selection evidence in both browsers. A READY result is an evidence-completeness result only; it does not enable deployment automatically or imply device readback, live-parameter, sequencer, BLE MIDI or virtual-synth validation.
+
 Export both artifacts when MIDI evidence is relevant:
 
 1. **Export JSON** from the MIDI monitor for the raw captured bytes.
 2. **Export evidence manifest** from the hardware evidence session for sanitized identity, measurements, result states and MIDI summary counts.
+
+After completing both browser sessions, import the sanitized manifests into **FM-1 delivery evidence gate** and export the compact gate receipt. The gate receipt stores validation results and source filenames but does not embed the imported manifests, raw SysEx or WAV data.
 
 The manifest intentionally does not duplicate raw SysEx bytes or audio samples. Review tester names, device labels and free-text notes before committing sanitized evidence.
 
@@ -56,7 +60,7 @@ Required results:
 | MASTER affects USB level | YES / NO |
 | Approximate latency | milliseconds |
 
-## B. Chrome and Edge audio resilience
+## B. Chrome and Edge audio/MIDI resilience
 
 Run the following matrix in both browsers:
 
@@ -69,9 +73,13 @@ Run the following matrix in both browsers:
 - concurrent Web MIDI note audition;
 - concurrent bank transfer only after bank-transfer safety checks pass;
 - repeated connect/record/disconnect cycles;
-- all media tracks released after disconnect and page navigation.
+- all media tracks released after disconnect and page navigation;
+- note-off/Panic recovery after an intentional held-note or interruption scenario;
+- explicit MIDI channel selection with one matching and one deliberately mismatching channel.
 
-For each case record browser, result, visible error/status text, whether MIDI remained usable and whether Windows still showed the endpoint in use after disconnect.
+For each case record browser, result, visible error/status text, whether MIDI remained usable and whether Windows still showed the endpoint in use after disconnect. Mark **Note-off/Panic recovery** and **MIDI channel selection** separately in the hardware evidence manifest; these checks are required by the delivery evidence gate.
+
+For the Pages/delivery prerequisite, create one complete sanitized manifest in branded Chrome and one in branded Microsoft Edge while running the same editor commit against the same FM-1 firmware and Windows build on the intended HTTPS origin. Each browser manifest must include a captured standard 4,104-byte merged-bank send plus sections A and C evidence. Import both manifests into **FM-1 delivery evidence gate**; do not treat a single-browser result or an origin/commit mismatch as delivery-ready.
 
 ## C. FM-1 merged 32-voice bank import
 
@@ -161,6 +169,7 @@ Store each completed session under a dated folder outside the application reposi
 - original and merged `.syx` files with SHA-256 values;
 - saved WAV samples;
 - sequencer capture pairs where exactly one pattern property changed;
+- exported delivery evidence gate receipt when validating Chrome/Edge delivery readiness;
 - screenshots or a short screen-state timeline;
 - exact failure/recovery notes;
 - a proposed `PLAN.md` item to close, linked to the evidence.
