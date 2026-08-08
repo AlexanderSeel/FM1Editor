@@ -1,6 +1,6 @@
 # Hardware evidence recorder software acceptance
 
-Source commit: `6cd7f64c685ea84b0bdb35ba9812e5875955b01b`
+Source commit: `5e22ef590da682f0f1f193cab15ae3c365957285`
 
 Software acceptance: **SUCCESS**
 
@@ -14,6 +14,6 @@ Software acceptance: **SUCCESS**
 | full-test | 0 |
 | build | 0 |
 
-The accepted helper is mounted inside the existing MIDI monitor. It summarizes current traffic, including standard outgoing Yamaha 4,104-byte bank and 163-byte single-voice messages, records explicit protocol observations and exports a sanitized hardware-session manifest. Raw MIDI bytes remain in the separate MIDI-monitor JSON export.
+The accepted in-app helper is explicitly scoped to the FM-1 physical protocol. It summarizes current MIDI traffic, recognizes outgoing standard Yamaha 4,104-byte bank and 163-byte single-voice frames, records test identity/audio measurements plus explicit protocol observations, and exports a sanitized summary manifest beside the raw MIDI-monitor JSON.
 
-No monitor pattern or software test can set a hardware check to PASS. All physical result fields start pending and require tester observation. This receipt validates only the evidence-capture tooling and does not close any hardware-dependent PLAN item.
+No traffic pattern or software test can set a physical result to PASS. Stock Yamaha DX7 validation is intentionally kept in the separate `docs/validation/dx7-hardware-test-protocol.md` procedure. This receipt validates evidence tooling only and closes no hardware-dependent PLAN item.
