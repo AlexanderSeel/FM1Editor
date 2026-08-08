@@ -1,0 +1,125 @@
+name: Convert pinned SpiegeLib simple-FM MLP weights
+
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/convert-spiegelib-mlp.yml']
+
+permissions:
+  contents: write
+
+jobs:
+  convert:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          path: fm1
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Fetch pinned upstream and convert verified weights
+        shell: bash
+        run: |
+          set -euo pipefail
+          git clone --filter=blob:none https://github.com/spiegelib/vst-fm-sound-match.git upstream
+          git -C upstream checkout --detach e1baab7fbeb0bc3f4d4946f8348e77dd18028080
+          echo '96f1d58d3190fc7590f62d1293bb5d39d4d1dbde74c1a754ad5c576c26c32c4f  upstream/saved_models/simple_fm_mlp.h5' | sha256sum --check --strict
+          python -m pip install --disable-pip-version-check --no-input 'numpy<2' 'h5py<4'
+          python - <<'PY'
+          from pathlib import Path
+          import hashlib
+          import json
+          import h5py
+          import numpy as np
+
+          model = Path('upstream/saved_models/simple_fm_mlp.h5')
+          expected = [
+              ('dense', 572, 50, 'relu'),
+              ('dense_1', 50, 40, 'relu'),
+              ('dense_2', 40, 30, 'relu'),
+              ('dense_3', 30, 9, 'linear'),
+          ]
+          layers = []
+          with h5py.File(model, 'r') as handle:
+              datasets = {}
+              def visit(name, obj):
+                  if isinstance(obj, h5py.Dataset): datasets[name] = tuple(obj.shape)
+              handle.visititems(visit)
+              for name, input_size, output_size, activation in expected:
+                  candidates = [(dataset_name, shape) for dataset_name, shape in datasets.items() if f'{name}/' in dataset_name]
+                  kernel_name = next((dataset_name for dataset_name, shape in candidates if shape == (input_size, output_size)), None)
+                  bias_name = next((dataset_name for dataset_name, shape in candidates if shape == (output_size,)), None)
+                  if kernel_name is None or bias_name is None:
+                      raise SystemExit(f'weights missing for {name}: {candidates}')
+                  kernel = handle[kernel_name][...].astype(np.float32)
+                  bias = handle[bias_name][...].astype(np.float32)
+                  if not np.isfinite(kernel).all() or not np.isfinite(bias).all():
+                      raise SystemExit(f'non-finite weights in {name}')
+                  layers.append({
+                      'name': name,
+                      'inputSize': input_size,
+                      'outputSize': output_size,
+                      'activation': activation,
+                      'kernel': kernel.reshape(-1).tolist(),
+                      'bias': bias.tolist(),
+                  })
+
+          payload = {
+              'schema': 'fm1-editor.spiegelib-simple-fm-mlp.v1',
+              'source': {
+                  'repository': 'spiegelib/vst-fm-sound-match',
+                  'commit': 'e1baab7fbeb0bc3f4d4946f8348e77dd18028080',
+                  'path': 'saved_models/simple_fm_mlp.h5',
+                  'sha256': '96f1d58d3190fc7590f62d1293bb5d39d4d1dbde74c1a754ad5c576c26c32c4f',
+                  'license': 'MIT',
+                  'copyright': 'Copyright (c) 2020 spiegel-lib',
+              },
+              'inputSize': 572,
+              'outputSize': 9,
+              'layers': layers,
+          }
+          raw = (json.dumps(payload, separators=(',', ':')) + '\n').encode('utf-8')
+          out = Path('fm1/src/audio/data/spiegelib-simple-fm-mlp.json')
+          out.parent.mkdir(parents=True, exist_ok=True)
+          out.write_bytes(raw)
+          Path('mlp-json-sha.txt').write_text(hashlib.sha256(raw).hexdigest() + '\n', encoding='utf-8')
+          print(f'converted bytes={len(raw)} sha256={hashlib.sha256(raw).hexdigest()}')
+          PY
+      - name: Persist conversion provenance
+        shell: python
+        run: |
+          from pathlib import Path
+          import os
+          sha = Path('mlp-json-sha.txt').read_text(encoding='utf-8').strip()
+          model = Path('fm1/src/audio/data/spiegelib-simple-fm-mlp.json')
+          Path('fm1/docs/research/spiegelib-simple-fm-model-conversion.md').write_text('\n'.join([
+              '# SpiegeLib simple-FM MLP model conversion',
+              '',
+              f"FM1 Editor source commit: `{os.environ['GITHUB_SHA']}`",
+              '',
+              'Conversion status: **SUCCESS**',
+              '',
+              '- upstream: `spiegelib/vst-fm-sound-match` commit `e1baab7fbeb0bc3f4d4946f8348e77dd18028080`',
+              '- source model: `saved_models/simple_fm_mlp.h5` — SHA-256 `96f1d58d3190fc7590f62d1293bb5d39d4d1dbde74c1a754ad5c576c26c32c4f`',
+              f'- converted JSON: `src/audio/data/spiegelib-simple-fm-mlp.json` — {model.stat().st_size} bytes — SHA-256 `{sha}`',
+              '- architecture: `572 → 50 ReLU → 40 ReLU → 30 ReLU → 9 linear`',
+              '- license: MIT; Copyright (c) 2020 spiegel-lib',
+              '',
+              'The conversion stores only deterministic Float32 Dense kernels/biases and provenance metadata. It removes the runtime TensorFlow/HDF5 dependency but does not change the learned model or enable the product benchmark row by itself.',
+              '',
+          ]), encoding='utf-8')
+          Path('fm1/.github/workflows/convert-spiegelib-mlp.yml').unlink(missing_ok=True)
+          Path('mlp-json-sha.txt').unlink(missing_ok=True)
+      - name: Commit converted model
+        working-directory: fm1
+        shell: bash
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add -A
+          git commit -m 'feat(audio): pin browser-safe SpiegeLib MLP weights' || true
+          git pull --rebase origin main
+          git push origin HEAD:main
