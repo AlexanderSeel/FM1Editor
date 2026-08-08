@@ -45,6 +45,30 @@ The helper recognizes:
 
 Unknown JSON/data files remain in the package as generic artifacts rather than being discarded.
 
+## Raw MIDI correlation review
+
+When a target-specific hardware manifest and raw version-1 MIDI-monitor JSON are both selected, the helper recomputes `summarizeHardwareMidiCapture()` from the raw events and compares that result with the summary embedded in the manifest.
+
+For each FM-1 or stock-DX7 manifest the correlation review requires **exactly one** raw MIDI export with matching:
+
+- total/input/output message counts;
+- SysEx input/output counts;
+- recognized 4,104-byte Yamaha bank and 163-byte single-voice output counts;
+- SysEx length histograms by direction;
+- sorted input/output port names;
+- first and last capture timestamps.
+
+It also checks manifest-local invariants written by the recorder:
+
+- FM-1 target identity, `sysexEnabled`, and selected input/output strings must agree with the embedded MIDI summary;
+- stock-DX7 selected input/output arrays must agree with the embedded MIDI summary;
+- DX7 recovery-bank SHA-256 must remain valid;
+- editor commit identity and FM-1 firmware / DX7 model identity are flagged when they are missing or not sufficiently pinned.
+
+If no raw export matches, the helper shows the closest candidate and the summary fields that differ. If more than one raw export matches the same manifest, linkage is considered ambiguous rather than silently choosing one. Unlinked raw MIDI exports are also reported.
+
+This is **structural correlation only**. Matching summaries are evidence that the selected files came from the same captured message set; they do not prove what the hardware did, that the device accepted a message, that audio is correct, or that a tester-entered PASS is valid.
+
 ## Package warnings
 
 Warnings are coverage hints, not physical failures. Depending on the selected target, the helper warns when the package lacks:
@@ -57,17 +81,18 @@ Warnings are coverage hints, not physical failures. Depending on the selected ta
 
 Identical SHA-256 values under multiple filenames are also reported for duplicate review.
 
-A package may legitimately retain warnings when it covers only one protocol section. Conversely, a warning-free package does not prove that any hardware check passed.
+A package may legitimately retain warnings or correlation errors when it covers only one protocol section or records a failed session. Conversely, a warning-free and structurally consistent package does not prove that any hardware check passed.
 
 ## Commit workflow
 
 1. Keep unsanitized physical captures outside the repository while testing.
 2. Review filenames, tester/device identifiers, screenshots and notes for privacy-sensitive content.
-3. Export the target-specific hardware manifest and raw MIDI JSON where applicable.
+3. Export the target-specific hardware manifest **without clearing the MIDI monitor**, then export the raw MIDI JSON from that same captured session.
 4. Add the relevant `.syx`, WAV, screenshots/timeline and matrices/notes to a sanitized folder.
-5. Run **Physical evidence package** over that exact sanitized file set and export the index.
-6. Retain the raw sanitized files with the index externally, or commit only the artifacts appropriate for the repository.
-7. When proposing a `PLAN.md` item for closure, cite the package index SHA together with the target manifest/protocol result. The package index is not a substitute for those results.
+5. Run **Physical evidence package** over that exact sanitized file set and review both package-coverage warnings and the raw-MIDI correlation result.
+6. Resolve accidental mixed-session/ambiguous raw-capture errors before proposing closure. Do not alter legitimate failed observations merely to make the package look green.
+7. Export the package index. Retain the raw sanitized files with the index externally, or commit only the artifacts appropriate for the repository.
+8. When proposing a `PLAN.md` item for closure, cite the package index SHA together with the target manifest/protocol result. The package index and correlation result are not substitutes for those results.
 
 ## Security and evidence boundary
 
