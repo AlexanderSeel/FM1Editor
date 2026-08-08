@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest'
-import { createMidiMonitorEntry, formatMidiHex, summarizeMidiMessage } from './monitor'
+import {
+  compareMidiMonitorEntries,
+  createMidiMonitorEntry,
+  formatMidiHex,
+  latestSameDirectionSysexComparison,
+  summarizeMidiMessage,
+} from './monitor'
 import { choosePreferredPort } from './portPreferences'
 import type { MidiPortInfo } from './webMidi'
 
@@ -19,6 +25,37 @@ describe('MIDI monitor', () => {
     expect(entry.timestamp).toBe(1234)
     expect(entry.data).toEqual([0xb0, 7, 99])
     expect(entry.summary).toContain('controller 7')
+  })
+
+  it('reports changed byte positions with stable prefix and suffix boundaries', () => {
+    const left = createMidiMonitorEntry('in', { id: 'input-1', name: 'FM-1' }, [0xf0, 0x43, 0x10, 0x20, 0x30, 0xf7], 100)
+    const right = createMidiMonitorEntry('in', { id: 'input-1', name: 'FM-1' }, [0xf0, 0x43, 0x10, 0x21, 0x31, 0xf7], 200)
+    expect(compareMidiMonitorEntries(left, right)).toMatchObject({
+      direction: 'in',
+      leftLength: 6,
+      rightLength: 6,
+      differenceCount: 2,
+      commonPrefixLength: 3,
+      commonSuffixLength: 1,
+      differences: [
+        { index: 3, before: 0x20, after: 0x21 },
+        { index: 4, before: 0x30, after: 0x31 },
+      ],
+    })
+  })
+
+  it('uses the two latest SysEx messages with the same direction', () => {
+    const firstIn = createMidiMonitorEntry('in', { id: 'input-1', name: 'FM-1' }, [0xf0, 1, 2, 0xf7], 100)
+    const unrelatedOut = createMidiMonitorEntry('out', { id: 'output-1', name: 'FM-1' }, [0xf0, 9, 0xf7], 200)
+    const secondIn = createMidiMonitorEntry('in', { id: 'input-1', name: 'FM-1' }, [0xf0, 1, 3, 0xf7], 300)
+    const comparison = latestSameDirectionSysexComparison([firstIn, unrelatedOut, secondIn])
+    expect(comparison).toMatchObject({
+      direction: 'in',
+      leftId: firstIn.id,
+      rightId: secondIn.id,
+      differenceCount: 1,
+      differences: [{ index: 2, before: 2, after: 3 }],
+    })
   })
 })
 
