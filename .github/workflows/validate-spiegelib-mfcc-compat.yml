@@ -1,0 +1,198 @@
+name: Validate SpiegeLib Librosa 0.7.2 MFCC compatibility
+
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/validate-spiegelib-mfcc-compat.yml']
+
+permissions:
+  contents: write
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Generate pinned Librosa 0.7.2 reference in Python 3.7.7
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf librosa-ref reference-out
+          mkdir -p librosa-ref reference-out
+          cat > librosa-ref/Dockerfile <<'DOCKER'
+          FROM python:3.7.7-slim-buster
+          RUN python -m pip install --no-cache-dir --disable-pip-version-check \
+              numpy==1.18.5 \
+              scipy==1.4.1 \
+              llvmlite==0.31.0 \
+              numba==0.48.0 \
+              joblib==0.14.1 \
+              scikit-learn==0.22.2.post1 \
+              soundfile==0.10.3.post1 \
+              librosa==0.7.2
+          COPY generate.py /opt/generate.py
+          ENTRYPOINT ["python", "/opt/generate.py"]
+          DOCKER
+          cat > librosa-ref/generate.py <<'PY'
+          import hashlib
+          import json
+          from pathlib import Path
+          import librosa
+          import numpy as np
+          import scipy
+
+          sr = 44100
+          n = np.arange(sr, dtype=np.float64)
+          t = n / sr
+          envelope = 0.55 + 0.35 * (n / (sr - 1))
+          signal = envelope * (
+              0.37 * np.sin(2 * np.pi * 220 * t)
+              + 0.23 * np.sin(2 * np.pi * 880 * t + 0.17)
+              + 0.11 * np.cos(2 * np.pi * 1760 * t + 0.31)
+          )
+          signal[0] += 0.19
+          signal[1] -= 0.07
+          signal[-2] += 0.09
+          signal[-1] -= 0.13
+          signal = signal.astype(np.float32)
+
+          mfcc = librosa.feature.mfcc(
+              y=signal,
+              sr=sr,
+              n_mfcc=13,
+              n_fft=2048,
+              hop_length=1024,
+          )
+          if mfcc.shape != (13, 44):
+              raise SystemExit('unexpected MFCC shape: %r' % (mfcc.shape,))
+          flat = mfcc.T.astype(np.float32).reshape(-1)
+          raw = flat.tobytes(order='C')
+          payload = {
+              'schema': 'fm1-editor.spiegelib-mfcc-librosa-0.7.2-reference.v1',
+              'environment': {
+                  'python': '3.7.7',
+                  'numpy': np.__version__,
+                  'scipy': scipy.__version__,
+                  'librosa': librosa.__version__,
+              },
+              'signal': {
+                  'sampleRate': sr,
+                  'sampleCount': int(signal.size),
+                  'formula': 'documented deterministic multi-sine/envelope/edge-impulse fixture',
+              },
+              'featureShape': [44, 13],
+              'flatFloat32Sha256': hashlib.sha256(raw).hexdigest(),
+              'values': [float(v) for v in flat],
+          }
+          Path('/output/reference.json').write_text(json.dumps(payload, separators=(',', ':')) + '\n', encoding='utf-8')
+          print(json.dumps({k: payload[k] for k in ('environment','featureShape','flatFloat32Sha256')}, indent=2))
+          PY
+          docker build --quiet --tag fm1-librosa072-ref:local librosa-ref
+          docker run --rm --network none --read-only --cap-drop ALL \
+            --memory 1g --cpus 2 --pids-limit 128 \
+            --tmpfs /tmp:rw,noexec,nosuid,size=64m \
+            --volume "$PWD/reference-out:/output:rw" \
+            fm1-librosa072-ref:local
+          test -s reference-out/reference.json
+          mkdir -p src/audio/data
+          cp reference-out/reference.json src/audio/data/spiegelib-mfcc-librosa-0.7.2-reference.json
+
+      - name: Compare TypeScript extractor against Librosa oracle
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm install --no-audit --no-fund
+          cat > src/audio/spiegelibSimpleFmMfcc.compat.test.ts <<'TS'
+          import { describe, expect, it } from 'vitest'
+          import reference from './data/spiegelib-mfcc-librosa-0.7.2-reference.json'
+          import { extractSpiegelibSimpleFmRawMfcc } from './spiegelibSimpleFmMfcc'
+
+          function deterministicSignal(): Float32Array {
+            const sampleRate = 44_100
+            const output = new Float32Array(sampleRate)
+            for (let index = 0; index < output.length; index += 1) {
+              const t = index / sampleRate
+              const envelope = 0.55 + 0.35 * (index / (sampleRate - 1))
+              output[index] = envelope * (
+                0.37 * Math.sin(2 * Math.PI * 220 * t)
+                + 0.23 * Math.sin(2 * Math.PI * 880 * t + 0.17)
+                + 0.11 * Math.cos(2 * Math.PI * 1760 * t + 0.31)
+              )
+            }
+            output[0] = (output[0] ?? 0) + 0.19
+            output[1] = (output[1] ?? 0) - 0.07
+            output[output.length - 2] = (output[output.length - 2] ?? 0) + 0.09
+            output[output.length - 1] = (output[output.length - 1] ?? 0) - 0.13
+            return output
+          }
+
+          describe('SpiegeLib MFCC Librosa 0.7.2 compatibility', () => {
+            it('matches all 572 time-major coefficients', () => {
+              expect(reference.environment).toMatchObject({ python: '3.7.7', librosa: '0.7.2' })
+              const actual = extractSpiegelibSimpleFmRawMfcc(deterministicSignal())
+              expect(actual).toHaveLength(reference.values.length)
+              let maxError = 0
+              let rms = 0
+              for (let index = 0; index < actual.length; index += 1) {
+                const error = Math.abs((actual[index] ?? 0) - (reference.values[index] ?? 0))
+                maxError = Math.max(maxError, error)
+                rms += error * error
+              }
+              rms = Math.sqrt(rms / actual.length)
+              console.log(`MFCC compatibility maxError=${maxError} rms=${rms}`)
+              expect(maxError).toBeLessThan(0.01)
+              expect(rms).toBeLessThan(0.002)
+            })
+          })
+          TS
+          npx vitest run src/audio/spiegelibSimpleFmMfcc.compat.test.ts 2>&1 | tee mfcc-compat.log
+
+      - name: Persist permanent test and compatibility receipt
+        shell: python
+        run: |
+          from pathlib import Path
+          import hashlib, json, os, re
+
+          fixture = Path('src/audio/data/spiegelib-mfcc-librosa-0.7.2-reference.json')
+          fixture_sha = hashlib.sha256(fixture.read_bytes()).hexdigest()
+          log = Path('mfcc-compat.log').read_text(encoding='utf-8', errors='replace')
+          match = re.search(r'MFCC compatibility maxError=([^ ]+) rms=([^\s]+)', log)
+          metrics = match.groups() if match else ('unknown', 'unknown')
+          Path('docs/research/spiegelib-mfcc-compatibility.md').write_text('\n'.join([
+              '# SpiegeLib MFCC preprocessing compatibility', '',
+              f"FM1 Editor source commit: `{os.environ['GITHUB_SHA']}`", '',
+              'Compatibility status: **SUCCESS**', '',
+              '- reference runtime: Python 3.7.7 + Librosa 0.7.2',
+              '- SpiegeLib settings: 44.1 kHz, 2048 FFT, 1024 hop, 13 MFCC, one-second input',
+              f'- committed reference fixture SHA-256: `{fixture_sha}`',
+              f'- 572-value comparison max absolute error: `{metrics[0]}`',
+              f'- 572-value comparison RMS error: `{metrics[1]}`', '',
+              'The TypeScript path independently implements Librosa 0.7.2 centered reflect-padding STFT, periodic Hann windowing, 128-band Slaney mel projection, 80 dB power floor and orthonormal DCT-II. The compatibility fixture is generated from a deterministic synthetic signal in an isolated historical Python container.', '',
+              'This establishes a pinned raw-MFCC compatibility target. The learned initializer still requires the archived scaler and converted MLP tensors to be combined and validated end-to-end before the benchmark row is enabled.', '',
+          ]), encoding='utf-8')
+          Path('.github/workflows/validate-spiegelib-mfcc-compat.yml').unlink(missing_ok=True)
+          Path('mfcc-compat.log').unlink(missing_ok=True)
+          Path('src/audio/spiegelibSimpleFmMfcc.compat.test.ts').rename('src/audio/spiegelibSimpleFmMfcc.test.ts')
+
+      - name: Validate repository and commit evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm run typecheck
+          npm run lint
+          npm test -- src/audio/spiegelibSimpleFmMfcc.test.ts src/audio/spiegelibSimpleFmMlp.test.ts src/audio/spiegelibSimpleFmModel.test.ts src/audio/spiegelibSimpleFmInitializer.test.ts
+          npm run test
+          npm run build
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add -A
+          git commit -m 'test(audio): record Librosa MFCC compatibility' || true
+          git pull --rebase origin main
+          git push origin HEAD:main
