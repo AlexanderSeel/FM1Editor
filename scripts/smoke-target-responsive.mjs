@@ -130,10 +130,12 @@ try {
   await waitFor(cdp, `document.querySelector('.fm1-app') && document.querySelector('nav[aria-label="Workspace navigation"]')`, 20_000)
 
   const selected = await evaluate(cdp, `(() => {
-    const label=${JSON.stringify(target.label)};
-    const buttons=[...document.querySelectorAll('button')];
-    const button=buttons.find((candidate)=>candidate.textContent?.trim()===label) ?? buttons.find((candidate)=>candidate.textContent?.trim().startsWith(label+' '));
-    if(!button)return false;button.click();return true;
+    const targetId=${JSON.stringify(targetId)};
+    const select=[...document.querySelectorAll('select')].find((candidate)=>candidate.querySelector('option[value="'+targetId+'"]'));
+    if(!select)return false;
+    select.value=targetId;
+    select.dispatchEvent(new Event('change',{bubbles:true}));
+    return true;
   })()`)
   if (!selected) throw new Error(`Unable to select ${target.label} target in the UI`)
   await waitFor(cdp, `document.body.textContent.includes(${JSON.stringify(target.audition)}) && document.body.textContent.includes(${JSON.stringify(target.recorder)})`, 15_000)
