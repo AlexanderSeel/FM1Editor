@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { createInitializedVoice, type Dx7Voice } from '../domain/voice'
 import type { PresetIndexCandidate, PresetRenderProbe } from './nearestPreset'
 import {
-  REAL_REFERENCE_LEARNED_BLOCK,
+  REAL_REFERENCE_LEARNED_STATUS,
   REAL_REFERENCE_RECONSTRUCTION_BENCHMARK_SCHEMA,
   runRealReferenceReconstructionBenchmark,
 } from './realReferenceReconstructionBenchmark'
@@ -87,7 +87,7 @@ function candidates(): readonly PresetIndexCandidate[] {
 }
 
 describe('real-reference reconstruction benchmark', () => {
-  it('creates a privacy-safe comparison receipt with retrieval, evolutionary and blocked learned rows', async () => {
+  it('creates a privacy-safe comparison receipt with retrieval, evolutionary and admitted local learned rows', async () => {
     const reference = await createReference()
     const report = await runRealReferenceReconstructionBenchmark(reference, {
       declaredIsolated: true,
@@ -121,11 +121,13 @@ describe('real-reference reconstruction benchmark', () => {
     expect(report.comparison.results[0]?.candidateCount).toBe(3)
     expect(report.comparison.results[1]?.candidateCount).toBe(1)
     expect(report.comparison.results[2]).toMatchObject({
-      candidateCount: 0,
-      bestDistance: null,
-      failure: REAL_REFERENCE_LEARNED_BLOCK,
+      candidateCount: 1,
+      failure: null,
     })
-    expect(report.learnedStatus).toBe(REAL_REFERENCE_LEARNED_BLOCK)
+    expect(report.comparison.results[2]?.bestDistance).not.toBeNull()
+    expect(Number.isFinite(report.comparison.results[2]?.bestDistance)).toBe(true)
+    expect(report.comparison.results[2]?.sourceInitialization).toMatch(/SpiegeLib simple-FM MLP/)
+    expect(report.learnedStatus).toBe(REAL_REFERENCE_LEARNED_STATUS)
     expect(Number.isFinite(report.sharedPreparationMs)).toBe(true)
     expect(JSON.stringify(report)).not.toContain('"samples"')
   })
