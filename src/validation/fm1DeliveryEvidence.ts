@@ -83,7 +83,7 @@ function parseManifest(value: unknown): HardwareEvidenceManifest | null {
 }
 
 function requiredCheckBlockers(manifest: HardwareEvidenceManifest, family: DeliveryBrowserFamily): string[] {
-  const required = [...COMMON_REQUIRED_CHECKS]
+  const required: string[] = [...COMMON_REQUIRED_CHECKS]
   if (family === 'chrome') required.push('browser-chrome-resilience')
   if (family === 'edge') required.push('browser-edge-resilience')
   return required
