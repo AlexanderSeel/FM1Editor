@@ -1,0 +1,98 @@
+name: Validate hash-bound FM-1 delivery gate
+
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/validate-fm1-delivery-integrity.yml']
+
+permissions:
+  contents: write
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Run acceptance stages
+        shell: bash
+        run: |
+          set +e
+          : > stages.txt
+          run_stage() {
+            name="$1"
+            shift
+            "$@" > "$name.log" 2>&1
+            code=$?
+            cat "$name.log"
+            echo "$name=$code" >> stages.txt
+          }
+          run_stage install npm install --no-audit --no-fund
+          run_stage audit-virtual npm run audit:virtual-dx7
+          run_stage audit-research npm run audit:reconstruction-upstreams
+          run_stage typecheck npm run typecheck
+          run_stage lint npm run lint
+          run_stage base-delivery npm test -- src/validation/fm1DeliveryEvidence.test.ts
+          run_stage delivery-integrity npm test -- src/validation/fm1DeliveryEvidenceIntegrity.test.ts
+          run_stage consistency npm test -- src/validation/physicalEvidenceConsistency.test.ts
+          run_stage package npm test -- src/validation/physicalEvidencePackage.test.ts
+          run_stage full-test npm run test
+          run_stage build npm run build
+          exit 0
+
+      - name: Persist receipt
+        if: always()
+        shell: python
+        run: |
+          from pathlib import Path
+          import os
+          codes={}
+          p=Path('stages.txt')
+          if p.exists():
+            for line in p.read_text().splitlines():
+              if '=' in line:
+                k,v=line.split('=',1)
+                try: codes[k]=int(v)
+                except ValueError: codes[k]=999
+          stages=['install','audit-virtual','audit-research','typecheck','lint','base-delivery','delivery-integrity','consistency','package','full-test','build']
+          ok=all(codes.get(stage)==0 for stage in stages)
+          rows=['| Stage | Exit |','| --- | ---: |']+[f'| {stage} | {codes.get(stage,"?")} |' for stage in stages]
+          failures=[]
+          if not ok:
+            for stage in stages:
+              if codes.get(stage)==0: continue
+              log=Path(f'{stage}.log')
+              text=log.read_text(errors='replace') if log.exists() else 'missing log'
+              failures += ['',f'## {stage} failure tail','','```text',text[-12000:],'```']
+          Path('docs/validation/fm1-delivery-evidence-integrity.md').write_text('\n'.join([
+            '# FM-1 hash-bound delivery evidence software acceptance','',
+            f"Source commit: `{os.environ['GITHUB_SHA']}`",'',
+            f"Software acceptance: **{'SUCCESS' if ok else 'FAILED'}**",'',
+            *rows,'',
+            '- the historical v1 evaluator remains the manifest-completeness layer',
+            '- final v2 READY requires each selected Chrome/Edge manifest SHA-256 to have exactly one structurally-consistent raw-MIDI correlation link',
+            '- Chrome and Edge must use distinct manifest hashes and distinct raw MIDI capture hashes',
+            '- the v2 receipt contains source/hash bindings and validation metadata only; imported manifest bodies and raw MIDI payloads are not copied into the receipt',
+            '- hash/session correlation is an integrity prerequisite and never derives physical PASS observations','',
+            *failures,''
+          ]),encoding='utf-8')
+          Path('.github/workflows/validate-fm1-delivery-integrity.yml').unlink(missing_ok=True)
+          for path in Path('.').glob('*.log'): path.unlink(missing_ok=True)
+          Path('stages.txt').unlink(missing_ok=True)
+
+      - name: Commit receipt
+        if: always()
+        shell: bash
+        run: |
+          status=$(grep -F 'Software acceptance:' docs/validation/fm1-delivery-evidence-integrity.md | grep -oE 'SUCCESS|FAILED' | head -1)
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add -A
+          git commit -m "test(validation): record hash-bound FM-1 delivery gate $status" || true
+          git pull --rebase origin main
+          git push origin HEAD:main
