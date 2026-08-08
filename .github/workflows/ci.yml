@@ -31,6 +31,9 @@ jobs:
       - name: Audit virtual DX7 source boundary
         run: npm run audit:virtual-dx7
 
+      - name: Audit reconstruction research boundary
+        run: npm run audit:reconstruction-upstreams
+
       - name: Typecheck
         run: npm run typecheck
 
