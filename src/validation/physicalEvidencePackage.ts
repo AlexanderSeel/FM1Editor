@@ -4,6 +4,7 @@ import { FM1_DELIVERY_EVIDENCE_INTEGRITY_SCHEMA } from './fm1DeliveryEvidenceInt
 import { HARDWARE_EVIDENCE_SCHEMA } from './hardwareEvidence'
 
 export const PHYSICAL_EVIDENCE_PACKAGE_SCHEMA = 'fm1-editor.physical-evidence-package.v1' as const
+const FM1_DELIVERY_EVIDENCE_PACKAGE_INTEGRITY_SCHEMA = 'fm1-editor.fm1-delivery-evidence-gate.v3' as const
 
 export type PhysicalEvidenceTarget = 'fm1' | 'dx7' | 'mixed'
 export type PhysicalEvidenceArtifactKind =
@@ -89,7 +90,7 @@ export function classifyPhysicalEvidenceArtifact(
 
   if (schema === HARDWARE_EVIDENCE_SCHEMA) return { kind: 'fm1-hardware-manifest', jsonSchema: schema }
   if (schema === DX7_HARDWARE_EVIDENCE_SCHEMA) return { kind: 'dx7-hardware-manifest', jsonSchema: schema }
-  if (schema === FM1_DELIVERY_EVIDENCE_SCHEMA || schema === FM1_DELIVERY_EVIDENCE_INTEGRITY_SCHEMA) return { kind: 'fm1-delivery-gate', jsonSchema: schema }
+  if (schema === FM1_DELIVERY_EVIDENCE_SCHEMA || schema === FM1_DELIVERY_EVIDENCE_INTEGRITY_SCHEMA || schema === FM1_DELIVERY_EVIDENCE_PACKAGE_INTEGRITY_SCHEMA) return { kind: 'fm1-delivery-gate', jsonSchema: schema }
   if (isMidiMonitorJson(value)) return { kind: 'midi-monitor', jsonSchema: null }
   if (lower.endsWith('.syx')) return { kind: 'sysex', jsonSchema: null }
   if (lower.endsWith('.wav') || mimeType.toLowerCase() === 'audio/wav' || mimeType.toLowerCase() === 'audio/x-wav') return { kind: 'audio-wav', jsonSchema: null }
