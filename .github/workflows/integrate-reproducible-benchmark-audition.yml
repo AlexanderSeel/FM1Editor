@@ -1,0 +1,402 @@
+name: Integrate reproducible benchmark audition evidence
+
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/integrate-reproducible-benchmark-audition.yml']
+
+permissions:
+  contents: write
+
+jobs:
+  integrate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Bind benchmark metrics to exact audition candidates
+        shell: python
+        run: |
+          from pathlib import Path
+
+          # Core benchmark: retain exact semantic winner voices without raw audio/source byte provenance.
+          path=Path('src/audio/realReferenceReconstructionBenchmark.ts')
+          text=path.read_text(encoding='utf-8')
+          if "import type { Dx7Voice } from '../domain/voice'" not in text:
+            text="import type { Dx7Voice } from '../domain/voice'\n"+text
+          text=text.replace(
+            "  type ReconstructionApproach,\n  type ReconstructionComparisonReport,\n",
+            "  type ReconstructionApproach,\n  type ReconstructionCandidate,\n  type ReconstructionComparisonReport,\n",
+            1,
+          )
+          anchor="export const REAL_REFERENCE_LEARNED_STATUS = 'Local SpiegeLib simple-FM MLP · 9 OP2 controls + fixed training base' as const\n"
+          addition=anchor+"\nexport type RealReferenceAuditionApproachId = 'retrieval' | 'evolutionary' | 'learned-initialization'\n\nexport interface RealReferenceBenchmarkAuditionCandidate {\n  readonly approachId: RealReferenceAuditionApproachId\n  readonly sourceInitialization: string\n  readonly distance: number\n  /** Exact semantic DX7 winner used for reproducible local audition; raw reference audio and packed provenance bytes are excluded. */\n  readonly voice: Dx7Voice\n}\n"
+          if anchor not in text: raise SystemExit('learned status anchor missing')
+          text=text.replace(anchor,addition,1)
+          iface_anchor="  readonly retrievalVsEvolutionaryDelta: number | null\n  readonly learnedStatus: string\n"
+          iface_new="  readonly retrievalVsEvolutionaryDelta: number | null\n  /** Present on current receipts so structured listening can reproduce the exact three metric winners. Legacy receipts may omit it. */\n  readonly auditionCandidates?: readonly RealReferenceBenchmarkAuditionCandidate[]\n  readonly learnedStatus: string\n"
+          if iface_anchor not in text: raise SystemExit('report interface anchor missing')
+          text=text.replace(iface_anchor,iface_new,1)
+
+          before_approaches="  const retrieval: ReconstructionApproach<null> = {\n"
+          state="  let retrievalCandidates: readonly ReconstructionCandidate[] = []\n  let evolutionaryCandidates: readonly ReconstructionCandidate[] = []\n  let learnedCandidates: readonly ReconstructionCandidate[] = []\n\n  const retrieval: ReconstructionApproach<null> = {\n"
+          if before_approaches not in text: raise SystemExit('retrieval approach anchor missing')
+          text=text.replace(before_approaches,state,1)
+          retrieval_old="""    async run() {\n      const ranked = await ensureRanked()\n      return ranked.map((candidate) => ({ voice: candidate.voice, sourceInitialization: candidate.sourceLabel }))\n    },\n"""
+          retrieval_new="""    async run() {\n      const ranked = await ensureRanked()\n      const output = ranked.map((candidate) => ({ voice: candidate.voice, sourceInitialization: candidate.sourceLabel }))\n      retrievalCandidates = output\n      return output\n    },\n"""
+          if retrieval_old not in text: raise SystemExit('retrieval run anchor missing')
+          text=text.replace(retrieval_old,retrieval_new,1)
+          evolutionary_old="""      return refined.map((result) => ({\n        voice: result.bestVoice,\n        sourceInitialization: `CMA from ${result.sourceCandidate.sourceLabel}`,\n      }))\n"""
+          evolutionary_new="""      const output = refined.map((result) => ({\n        voice: result.bestVoice,\n        sourceInitialization: `CMA from ${result.sourceCandidate.sourceLabel}`,\n      }))\n      evolutionaryCandidates = output\n      return output\n"""
+          if evolutionary_old not in text: raise SystemExit('evolutionary run anchor missing')
+          text=text.replace(evolutionary_old,evolutionary_new,1)
+          learned_old="""      return [{\n        voice: candidate.voice,\n        sourceInitialization: `${candidate.source} · nine OP2 controls + fixed training base`,\n      }]\n"""
+          learned_new="""      const output = [{\n        voice: candidate.voice,\n        sourceInitialization: `${candidate.source} · nine OP2 controls + fixed training base`,\n      }]\n      learnedCandidates = output\n      return output\n"""
+          if learned_old not in text: raise SystemExit('learned run anchor missing')
+          text=text.replace(learned_old,learned_new,1)
+
+          delta_anchor="""  const retrievalVsEvolutionaryDelta = retrievalResult?.bestDistance !== null\n    && retrievalResult?.bestDistance !== undefined\n    && evolutionaryResult?.bestDistance !== null\n    && evolutionaryResult?.bestDistance !== undefined\n    ? retrievalResult.bestDistance - evolutionaryResult.bestDistance\n    : null\n\n  return {\n"""
+          audition_block="""  const retrievalVsEvolutionaryDelta = retrievalResult?.bestDistance !== null\n    && retrievalResult?.bestDistance !== undefined\n    && evolutionaryResult?.bestDistance !== null\n    && evolutionaryResult?.bestDistance !== undefined\n    ? retrievalResult.bestDistance - evolutionaryResult.bestDistance\n    : null\n\n  const candidateSets: Readonly<Record<RealReferenceAuditionApproachId, readonly ReconstructionCandidate[]>> = {\n    retrieval: retrievalCandidates,\n    evolutionary: evolutionaryCandidates,\n    'learned-initialization': learnedCandidates,\n  }\n  const auditionCandidates: RealReferenceBenchmarkAuditionCandidate[] = []\n  for (const approachId of ['retrieval', 'evolutionary', 'learned-initialization'] as const) {\n    const result = comparison.results.find((entry) => entry.approachId === approachId)\n    if (!result || result.failure !== null || result.bestCandidateIndex === null || result.bestDistance === null) continue\n    const candidate = candidateSets[approachId][result.bestCandidateIndex]\n    if (!candidate) throw new Error(`Benchmark ${approachId} winner index no longer resolves to its evaluated candidate.`)\n    const { source: _source, ...semanticVoice } = candidate.voice\n    auditionCandidates.push({\n      approachId,\n      sourceInitialization: candidate.sourceInitialization,\n      distance: result.bestDistance,\n      voice: semanticVoice,\n    })\n  }\n\n  return {\n"""
+          if delta_anchor not in text: raise SystemExit('delta anchor missing')
+          text=text.replace(delta_anchor,audition_block,1)
+          return_anchor="""    comparison,\n    retrievalVsEvolutionaryDelta,\n    learnedStatus: REAL_REFERENCE_LEARNED_STATUS,\n    note: 'User-declared isolated reference; audio remains local and is not embedded in this report. The learned row is a local SpiegeLib simple-FM MLP candidate that predicts nine historical Dexed OP2 controls over a fixed training base. Similarity metrics are comparative estimates, not proof of patch identity or exact FM-1 hardware equivalence.',\n"""
+          return_new="""    comparison,\n    retrievalVsEvolutionaryDelta,\n    auditionCandidates,\n    learnedStatus: REAL_REFERENCE_LEARNED_STATUS,\n    note: 'User-declared isolated reference; audio remains local and is not embedded in this report. Current receipts retain the exact semantic DX7 winner for each successful benchmark approach so listening evidence can be reproduced without embedding audio or packed catalog provenance bytes. The learned row is a local SpiegeLib simple-FM MLP candidate that predicts nine historical Dexed OP2 controls over a fixed training base. Similarity metrics are comparative estimates, not proof of patch identity or exact FM-1 hardware equivalence.',\n"""
+          if return_anchor not in text: raise SystemExit('return anchor missing')
+          text=text.replace(return_anchor,return_new,1)
+          path.write_text(text,encoding='utf-8')
+
+          # Aggregate: validate exact winner binding and make it part of final closure readiness.
+          path=Path('src/audio/realReferenceBenchmarkAggregate.ts')
+          text=path.read_text(encoding='utf-8')
+          if "import { createDx7VoiceSyxArtifact } from './dx7CandidateArtifacts'" not in text:
+            text="import { createDx7VoiceSyxArtifact } from './dx7CandidateArtifacts'\n"+text
+          text=text.replace(
+            "  readonly learnedInitializationFailedCount: number\n  readonly closureReadiness: {\n",
+            "  readonly learnedInitializationFailedCount: number\n  readonly auditionEvidenceReceiptCount: number\n  readonly closureReadiness: {\n",
+            1,
+          )
+          text=text.replace(
+            "    readonly currentThreeWayComplete: boolean\n    readonly readyForAggregateEvidence: boolean\n",
+            "    readonly currentThreeWayComplete: boolean\n    readonly auditionEvidenceComplete: boolean\n    readonly readyForAggregateEvidence: boolean\n",
+            1,
+          )
+          text=text.replace(
+            "    readonly learnedStatus: string\n  }[]\n",
+            "    readonly learnedStatus: string\n    readonly auditionEvidenceComplete: boolean\n  }[]\n",
+            1,
+          )
+
+          assert_anchor="""function assertReport(report: RealReferenceReconstructionBenchmarkReport): void {\n"""
+          helper="""function completeAuditionEvidence(report: RealReferenceReconstructionBenchmarkReport): boolean {\n  const candidates = report.auditionCandidates\n  if (!Array.isArray(candidates) || candidates.length !== 3) return false\n  const ids = new Set<string>()\n  for (const candidate of candidates) {\n    if (!['retrieval', 'evolutionary', 'learned-initialization'].includes(candidate.approachId)) return false\n    if (ids.has(candidate.approachId)) return false\n    ids.add(candidate.approachId)\n    const result = report.comparison.results.find((entry) => entry.approachId === candidate.approachId)\n    if (!result || result.failure !== null || result.bestDistance === null || result.bestCandidateIndex === null) return false\n    if (!Number.isFinite(candidate.distance) || candidate.distance < 0 || Math.abs(candidate.distance - result.bestDistance) > 1e-9) return false\n    if (candidate.sourceInitialization !== result.sourceInitialization) return false\n    if (!candidate.voice || typeof candidate.voice !== 'object' || 'source' in candidate.voice) return false\n    try {\n      createDx7VoiceSyxArtifact(candidate.voice)\n    } catch {\n      return false\n    }\n  }\n  return ids.size === 3\n}\n\nexport function hasReproducibleBenchmarkAuditionEvidence(report: RealReferenceReconstructionBenchmarkReport): boolean {\n  return completeAuditionEvidence(report)\n}\n\nfunction assertReport(report: RealReferenceReconstructionBenchmarkReport): void {\n"""
+          if assert_anchor not in text: raise SystemExit('assert report anchor missing')
+          text=text.replace(assert_anchor,helper,1)
+          report_validation_anchor="""  if (learned.failure === null) {\n    finiteNonNegative(learned.bestDistance, `${report.reference.filename} learned distance`)\n    finiteNonNegative(learned.runtimeMs, `${report.reference.filename} learned runtime`)\n  }\n}\n"""
+          report_validation_new="""  if (learned.failure === null) {\n    finiteNonNegative(learned.bestDistance, `${report.reference.filename} learned distance`)\n    finiteNonNegative(learned.runtimeMs, `${report.reference.filename} learned runtime`)\n  }\n  if (report.auditionCandidates !== undefined && !completeAuditionEvidence(report)) {\n    throw new Error(`${report.reference.filename} contains invalid benchmark audition-candidate evidence.`)\n  }\n}\n"""
+          if report_validation_anchor not in text: raise SystemExit('assert report end anchor missing')
+          text=text.replace(report_validation_anchor,report_validation_new,1)
+
+          count_anchor="""  let learnedInitializationFailedCount = 0\n\n  for (const input of inputs) {\n"""
+          count_new="""  let learnedInitializationFailedCount = 0\n  let auditionEvidenceReceiptCount = 0\n\n  for (const input of inputs) {\n"""
+          if count_anchor not in text: raise SystemExit('count anchor missing')
+          text=text.replace(count_anchor,count_new,1)
+          before_push="""    receipts.push({\n      referenceSha256: hash,\n"""
+          push_new="""    const auditionEvidenceComplete = completeAuditionEvidence(input.report)\n    if (auditionEvidenceComplete) auditionEvidenceReceiptCount += 1\n\n    receipts.push({\n      referenceSha256: hash,\n"""
+          if before_push not in text: raise SystemExit('receipts push anchor missing')
+          text=text.replace(before_push,push_new,1)
+          text=text.replace(
+            "      learnedStatus: learned.failure ?? learned.sourceInitialization ?? input.report.learnedStatus,\n    })\n",
+            "      learnedStatus: learned.failure ?? learned.sourceInitialization ?? input.report.learnedStatus,\n      auditionEvidenceComplete,\n    })\n",
+            1,
+          )
+          readiness_anchor="""  const currentThreeWayComplete = learnedInitializationSuccessCount === receipts.length\n  if (!currentThreeWayComplete) missing.push(`${receipts.length - learnedInitializationSuccessCount} receipt${receipts.length - learnedInitializationSuccessCount === 1 ? '' : 's'} must be rerun with the admitted learned row`)\n\n  return {\n"""
+          readiness_new="""  const currentThreeWayComplete = learnedInitializationSuccessCount === receipts.length\n  if (!currentThreeWayComplete) missing.push(`${receipts.length - learnedInitializationSuccessCount} receipt${receipts.length - learnedInitializationSuccessCount === 1 ? '' : 's'} must be rerun with the admitted learned row`)\n  const auditionEvidenceComplete = auditionEvidenceReceiptCount === receipts.length\n  if (!auditionEvidenceComplete) missing.push(`${receipts.length - auditionEvidenceReceiptCount} receipt${receipts.length - auditionEvidenceReceiptCount === 1 ? '' : 's'} must be rerun with exact benchmark winner audition evidence`)\n\n  return {\n"""
+          if readiness_anchor not in text: raise SystemExit('readiness anchor missing')
+          text=text.replace(readiness_anchor,readiness_new,1)
+          text=text.replace(
+            "    learnedInitializationFailedCount,\n    closureReadiness: {\n",
+            "    learnedInitializationFailedCount,\n    auditionEvidenceReceiptCount,\n    closureReadiness: {\n",
+            1,
+          )
+          text=text.replace(
+            "      currentThreeWayComplete,\n      readyForAggregateEvidence: mixedSetComplete && listeningAssessmentsComplete && learnedListeningAssessmentsComplete && currentThreeWayComplete,\n",
+            "      currentThreeWayComplete,\n      auditionEvidenceComplete,\n      readyForAggregateEvidence: mixedSetComplete && listeningAssessmentsComplete && learnedListeningAssessmentsComplete && currentThreeWayComplete && auditionEvidenceComplete,\n",
+            1,
+          )
+          text=text.replace(
+            "    note: 'Aggregate contains benchmark metadata, metrics, classifications and structured listening assessments only. Legacy blocked learned receipts remain parseable but cannot satisfy current three-way closure readiness. It does not contain reference audio and does not establish exact patch identity or physical FM-1 equivalence.',\n",
+            "    note: 'Aggregate contains benchmark metadata, metrics, classifications and structured listening assessments only. Current closure additionally requires each receipt to carry the exact three semantic benchmark winner voices so listening evidence is reproducible; those voices are not copied into the aggregate. Legacy receipts remain parseable but cannot satisfy closure readiness. The aggregate does not contain reference audio and does not establish exact patch identity or physical FM-1 equivalence.',\n",
+            1,
+          )
+          path.write_text(text,encoding='utf-8')
+
+          # Benchmark UI: exact winners can be auditioned/exported while reference audio remains loaded.
+          path=Path('src/components/ReconstructionBenchmarkPanel.tsx')
+          text=path.read_text(encoding='utf-8')
+          text=text.replace(
+            "import { useCallback, useEffect, useRef, useState } from 'react'\n",
+            "import { useCallback, useEffect, useRef, useState } from 'react'\nimport type { Dx7Voice } from '../domain/voice'\nimport { createDx7VoiceSyxArtifact } from '../audio/dx7CandidateArtifacts'\n",
+            1,
+          )
+          text=text.replace(
+            "interface ReconstructionBenchmarkPanelProps {\n  reference: PreparedReferenceAudio | null\n}\n",
+            "interface ReconstructionBenchmarkPanelProps {\n  reference: PreparedReferenceAudio | null\n  onAuditionVoice?: (voice: Dx7Voice | Promise<Dx7Voice>) => Promise<void>\n  onStopAudition?: () => Promise<void>\n}\n",
+            1,
+          )
+          helper_anchor="""function downloadReport(report: RealReferenceReconstructionBenchmarkReport): void {\n"""
+          helper_code="""function downloadVoiceSyx(voice: Dx7Voice): void {\n  const artifact = createDx7VoiceSyxArtifact(voice)\n  const blob = new Blob([artifact.bytes as Uint8Array<ArrayBuffer>], { type: artifact.mimeType })\n  const url = URL.createObjectURL(blob)\n  const anchor = document.createElement('a')\n  anchor.href = url\n  anchor.download = artifact.filename\n  document.body.append(anchor)\n  anchor.click()\n  anchor.remove()\n  URL.revokeObjectURL(url)\n}\n\nfunction downloadReport(report: RealReferenceReconstructionBenchmarkReport): void {\n"""
+          if helper_anchor not in text: raise SystemExit('benchmark download anchor missing')
+          text=text.replace(helper_anchor,helper_code,1)
+          text=text.replace(
+            "export function ReconstructionBenchmarkPanel({ reference }: ReconstructionBenchmarkPanelProps) {\n",
+            "export function ReconstructionBenchmarkPanel({ reference, onAuditionVoice, onStopAudition }: ReconstructionBenchmarkPanelProps) {\n",
+            1,
+          )
+          calc_anchor="""  const learned = report?.comparison.results.find((result) => result.approachId === 'learned-initialization')\n\n  return (\n"""
+          calc_new="""  const learned = report?.comparison.results.find((result) => result.approachId === 'learned-initialization')\n  const auditionWinners = report?.auditionCandidates ?? []\n\n  const auditionWinner = useCallback(async (voice: Dx7Voice) => {\n    if (!onAuditionVoice) return\n    setError(null)\n    try {\n      await onStopAudition?.().catch(() => undefined)\n      await onAuditionVoice(voice)\n    } catch (cause) {\n      setError(`Exact benchmark winner audition failed: ${errorMessage(cause)}`)\n    }\n  }, [onAuditionVoice, onStopAudition])\n\n  return (\n"""
+          if calc_anchor not in text: raise SystemExit('benchmark calc anchor missing')
+          text=text.replace(calc_anchor,calc_new,1)
+          text=text.replace(
+            "The report contains file hash, selected-region metadata, metrics and runtimes only; raw audio is never embedded or uploaded.",
+            "The report contains file hash, selected-region metadata, metrics, runtimes and the exact semantic DX7 winner for each successful approach so listening evidence is reproducible. Raw reference audio and packed catalog provenance bytes are never embedded or uploaded.",
+            1,
+          )
+          insert_before="""          <p className=\"text-[11px] leading-5 text-slate-500\">\n            Retrieval minus evolutionary distance: {distance(report.retrievalVsEvolutionaryDelta)}. Positive means constrained CMA-ES produced the lower fingerprint distance for this reference. Learned distance is reported independently and is not CMA-refined. This receipt is comparative evidence only and does not claim exact patch identity or physical FM-1 equivalence.\n          </p>\n"""
+          winner_ui="""          {auditionWinners.length > 0 && (\n            <div className=\"rounded-xl border border-violet-200/15 bg-violet-200/[0.025] p-3\" data-benchmark-audition-evidence={auditionWinners.length === 3 ? 'complete' : 'partial'}>\n              <p className=\"text-[10px] font-bold uppercase tracking-[0.12em] text-violet-200\">Exact benchmark winners · reproducible listening</p>\n              <p className=\"mt-1 text-[11px] leading-5 text-slate-500\">These are the exact semantic voices at the recorded best candidate indices. Compare them with the still-loaded reference before exporting the receipt.</p>\n              <div className=\"mt-3 flex flex-wrap gap-2\">\n                {auditionWinners.map((candidate) => (\n                  <div className=\"flex flex-wrap gap-1\" key={candidate.approachId}>\n                    <button className=\"rounded-lg border border-violet-200/30 px-3 py-2 text-xs font-bold text-violet-100 disabled:opacity-40\" disabled={!onAuditionVoice} onClick={() => void auditionWinner(candidate.voice)} type=\"button\">\n                      ▶ {candidate.approachId === 'retrieval' ? 'Retrieval' : candidate.approachId === 'evolutionary' ? 'CMA' : 'Learned'} winner\n                    </button>\n                    <button className=\"rounded-lg border border-white/10 px-3 py-2 text-xs font-bold text-slate-300\" onClick={() => downloadVoiceSyx(candidate.voice)} type=\"button\">\n                      Export .syx\n                    </button>\n                  </div>\n                ))}\n              </div>\n            </div>\n          )}\n\n"""+insert_before
+          if insert_before not in text: raise SystemExit('benchmark note anchor missing')
+          text=text.replace(insert_before,winner_ui,1)
+          path.write_text(text,encoding='utf-8')
+
+          # Evidence-set UI: imported receipts expose exact winners and make missing audition provenance obvious.
+          path=Path('src/components/ReconstructionBenchmarkSetPanel.tsx')
+          text=path.read_text(encoding='utf-8')
+          text=text.replace(
+            "import { useMemo, useState } from 'react'\n",
+            "import { useMemo, useState } from 'react'\nimport type { Dx7Voice } from '../domain/voice'\nimport { createDx7VoiceSyxArtifact } from '../audio/dx7CandidateArtifacts'\n",
+            1,
+          )
+          export_anchor="""export function ReconstructionBenchmarkSetPanel() {\n"""
+          props_code="""interface ReconstructionBenchmarkSetPanelProps {\n  onAuditionVoice?: (voice: Dx7Voice | Promise<Dx7Voice>) => Promise<void>\n  onStopAudition?: () => Promise<void>\n}\n\nfunction downloadWinnerSyx(voice: Dx7Voice): void {\n  const artifact = createDx7VoiceSyxArtifact(voice)\n  const blob = new Blob([artifact.bytes as Uint8Array<ArrayBuffer>], { type: artifact.mimeType })\n  const url = URL.createObjectURL(blob)\n  const anchor = document.createElement('a')\n  anchor.href = url\n  anchor.download = artifact.filename\n  document.body.append(anchor)\n  anchor.click()\n  anchor.remove()\n  URL.revokeObjectURL(url)\n}\n\nexport function ReconstructionBenchmarkSetPanel({ onAuditionVoice, onStopAudition }: ReconstructionBenchmarkSetPanelProps = {}) {\n"""
+          if export_anchor not in text: raise SystemExit('set panel export anchor missing')
+          text=text.replace(export_anchor,props_code,1)
+          update_anchor="""  const removeReceipt = (id: string) => {\n    setAggregate(null)\n    setReceipts((current) => current.filter((item) => item.id !== id))\n  }\n\n  const buildAggregate = () => {\n"""
+          update_new="""  const removeReceipt = (id: string) => {\n    setAggregate(null)\n    setReceipts((current) => current.filter((item) => item.id !== id))\n  }\n\n  const auditionWinner = async (voice: Dx7Voice) => {\n    if (!onAuditionVoice) return\n    setError(null)\n    try {\n      await onStopAudition?.().catch(() => undefined)\n      await onAuditionVoice(voice)\n    } catch (cause) {\n      setError(`Imported benchmark winner audition failed: ${errorMessage(cause)}`)\n    }\n  }\n\n  const buildAggregate = () => {\n"""
+          if update_anchor not in text: raise SystemExit('set panel action anchor missing')
+          text=text.replace(update_anchor,update_new,1)
+          text=text.replace(
+            "The minimum set is two FM-friendly electronic, two pitched acoustic and two difficult/noisy references with both listening assessments completed.",
+            "The minimum set is two FM-friendly electronic, two pitched acoustic and two difficult/noisy references with both listening assessments completed. Current closure also requires each receipt to preserve the exact three semantic benchmark winners used for those listening judgments.",
+            1,
+          )
+          card_anchor="""            const learned = learnedResult(item.report)\n            const learnedAvailable = learned?.failure === null\n            return (\n"""
+          card_new="""            const learned = learnedResult(item.report)\n            const learnedAvailable = learned?.failure === null\n            const auditionWinners = item.report.auditionCandidates ?? []\n            const auditionEvidenceReady = auditionWinners.length === 3\n            return (\n"""
+          if card_anchor not in text: raise SystemExit('receipt card anchor missing')
+          text=text.replace(card_anchor,card_new,1)
+          status_anchor="""                    <p className={`mt-2 text-[10px] ${learnedAvailable ? 'text-violet-200' : 'text-amber-200'}`}>\n                      {learnedAvailable ? `Learned row ready · distance ${statistic(learned.bestDistance ?? Number.NaN)} · ${runtime(learned.runtimeMs)}` : `Legacy/failed learned row · ${learned?.failure ?? item.report.learnedStatus}`}\n                    </p>\n"""
+          status_new=status_anchor+"""                    <p className={`mt-1 text-[10px] ${auditionEvidenceReady ? 'text-emerald-200' : 'text-amber-200'}`}>\n                      {auditionEvidenceReady ? 'Exact retrieval/CMA/learned winners retained for reproducible listening' : 'Legacy receipt: exact benchmark winners missing · rerun before final closure'}\n                    </p>\n"""
+          if status_anchor not in text: raise SystemExit('receipt status anchor missing')
+          text=text.replace(status_anchor,status_new,1)
+          controls_anchor="""                <div className=\"mt-3 grid gap-3 xl:grid-cols-3\">\n"""
+          winner_controls="""                {auditionWinners.length > 0 && (\n                  <div className=\"mt-3 rounded-xl border border-emerald-200/15 bg-emerald-200/[0.02] p-3\" data-imported-audition-evidence={auditionEvidenceReady ? 'complete' : 'partial'}>\n                    <p className=\"text-[10px] uppercase tracking-[0.12em] text-emerald-200\">Exact imported winners</p>\n                    <div className=\"mt-2 flex flex-wrap gap-2\">\n                      {auditionWinners.map((candidate) => (\n                        <div className=\"flex gap-1\" key={candidate.approachId}>\n                          <button className=\"rounded-lg border border-emerald-200/25 px-2.5 py-1.5 text-[11px] font-bold text-emerald-100 disabled:opacity-40\" disabled={!onAuditionVoice} onClick={() => void auditionWinner(candidate.voice)} type=\"button\">▶ {candidate.approachId === 'retrieval' ? 'Retrieval' : candidate.approachId === 'evolutionary' ? 'CMA' : 'Learned'}</button>\n                          <button className=\"rounded-lg border border-white/10 px-2.5 py-1.5 text-[11px] text-slate-300\" onClick={() => downloadWinnerSyx(candidate.voice)} type=\"button\">.syx</button>\n                        </div>\n                      ))}\n                    </div>\n                  </div>\n                )}\n\n"""+controls_anchor
+          if controls_anchor not in text: raise SystemExit('receipt controls anchor missing')
+          text=text.replace(controls_anchor,winner_controls,1)
+          # Disable structured listening selection when exact winner provenance is absent.
+          text=text.replace(
+            "                      onChange={(event) => updateReceipt(item.id, { listeningAssessment: event.target.value as RealReferenceListeningAssessment })}\n                      value={item.listeningAssessment}\n",
+            "                      disabled={!auditionEvidenceReady}\n                      onChange={(event) => updateReceipt(item.id, { listeningAssessment: event.target.value as RealReferenceListeningAssessment })}\n                      value={item.listeningAssessment}\n",
+            1,
+          )
+          text=text.replace(
+            "                      disabled={!learnedAvailable}\n",
+            "                      disabled={!learnedAvailable || !auditionEvidenceReady}\n",
+            1,
+          )
+          closure_text="Current learned rows {aggregate.learnedInitializationSuccessCount}/{aggregate.receiptCount}"
+          closure_new="Current learned rows {aggregate.learnedInitializationSuccessCount}/{aggregate.receiptCount} · Reproducible audition receipts {aggregate.auditionEvidenceReceiptCount}/{aggregate.receiptCount}"
+          if closure_text not in text: raise SystemExit('aggregate closure display anchor missing')
+          text=text.replace(closure_text,closure_new,1)
+          path.write_text(text,encoding='utf-8')
+
+          # Mount callbacks through the parent panel.
+          path=Path('src/components/AudioToFmReferencePanel.tsx')
+          text=path.read_text(encoding='utf-8')
+          text=text.replace(
+            "      <ReconstructionBenchmarkPanel reference={reference} />\n      <ReconstructionBenchmarkSetPanel />\n",
+            "      <ReconstructionBenchmarkPanel onAuditionVoice={onAuditionVoice} onStopAudition={onStopAudition} reference={reference} />\n      <ReconstructionBenchmarkSetPanel onAuditionVoice={onAuditionVoice} onStopAudition={onStopAudition} />\n",
+            1,
+          )
+          path.write_text(text,encoding='utf-8')
+
+          # Core benchmark test: prove exact winners are bound and privacy-safe.
+          path=Path('src/audio/realReferenceReconstructionBenchmark.test.ts')
+          text=path.read_text(encoding='utf-8')
+          test_anchor="""    expect(report.learnedStatus).toBe(REAL_REFERENCE_LEARNED_STATUS)\n    expect(Number.isFinite(report.sharedPreparationMs)).toBe(true)\n    expect(JSON.stringify(report)).not.toContain('\"samples\"')\n"""
+          test_new="""    expect(report.learnedStatus).toBe(REAL_REFERENCE_LEARNED_STATUS)\n    expect(Number.isFinite(report.sharedPreparationMs)).toBe(true)\n    expect(report.auditionCandidates?.map((candidate) => candidate.approachId)).toEqual([\n      'retrieval',\n      'evolutionary',\n      'learned-initialization',\n    ])\n    for (const candidate of report.auditionCandidates ?? []) {\n      const result = report.comparison.results.find((entry) => entry.approachId === candidate.approachId)\n      expect(candidate.distance).toBe(result?.bestDistance)\n      expect(candidate.sourceInitialization).toBe(result?.sourceInitialization)\n      expect(candidate.voice).not.toHaveProperty('source')\n      expect(candidate.voice.operators).toHaveLength(6)\n    }\n    expect(JSON.stringify(report)).not.toContain('\"samples\"')\n    expect(JSON.stringify(report)).not.toContain('\"packed\"')\n    expect(JSON.stringify(report)).not.toContain('\"unpacked\"')\n"""
+          if test_anchor not in text: raise SystemExit('benchmark test anchor missing')
+          text=text.replace(test_anchor,test_new,1)
+          path.write_text(text,encoding='utf-8')
+
+          # Aggregate tests: current fixtures carry exact winners; add explicit legacy-success/no-audition regression.
+          path=Path('src/audio/realReferenceBenchmarkAggregate.test.ts')
+          text=path.read_text(encoding='utf-8')
+          if "import { createInitializedVoice } from '../domain/voice'" not in text:
+            text="import { createInitializedVoice } from '../domain/voice'\n"+text
+          sig="""  learned?: { readonly distance: number; readonly runtimeMs?: number },\n): RealReferenceReconstructionBenchmarkReport {\n"""
+          sig_new="""  learned?: { readonly distance: number; readonly runtimeMs?: number },\n  includeAudition = learned !== undefined,\n): RealReferenceReconstructionBenchmarkReport {\n"""
+          if sig not in text: raise SystemExit('receipt signature anchor missing')
+          text=text.replace(sig,sig_new,1)
+          before_return="""  const hash = hashCharacter.repeat(64)\n  return {\n"""
+          before_return_new="""  const hash = hashCharacter.repeat(64)\n  const retrievalVoice = createInitializedVoice('RETR WIN')\n  const evolutionaryVoice = createInitializedVoice('CMA WIN')\n  const learnedVoice = createInitializedVoice('MLP WIN')\n  return {\n"""
+          if before_return not in text: raise SystemExit('receipt return anchor missing')
+          text=text.replace(before_return,before_return_new,1)
+          receipt_tail="""    retrievalVsEvolutionaryDelta: retrievalDistance - evolutionaryDistance,\n    learnedStatus: learned ? REAL_REFERENCE_LEARNED_STATUS : REAL_REFERENCE_LEARNED_BLOCK,\n    note: 'test receipt',\n"""
+          receipt_tail_new="""    retrievalVsEvolutionaryDelta: retrievalDistance - evolutionaryDistance,\n    ...(includeAudition && learned ? { auditionCandidates: [\n      { approachId: 'retrieval' as const, sourceInitialization: 'retrieved', distance: retrievalDistance, voice: retrievalVoice },\n      { approachId: 'evolutionary' as const, sourceInitialization: 'CMA from retrieved', distance: evolutionaryDistance, voice: evolutionaryVoice },\n      { approachId: 'learned-initialization' as const, sourceInitialization: 'SpiegeLib simple-FM MLP · nine OP2 controls + fixed training base', distance: learned.distance, voice: learnedVoice },\n    ] } : {}),\n    learnedStatus: learned ? REAL_REFERENCE_LEARNED_STATUS : REAL_REFERENCE_LEARNED_BLOCK,\n    note: 'test receipt',\n"""
+          if receipt_tail not in text: raise SystemExit('receipt tail anchor missing')
+          text=text.replace(receipt_tail,receipt_tail_new,1)
+          expected="""      currentThreeWayComplete: false,\n      readyForAggregateEvidence: false,\n"""
+          expected_new="""      currentThreeWayComplete: false,\n      auditionEvidenceComplete: false,\n      readyForAggregateEvidence: false,\n"""
+          if expected not in text: raise SystemExit('legacy readiness expected anchor missing')
+          text=text.replace(expected,expected_new,1)
+          current_expected="""      currentThreeWayComplete: true,\n      readyForAggregateEvidence: true,\n"""
+          current_expected_new="""      currentThreeWayComplete: true,\n      auditionEvidenceComplete: true,\n      readyForAggregateEvidence: true,\n"""
+          if current_expected not in text: raise SystemExit('current readiness expected anchor missing')
+          text=text.replace(current_expected,current_expected_new,1)
+          insert_test="""  it('reports missing learned listening assessments on otherwise current receipts', () => {\n"""
+          new_test="""  it('keeps successful learned receipts without exact winner voices parseable but not closure-ready', () => {\n    const report = receipt('z', 0.5, 0.4, 10, 30, { distance: 0.45 }, false)\n    expect(parseRealReferenceBenchmarkReceipt(report).learnedStatus).toBe(REAL_REFERENCE_LEARNED_STATUS)\n    const aggregate = aggregateRealReferenceBenchmarkEvidence([{\n      report,\n      category: 'fm-friendly-electronic',\n      listeningAssessment: 'similar',\n      learnedListeningAssessment: 'learned-similar',\n    }])\n    expect(aggregate.closureReadiness.currentThreeWayComplete).toBe(true)\n    expect(aggregate.closureReadiness.auditionEvidenceComplete).toBe(false)\n    expect(aggregate.closureReadiness.readyForAggregateEvidence).toBe(false)\n    expect(aggregate.closureReadiness.missing.join(' ')).toMatch(/exact benchmark winner audition evidence/)\n  })\n\n"""+insert_test
+          if insert_test not in text: raise SystemExit('aggregate new test insertion anchor missing')
+          text=text.replace(insert_test,new_test,1)
+          # z is not hexadecimal; use valid hex char for SHA fixture.
+          text=text.replace("receipt('z', 0.5, 0.4", "receipt('9', 0.5, 0.4", 1)
+          path.write_text(text,encoding='utf-8')
+
+          # Evidence-document fixture follows the stronger aggregate shape.
+          path=Path('src/audio/realReferenceAggregateEvidenceDocument.test.ts')
+          text=path.read_text(encoding='utf-8')
+          text=text.replace(
+            "    learnedInitializationFailedCount: 0,\n    closureReadiness: {\n",
+            "    learnedInitializationFailedCount: 0,\n    auditionEvidenceReceiptCount: ready ? 6 : 5,\n    closureReadiness: {\n",
+            1,
+          )
+          text=text.replace(
+            "      currentThreeWayComplete: ready,\n      readyForAggregateEvidence: ready,\n",
+            "      currentThreeWayComplete: ready,\n      auditionEvidenceComplete: ready,\n      readyForAggregateEvidence: ready,\n",
+            1,
+          )
+          text=text.replace(
+            "      learnedStatus: ready || index < 5 ? 'SpiegeLib simple-FM MLP' : 'legacy unavailable',\n    })),\n",
+            "      learnedStatus: ready || index < 5 ? 'SpiegeLib simple-FM MLP' : 'legacy unavailable',\n      auditionEvidenceComplete: ready || index < 5,\n    })),\n",
+            1,
+          )
+          path.write_text(text,encoding='utf-8')
+
+          # Protocol and PLAN: stronger evidence chain, while physical/real-audio task remains open.
+          path=Path('docs/validation/real-reference-benchmark-protocol.md')
+          text=path.read_text(encoding='utf-8')
+          text=text.replace(
+            "6. Export the JSON receipt.\n7. Listen to the best retrieval and refined CMA candidates, then choose the structured **Retrieval / CMA listening** verdict.\n8. Listen to the learned candidate against the better local alternative and choose the structured **Learned listening** verdict: learned best, perceptually similar, clearly worse, or poor/out-of-scope.\n",
+            "6. Confirm the **Exact benchmark winners · reproducible listening** controls are present for retrieval, CMA and learned. These voices are the exact semantic candidates at the best indices recorded in the metrics.\n7. While the reference is still loaded, listen to the exact retrieval and refined CMA winners, then choose the structured **Retrieval / CMA listening** verdict.\n8. Listen to the exact learned winner against the better local alternative and choose the structured **Learned listening** verdict: learned best, perceptually similar, clearly worse, or poor/out-of-scope.\n9. Export the JSON receipt only after confirming all three exact winner voices are retained; the receipt contains semantic DX7 parameters but no raw reference audio or packed catalog bytes.\n",
+            1,
+          )
+          # Renumber old 9/10 if still present.
+          text=text.replace("9. Use optional notes", "10. Use optional notes", 1)
+          text=text.replace("10. Keep the reference file", "11. Keep the reference file", 1)
+          fields_anchor="""- retrieval-minus-evolutionary distance delta;\n- no embedded raw audio samples.\n"""
+          fields_new="""- retrieval-minus-evolutionary distance delta;\n- exact semantic DX7 winner voice, source label and recorded best distance for each successful retrieval/CMA/learned row;\n- no embedded raw audio samples and no packed/unpacked catalog provenance bytes.\n"""
+          if fields_anchor not in text: raise SystemExit('protocol fields anchor missing')
+          text=text.replace(fields_anchor,fields_new,1)
+          closure_anchor="""4. every retained receipt contains a successful current admitted learned row.\n"""
+          closure_new="""4. every retained receipt contains a successful current admitted learned row;\n5. every retained receipt contains all three exact semantic winner voices matching the recorded best indices/distances/source labels, so the listening evidence is reproducible.\n"""
+          if closure_anchor not in text: raise SystemExit('protocol closure anchor missing')
+          text=text.replace(closure_anchor,closure_new,1)
+          path.write_text(text,encoding='utf-8')
+
+          path=Path('PLAN.md')
+          text=path.read_text(encoding='utf-8')
+          old="""Synthetic ground-truth comparison, real-reference receipt export, admitted learned-row execution, three-way closure gating and byte-identical JSON/hash Markdown evidence export are implemented and validated; this item now requires actual real isolated recordings and listening evidence.\n"""
+          new="""Synthetic ground-truth comparison, real-reference receipt export, admitted learned-row execution, three-way closure gating, exact semantic winner retention for reproducible listening, and byte-identical JSON/hash Markdown evidence export are implemented and validated; legacy/current receipts without exact winner audition evidence remain parseable but cannot satisfy final closure. This item now requires actual real isolated recordings and listening evidence.\n"""
+          if old not in text: raise SystemExit('PLAN reconstruction evidence anchor missing')
+          text=text.replace(old,new,1)
+          path.write_text(text,encoding='utf-8')
+
+      - name: Run acceptance stages
+        shell: bash
+        run: |
+          set +e
+          : > stages.txt
+          run_stage() {
+            name="$1"
+            shift
+            "$@" > "$name.log" 2>&1
+            code=$?
+            cat "$name.log"
+            echo "$name=$code" >> stages.txt
+          }
+          run_stage install npm install --no-audit --no-fund
+          run_stage audit-virtual npm run audit:virtual-dx7
+          run_stage audit-reconstruction npm run audit:reconstruction-upstreams
+          run_stage audit-learned npm run audit:learned-assets
+          run_stage typecheck npm run typecheck
+          run_stage lint npm run lint
+          run_stage benchmark npm test -- src/audio/realReferenceReconstructionBenchmark.test.ts
+          run_stage aggregate npm test -- src/audio/realReferenceBenchmarkAggregate.test.ts src/audio/realReferenceAggregateEvidenceDocument.test.ts
+          run_stage full-test npm run test
+          run_stage build npm run build
+          exit 0
+
+      - name: Persist acceptance receipt
+        if: always()
+        shell: python
+        run: |
+          from pathlib import Path
+          import os
+          codes={}
+          p=Path('stages.txt')
+          if p.exists():
+            for line in p.read_text().splitlines():
+              if '=' not in line: continue
+              key,value=line.split('=',1)
+              try: codes[key]=int(value)
+              except ValueError: codes[key]=999
+          stages=['install','audit-virtual','audit-reconstruction','audit-learned','typecheck','lint','benchmark','aggregate','full-test','build']
+          ok=all(codes.get(stage)==0 for stage in stages)
+          rows=['| Stage | Exit |','| --- | ---: |']+[f'| {stage} | {codes.get(stage,"?")} |' for stage in stages]
+          failures=[]
+          if not ok:
+            for stage in stages:
+              if codes.get(stage)==0: continue
+              log=Path(f'{stage}.log')
+              body=log.read_text(errors='replace') if log.exists() else 'missing log'
+              failures += ['',f'## {stage} failure tail','','```text',body[-14000:],'```']
+          Path('docs/validation/real-reference-reproducible-listening.md').write_text('\n'.join([
+            '# Real-reference reproducible listening evidence acceptance','',
+            f"Source commit: `{os.environ['GITHUB_SHA']}`",'',
+            f"Software acceptance: **{'SUCCESS' if ok else 'FAILED'}**",'',
+            *rows,'',
+            '- current benchmark receipts retain the exact semantic DX7 winner for every successful retrieval, CMA and learned row',
+            '- each retained winner is bound to the recorded approach id, best distance and source-initialization string and is standard single-voice SysEx encodable',
+            '- packed/unpacked catalog provenance bytes and raw reference samples are excluded from receipts',
+            '- benchmark and evidence-set UIs expose the exact winners for local audition and single-voice SysEx export',
+            '- legacy receipts remain parseable, but final aggregate closure requires all retained receipts to carry complete exact-winner audition evidence',
+            '- this closes software reproducibility of listening evidence only; actual 2+2+2 recordings and human listening verdicts remain external evidence','',
+            *failures,''
+          ]),encoding='utf-8')
+          Path('.github/workflows/integrate-reproducible-benchmark-audition.yml').unlink(missing_ok=True)
+          for path in Path('.').glob('*.log'): path.unlink(missing_ok=True)
+          Path('stages.txt').unlink(missing_ok=True)
+
+      - name: Commit result
+        if: always()
+        shell: bash
+        run: |
+          status=$(grep -F 'Software acceptance:' docs/validation/real-reference-reproducible-listening.md | grep -oE 'SUCCESS|FAILED' | head -1)
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add -A
+          git commit -m "feat(audio): bind benchmark listening to exact winners ($status)" || true
+          git pull --rebase origin main
+          git push origin HEAD:main
