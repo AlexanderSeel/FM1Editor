@@ -1,0 +1,52 @@
+name: Fix synthetic reconstruction comparison metric typing
+
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/fix-synthetic-comparison-metrics.yml']
+
+permissions:
+  contents: write
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - name: Normalize metric breakdown to generic comparison record
+        shell: python
+        run: |
+          from pathlib import Path
+          p=Path('src/audio/reconstructionComparison.integration.test.ts');t=p.read_text(encoding='utf-8')
+          old="""        const evaluated = await objective.evaluate(candidate.voice, signal)\n        return { distance: evaluated.distance, metrics: evaluated.metrics }\n"""
+          new="""        const evaluated = await objective.evaluate(candidate.voice, signal)\n        const metrics: Readonly<Record<string, number>> = {\n          envelope: evaluated.metrics.envelope,\n          mel: evaluated.metrics.mel,\n          mfcc: evaluated.metrics.mfcc,\n          centroid: evaluated.metrics.centroid,\n          rolloff: evaluated.metrics.rolloff,\n          flatness: evaluated.metrics.flatness,\n          total: evaluated.metrics.total,\n        }\n        return { distance: evaluated.distance, metrics }\n"""
+          if old not in t and 'const metrics: Readonly<Record<string, number>>' not in t:raise SystemExit('comparison metric anchor missing')
+          t=t.replace(old,new,1);p.write_text(t,encoding='utf-8')
+      - run: npm install --no-audit --no-fund
+      - run: npm run audit:virtual-dx7
+      - run: npm run audit:reconstruction-upstreams
+      - run: npm run typecheck
+      - run: npm run lint
+      - name: Run packaged benchmark and persist JSON
+        env:
+          FM1_RECONSTRUCTION_COMPARISON_RESULT: docs/validation/synthetic-reconstruction-comparison.json
+        run: npm test -- src/audio/reconstructionComparison.integration.test.ts
+      - run: npm run test
+      - run: npm run build
+      - name: Persist green receipt
+        shell: python
+        run: |
+          import json,os
+          from pathlib import Path
+          data=json.loads(Path('docs/validation/synthetic-reconstruction-comparison.json').read_text(encoding='utf-8'));results={r['approachId']:r for r in data['results']};r=results['retrieval'];e=results['evolutionary'];l=results['learned-initialization'];delta=data['benchmark']['retrievalVsEvolutionaryDelta']
+          Path('docs/validation/synthetic-reconstruction-comparison.md').write_text('\n'.join(['# Packaged-engine synthetic reconstruction comparison','',f"Source commit: `{os.environ['GITHUB_SHA']}`",'','Overall benchmark gate: **SUCCESS**','','| Approach | Candidates | Best distance | Runtime ms | Source / failure |','| --- | ---: | ---: | ---: | --- |',f"| Retrieval only | {r['candidateCount']} | {r['bestDistance']:.8f} | {r['runtimeMs']:.3f} | {r.get('sourceInitialization') or '—'} |",f"| Seeded constrained CMA-ES | {e['candidateCount']} | {e['bestDistance']:.8f} | {e['runtimeMs']:.3f} | {e.get('sourceInitialization') or '—'} |",f"| Learned initialization | {l['candidateCount']} | — | {l['runtimeMs']:.3f} | {l.get('failure') or '—'} |",'',f"Retrieval minus evolutionary best-distance delta: `{delta:.8f}`. Positive means CMA-ES produced the lower fingerprint distance on this fixture.",'',f"Engine: `{data['benchmark']['engineId']}` / `{data['benchmark']['engineVersion']}` at 48 kHz using probe `{data['benchmark']['probe']['id']}`.",'','Scope remains one repository-owned synthetic ground-truth case. It is not a real isolated-sound benchmark. The learned row intentionally records the absence of a license-admitted implementation/checkpoint; therefore the broader comparison roadmap item remains open.','','Upstream audit, strict typecheck, lint, packaged benchmark, full tests and production build passed.','']),encoding='utf-8')
+          Path('.github/workflows/fix-synthetic-comparison-metrics.yml').unlink(missing_ok=True)
+      - name: Commit validated benchmark
+        shell: bash
+        run: |
+          git config user.name github-actions[bot];git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add -A;git commit -m 'test(audio): accept packaged synthetic reconstruction comparison';git pull --rebase origin main;git push origin HEAD:main
