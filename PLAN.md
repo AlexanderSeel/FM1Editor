@@ -1,6 +1,6 @@
-# FM1 Editor — roadmap and progress
+# FM1 Editor — unresolved roadmap
 
-Completed work stays visible as `[x]`. Open or blocked work remains `[ ]`. A task is only marked complete when the repository contains implementation plus appropriate validation evidence; physical-device claims remain unchecked until physical evidence exists.
+This file contains unresolved or blocked work only. Completed implementation and validation history lives in the linked research/validation documents and Git history. A task is removed only when the repository contains the required implementation plus appropriate validation evidence; physical-device tasks remain here until physical evidence exists.
 
 ## 1. FM-1 protocol verification
 
