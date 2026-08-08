@@ -9,6 +9,7 @@ import {
 import { Dx7HardwareEvidenceRecorder } from './Dx7HardwareEvidenceRecorder'
 import { Fm1DeliveryEvidenceGatePanel } from './Fm1DeliveryEvidenceGatePanel'
 import { HardwareEvidenceRecorder } from './HardwareEvidenceRecorder'
+import { PhysicalEvidencePackagePanel } from './PhysicalEvidencePackagePanel'
 
 interface MidiMonitorProps {
   entries: readonly MidiMonitorEntry[]
@@ -115,6 +116,7 @@ export function MidiMonitor({ entries, onClear }: MidiMonitorProps) {
         <HardwareEvidenceRecorder entries={entries} />
         <Dx7HardwareEvidenceRecorder entries={entries} />
         <Fm1DeliveryEvidenceGatePanel />
+        <PhysicalEvidencePackagePanel />
       </div>
     </details>
   )
