@@ -6,6 +6,7 @@ import { setPreparedReferenceAudio } from '../audio/preparedReferenceStore'
 import { NearestPresetPanel } from './NearestPresetPanel'
 import { ReconstructionAccelerationPanel } from './ReconstructionAccelerationPanel'
 import { ReconstructionBenchmarkPanel } from './ReconstructionBenchmarkPanel'
+import { ReconstructionBenchmarkSetPanel } from './ReconstructionBenchmarkSetPanel'
 import { ReferenceAudioInputPanel } from './ReferenceAudioInputPanel'
 
 interface AudioToFmReferencePanelProps {
@@ -49,6 +50,7 @@ export function AudioToFmReferencePanel({
         reference={reference}
       />
       <ReconstructionBenchmarkPanel reference={reference} />
+      <ReconstructionBenchmarkSetPanel />
       <ReconstructionAccelerationPanel onLoadVoice={onLoadVoice} reference={reference} />
     </div>
   )
