@@ -76,8 +76,10 @@ describe('hardware validation evidence', () => {
     expect(outstanding).toContain('bank-destination-prompt')
     expect(outstanding).toContain('dump-completion-signal')
     expect(outstanding).toContain('audio-saved-wav')
+    expect(outstanding).toContain('sequencer-protocol')
 
     checks['audio-saved-wav'] = { status: 'fail', notes: 'Recorded file was silent.' }
     expect(hardwareEvidenceOutstandingChecks(checks)).not.toContain('audio-saved-wav')
+    expect(hardwareEvidenceOutstandingChecks(checks)).toContain('sequencer-protocol')
   })
 })
