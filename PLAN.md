@@ -50,7 +50,7 @@ Execute sections C and D of [`docs/validation/fm1-hardware-test-protocol.md`](./
 Known limitations, current evidence and conservative recovery procedures are maintained in [`docs/validation/support-matrix-and-recovery.md`](./docs/validation/support-matrix-and-recovery.md).
 
 - [ ] Test Chrome and Edge on Windows with a physical FM-1 over USB MIDI and USB audio, including merged bank import, destination selection, preset recall, recording, note-off recovery and channel selection; test BLE MIDI where browser/platform support permits.
-- [ ] Add GitHub Pages deployment after secure-context routing and Web MIDI/Web Audio behavior are verified.
+- [ ] Enable GitHub Pages deployment only after the physical Chrome/Edge FM-1 secure-context test records Web MIDI/SysEx and USB/Web Audio behavior on the intended HTTPS deployment. Repository-subpath build/PWA/static routing for `/FM1Editor/` is implemented and validated in [`docs/validation/pages-subpath-readiness.md`](./docs/validation/pages-subpath-readiness.md); do not publish before the hardware/browser prerequisite is satisfied.
 
 ## 9. Audio-to-FM sound reconstruction
 
