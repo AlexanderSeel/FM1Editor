@@ -1,6 +1,6 @@
 # SpiegeLib MFCC preprocessing compatibility
 
-FM1 Editor source commit: `3e2886e50bb2707643ec45893a7eba613642e5a5`
+FM1 Editor source commit: `1381d840a626f58cc0ad272999f61fa8fb150b88`
 
 Compatibility status: **FAILED**
 
@@ -9,37 +9,28 @@ Compatibility status: **FAILED**
 | reference | 1 |
 | compare | 1 |
 
-- target reference: Python 3.7.7 + Librosa 0.7.2
+- oracle: Python 3.7.7 + Librosa 0.7.2; Numba JIT disabled only to avoid old cache initialization
 - settings: 44.1 kHz, 2048 FFT, 1024 hop, 13 MFCC, one-second input
 
-A SUCCESS means the independent TypeScript extractor numerically matches the historical Librosa reference fixture. A FAILED receipt does not admit the learned raw-audio preprocessing path.
+The historical container writes only its JSON oracle to stdout. A SUCCESS means the TypeScript extractor matches all 572 Librosa coefficients within the recorded tolerance.
+
 
 ## reference failure tail
 
 ```text
-sha256:911c3445a6b4c84298147b94eefe587fd4fe1a21e6a1556d9730559105b0b3e5
+sha256:0aec1bb092e0759c8ad02d76339b4dd4c85f7dfbe9ea962e5fd315e7567c8609
 Traceback (most recent call last):
-  File "/opt/generate.py", line 3, in <module>
-    import librosa, numpy as np, scipy
+  File "/opt/generate.py", line 2, in <module>
+    import librosa,numpy as np,scipy
   File "/usr/local/lib/python3.7/site-packages/librosa/__init__.py", line 12, in <module>
     from . import core
-  File "/usr/local/lib/python3.7/site-packages/librosa/core/__init__.py", line 125, in <module>
-    from .time_frequency import *  # pylint: disable=wildcard-import
-  File "/usr/local/lib/python3.7/site-packages/librosa/core/time_frequency.py", line 11, in <module>
-    from ..util.exceptions import ParameterError
-  File "/usr/local/lib/python3.7/site-packages/librosa/util/__init__.py", line 77, in <module>
-    from .utils import *  # pylint: disable=wildcard-import
-  File "/usr/local/lib/python3.7/site-packages/librosa/util/utils.py", line 1825, in <module>
-    def __shear_dense(X, factor=+1, axis=-1):
-  File "/usr/local/lib/python3.7/site-packages/numba/decorators.py", line 193, in wrapper
-    disp.enable_caching()
-  File "/usr/local/lib/python3.7/site-packages/numba/dispatcher.py", line 679, in enable_caching
-    self._cache = FunctionCache(self.py_func)
-  File "/usr/local/lib/python3.7/site-packages/numba/caching.py", line 614, in __init__
-    self._impl = self._impl_class(py_func)
-  File "/usr/local/lib/python3.7/site-packages/numba/caching.py", line 349, in __init__
-    "for file %r" % (qualname, source_path))
-RuntimeError: cannot cache function '__shear_dense': no locator available for file '/usr/local/lib/python3.7/site-packages/librosa/util/utils.py'
+  File "/usr/local/lib/python3.7/site-packages/librosa/core/__init__.py", line 126, in <module>
+    from .audio import *  # pylint: disable=wildcard-import
+  File "/usr/local/lib/python3.7/site-packages/librosa/core/audio.py", line 10, in <module>
+    import soundfile as sf
+  File "/usr/local/lib/python3.7/site-packages/soundfile.py", line 142, in <module>
+    raise OSError('sndfile library not found')
+OSError: sndfile library not found
 
 ```
 
