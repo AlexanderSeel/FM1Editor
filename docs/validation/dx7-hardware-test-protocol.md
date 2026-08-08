@@ -2,6 +2,17 @@
 
 This protocol defines the physical evidence required for the two unresolved DX7 target-mode items in `PLAN.md`. Software tests, virtual rendering and mocked MIDI are not physical passes.
 
+## In-app evidence helper
+
+Open **MIDI monitor → Stock DX7 hardware evidence session** during a physical test. The helper summarizes the current MIDI capture, records DX7-specific identity/configuration, requires a full recovery-bank SHA-256 before export, and starts every protocol result as `Pending`. It does not derive hardware PASS from outgoing frames.
+
+Export both artifacts when MIDI evidence is relevant:
+
+1. **Export JSON** from the MIDI monitor for authoritative raw bytes.
+2. **Export DX7 evidence manifest** for sanitized hardware/configuration metadata and explicit observations.
+
+The shared **Latest SysEx delta** view may help compare controlled captures, but changed offsets remain structural evidence only and do not prove a Yamaha parameter meaning.
+
 ## Test identity and safety
 
 Record before every session:
@@ -68,7 +79,8 @@ The app may exercise live Yamaha parameter changes only against a stock DX7 afte
 4. Verify the targeted parameter changes audibly or visibly and unrelated parameters remain unchanged.
 5. For edit-only parameter `155`, exercise each individual operator bit and at least one multi-operator mask. Verify the operator on/off state matches the six-bit mask and is not serialized into the 155-byte voice payload.
 6. Repeat representative writes after changing MIDI channel to prove channel guarding.
-7. Capture and document any value the stock DX7 ignores, clamps or handles differently from the app model.
+7. Exercise the app's opt-in throttled live-edit path after individual writes are proven; record whether rapid UI changes remain stable without dropped/stuck or unrelated state changes.
+8. Capture and document any value the stock DX7 ignores, clamps or handles differently from the app model.
 
 Do not promote a parameter to hardware-validated solely because the outgoing byte stream matches Yamaha documentation; the physical DX7 must demonstrate the expected state change.
 
@@ -104,6 +116,7 @@ Bank interruption testing is optional and must not be attempted until recovery f
 Keep unsanitized captures outside the repository until device paths, user names and serial details are reviewed. A commit-ready evidence package should contain:
 
 - this protocol with results filled in;
+- exported DX7 hardware evidence manifest;
 - MIDI monitor JSON exports for the relevant sessions;
 - source single-voice and 32-voice `.syx` files with SHA-256 values;
 - recovery-bank SHA-256 and sanitized recovery result;
