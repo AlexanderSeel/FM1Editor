@@ -6,7 +6,10 @@ import {
   summarizeHardwareMidiCapture,
   type HardwareEvidenceManifest,
 } from './hardwareEvidence'
-import { validatePhysicalEvidenceConsistency } from './physicalEvidenceConsistency'
+import {
+  serializePhysicalEvidenceConsistencyReport,
+  validatePhysicalEvidenceConsistency,
+} from './physicalEvidenceConsistency'
 
 const A = 'a'.repeat(64)
 const B = 'b'.repeat(64)
@@ -89,7 +92,29 @@ describe('physical evidence consistency', () => {
     expect(report.structurallyConsistent).toBe(true)
     expect(report.errorCount).toBe(0)
     expect(report.warningCount).toBe(0)
-    expect(report.links).toEqual([{ manifestName: 'fm1.json', target: 'fm1', matchedMidiMonitorName: 'capture.json', summaryMismatchFields: [] }])
+    expect(report.links).toEqual([{
+      manifestName: 'fm1.json',
+      manifestSha256: A,
+      target: 'fm1',
+      matchedMidiMonitorName: 'capture.json',
+      matchedMidiMonitorSha256: B,
+      summaryMismatchFields: [],
+    }])
+  })
+
+  it('serializes a compact hash-bound receipt without embedding raw MIDI bytes', () => {
+    const entries = [entry('raw-secret-id', 1000, 'out', 'FM-1 MIDI', [0xf0, 0x43, 0x12, 0x34, 0xf7])]
+    const report = validatePhysicalEvidenceConsistency([
+      artifact('fm1.json', A, fm1Manifest(entries)),
+      artifact('capture.json', B, monitor(entries)),
+    ], 'fm1')
+    const serialized = serializePhysicalEvidenceConsistencyReport(report)
+
+    expect(serialized).toContain(`"manifestSha256": "${A}"`)
+    expect(serialized).toContain(`"matchedMidiMonitorSha256": "${B}"`)
+    expect(serialized).not.toContain('raw-secret-id')
+    expect(serialized).not.toContain('18, 52')
+    expect(serialized.endsWith('\n')).toBe(true)
   })
 
   it('rejects a manifest paired with a different raw capture and identifies mismatch fields', () => {
@@ -106,6 +131,8 @@ describe('physical evidence consistency', () => {
     expect(report.structurallyConsistent).toBe(false)
     const mismatch = report.issues.find((issue) => issue.code === 'midi-summary-mismatch')
     expect(mismatch?.severity).toBe('error')
+    expect(report.links[0]?.manifestSha256).toBe(A)
+    expect(report.links[0]?.matchedMidiMonitorSha256).toBeNull()
     expect(report.links[0]?.summaryMismatchFields).toContain('messageCount')
     expect(report.links[0]?.summaryMismatchFields).toContain('lastTimestamp')
   })
