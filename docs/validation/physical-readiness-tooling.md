@@ -1,6 +1,6 @@
-# Physical validation readiness tooling
+# Physical validation and protocol-discovery tooling
 
-Source commit: `55a286bad078df45b5f0eb8d3efde47ad90fea2a`
+Source commit: `5590e093131b742456c7edbaefbe72027e4b4489`
 
 Software acceptance: **SUCCESS**
 
@@ -10,10 +10,11 @@ Software acceptance: **SUCCESS**
 | audit-research | 0 |
 | typecheck | 0 |
 | lint | 0 |
-| focused-test | 0 |
+| focused-midi | 0 |
+| focused-hardware | 0 |
 | full-test | 0 |
 | build | 0 |
 
-This exact repository state contains the FM-1-only MIDI-monitor hardware evidence session, raw MIDI JSON export, FM-1 physical protocol sections A–F including discovery-first sequencer validation, the stock Yamaha DX7 physical protocol, current PLAN links, and the synchronized support/recovery matrix.
+This exact repository state contains the FM-1-only hardware evidence recorder inside the MIDI monitor, raw MIDI JSON export, deterministic latest same-direction SysEx byte-delta analysis, FM-1 protocol sections A–F including discovery-first sequencer validation, the dedicated stock Yamaha DX7 physical protocol, current PLAN links, and the synchronized support/recovery matrix.
 
-The recorder recognizes outgoing standard Yamaha 4,104-byte bank and 163-byte single-voice frames as metadata only. No traffic pattern, test, build, responsive browser smoke or documentation result closes any hardware-dependent PLAN item; real FM-1/DX7 observations and captures are still required.
+The SysEx delta analyzer reports only structural evidence: lengths, common prefix/suffix and changed byte offsets/values. It does not assign device semantics. The hardware recorder recognizes outgoing standard Yamaha 4,104-byte bank and 163-byte single-voice frames as metadata only. Real FM-1/DX7 observations and captures remain required before any hardware-dependent PLAN item can close.
