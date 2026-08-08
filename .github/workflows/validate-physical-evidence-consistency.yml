@@ -1,0 +1,97 @@
+name: Validate physical evidence consistency helper
+
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/validate-physical-evidence-consistency.yml']
+
+permissions:
+  contents: write
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Run acceptance stages
+        shell: bash
+        run: |
+          set +e
+          : > stages.txt
+          run_stage() {
+            name="$1"
+            shift
+            "$@" > "$name.log" 2>&1
+            code=$?
+            cat "$name.log"
+            echo "$name=$code" >> stages.txt
+          }
+          run_stage install npm install --no-audit --no-fund
+          run_stage audit-virtual npm run audit:virtual-dx7
+          run_stage audit-research npm run audit:reconstruction-upstreams
+          run_stage typecheck npm run typecheck
+          run_stage lint npm run lint
+          run_stage consistency npm test -- src/validation/physicalEvidenceConsistency.test.ts
+          run_stage package npm test -- src/validation/physicalEvidencePackage.test.ts
+          run_stage full-test npm run test
+          run_stage build npm run build
+          exit 0
+
+      - name: Persist receipt
+        if: always()
+        shell: python
+        run: |
+          from pathlib import Path
+          import os
+          codes={}
+          p=Path('stages.txt')
+          if p.exists():
+            for line in p.read_text().splitlines():
+              if '=' in line:
+                k,v=line.split('=',1)
+                try: codes[k]=int(v)
+                except ValueError: codes[k]=999
+          stages=['install','audit-virtual','audit-research','typecheck','lint','consistency','package','full-test','build']
+          ok=all(codes.get(stage)==0 for stage in stages)
+          rows=['| Stage | Exit |','| --- | ---: |']+[f'| {stage} | {codes.get(stage,"?")} |' for stage in stages]
+          failures=[]
+          if not ok:
+            for stage in stages:
+              if codes.get(stage)==0: continue
+              log=Path(f'{stage}.log')
+              text=log.read_text(errors='replace') if log.exists() else 'missing log'
+              failures += ['',f'## {stage} failure tail','','```text',text[-12000:],'```']
+          Path('docs/validation/physical-evidence-consistency.md').write_text('\n'.join([
+            '# Physical evidence structural-consistency software acceptance','',
+            f"Source commit: `{os.environ['GITHUB_SHA']}`",'',
+            f"Software acceptance: **{'SUCCESS' if ok else 'FAILED'}**",'',
+            *rows,'',
+            '- FM-1 and stock-DX7 manifests are correlated to exactly one raw version-1 MIDI-monitor export by recomputing the embedded capture summary',
+            '- mismatched message/SysEx counts, length histograms, port names and first/last timestamps are reported with closest-capture diagnostics',
+            '- the exported correlation receipt binds each linked manifest and raw MIDI export by SHA-256 while excluding MIDI event payloads',
+            '- ambiguous duplicate raw captures, target/selected-port inconsistencies and invalid DX7 recovery hashes fail structural consistency',
+            '- missing editor/device identity is surfaced for review',
+            '- structural consistency does not evaluate physical PASS/FAIL observations, device behavior, audio content or PLAN closure','',
+            *failures,''
+          ]),encoding='utf-8')
+          Path('.github/workflows/validate-physical-evidence-consistency.yml').unlink(missing_ok=True)
+          for path in Path('.').glob('*.log'): path.unlink(missing_ok=True)
+          Path('stages.txt').unlink(missing_ok=True)
+
+      - name: Commit receipt
+        if: always()
+        shell: bash
+        run: |
+          status=$(grep -F 'Software acceptance:' docs/validation/physical-evidence-consistency.md | grep -oE 'SUCCESS|FAILED' | head -1)
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add -A
+          git commit -m "test(validation): record physical evidence consistency $status" || true
+          git pull --rebase origin main
+          git push origin HEAD:main
