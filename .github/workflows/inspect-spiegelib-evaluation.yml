@@ -1,0 +1,120 @@
+name: Inspect SpiegeLib evaluation archive
+
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/inspect-spiegelib-evaluation.yml']
+
+permissions:
+  contents: write
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Download and inspect pinned evaluation archive
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail --location --retry 3 --retry-all-errors \
+            https://zenodo.org/api/records/3722784/files/evaluation.zip/content \
+            --output evaluation.zip
+          echo '6a5a04f12738bacabad56b33b933adc3  evaluation.zip' | md5sum --check --strict
+          python - <<'PY'
+          from pathlib import Path
+          import hashlib
+          import json
+          import zipfile
+
+          archive = Path('evaluation.zip')
+          with zipfile.ZipFile(archive) as handle:
+              members = [name for name in handle.namelist() if not name.endswith('/')]
+              audio_targets = sorted(name for name in members if '/audio/' in name.lower() and name.lower().endswith('.wav'))
+              mlp_audio = sorted(name for name in members if '/mlp/' in name.lower() and name.lower().endswith('.wav'))
+              data_like = sorted(name for name in members if name.lower().endswith(('.json', '.npy', '.npz', '.csv', '.txt', '.pkl')))
+              parameter_like = sorted(name for name in members if any(token in name.lower() for token in ('param', 'patch', 'estimate', 'prediction', 'result')))
+
+              hashed = {}
+              for name in (audio_targets[:1] + mlp_audio[:1] + data_like[:20]):
+                  data = handle.read(name)
+                  hashed[name] = {
+                      'bytes': len(data),
+                      'sha256': hashlib.sha256(data).hexdigest(),
+                  }
+
+          result = {
+              'archive': 'evaluation.zip',
+              'archiveMd5': '6a5a04f12738bacabad56b33b933adc3',
+              'memberCount': len(members),
+              'audioTargetCount': len(audio_targets),
+              'mlpAudioCount': len(mlp_audio),
+              'firstTargets': audio_targets[:10],
+              'firstMlpAudio': mlp_audio[:10],
+              'dataLikeMembers': data_like[:200],
+              'parameterLikeMembers': parameter_like[:200],
+              'selectedHashes': hashed,
+          }
+          Path('evaluation-inspection.json').write_text(json.dumps(result, indent=2) + '\n', encoding='utf-8')
+          print(json.dumps(result, indent=2))
+          PY
+
+      - name: Persist evaluation inventory
+        shell: python
+        run: |
+          from pathlib import Path
+          import json
+          import os
+
+          result = json.loads(Path('evaluation-inspection.json').read_text(encoding='utf-8'))
+          lines = [
+              '# SpiegeLib archived evaluation-set inventory',
+              '',
+              f"FM1 Editor source commit: `{os.environ['GITHUB_SHA']}`",
+              '',
+              '- DOI: `10.5281/zenodo.3722784`',
+              '- archive: `evaluation.zip` — MD5 `6a5a04f12738bacabad56b33b933adc3`',
+              f"- file members: `{result['memberCount']}`",
+              f"- target WAV count: `{result['audioTargetCount']}`",
+              f"- MLP result WAV count: `{result['mlpAudioCount']}`",
+              '',
+              '## First target WAVs',
+              '',
+              *[f'- `{name}`' for name in result['firstTargets']],
+              '',
+              '## First MLP result WAVs',
+              '',
+              *[f'- `{name}`' for name in result['firstMlpAudio']],
+              '',
+              '## Data-like members',
+              '',
+              *([f'- `{name}`' for name in result['dataLikeMembers']] or ['- none']),
+              '',
+              '## Parameter/prediction-like members',
+              '',
+              *([f'- `{name}`' for name in result['parameterLikeMembers']] or ['- none']),
+              '',
+              '## Selected hashes',
+              '',
+              *[f"- `{name}` — {meta['bytes']} bytes — SHA-256 `{meta['sha256']}`" for name, meta in result['selectedHashes'].items()],
+              '',
+              'This inventory is used only to choose immutable archived reference material for learned-initializer compatibility testing. It does not treat rendered MLP audio as proof that FM1 Editor reproduces the original parameter predictions.',
+              '',
+          ]
+          Path('docs/research/spiegelib-evaluation-inventory.md').write_text('\n'.join(lines), encoding='utf-8')
+          Path('.github/workflows/inspect-spiegelib-evaluation.yml').unlink(missing_ok=True)
+          Path('evaluation.zip').unlink(missing_ok=True)
+          Path('evaluation-inspection.json').unlink(missing_ok=True)
+
+      - name: Commit evaluation inventory
+        shell: bash
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add -A
+          git commit -m 'docs(research): record SpiegeLib evaluation inventory' || true
+          git pull --rebase origin main
+          git push origin HEAD:main
