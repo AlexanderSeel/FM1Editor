@@ -8,16 +8,17 @@ Open **MIDI monitor → Hardware evidence session** during a physical session. T
 
 The MIDI monitor also shows a **Latest SysEx delta** after two same-direction SysEx captures exist. It reports message lengths, common prefix/suffix lengths and changed byte offsets/values. Use it only for controlled one-property-at-a-time comparisons; a changed offset is a candidate field, not proof of its semantic meaning.
 
-For delivery validation, **FM-1 delivery evidence gate** imports sanitized Chrome and Edge hardware manifests and checks the specific physical evidence needed by the delivery/Pages roadmap item. It requires matching FM-1 firmware, editor commit, Windows build and intended HTTPS origin, plus physical USB-audio, bank, note-off recovery and channel-selection evidence in both browsers. A READY result is an evidence-completeness result only; it does not enable deployment automatically or imply device readback, live-parameter, sequencer, BLE MIDI or virtual-synth validation.
+For delivery validation, **FM-1 delivery evidence gate v2** retains the validated v1 manifest-completeness checks and adds a hash-bound integrity requirement. The selected Chrome and Edge manifests must still share the same FM-1 firmware, editor commit, Windows build and intended HTTPS origin and must contain the required physical USB-audio, bank, note-off recovery and channel-selection observations. In addition, each exact manifest SHA-256 must be backed by one structurally consistent **Physical evidence package → Export correlation receipt** that uniquely links it to its raw MIDI-monitor export. Chrome and Edge must use distinct manifest hashes and distinct raw-MIDI capture hashes. A v2 READY result is still an evidence-completeness/integrity result only; it does not enable deployment automatically or imply device readback, live-parameter, sequencer, BLE MIDI or virtual-synth validation.
 
-Export both artifacts when MIDI evidence is relevant:
+Export the following artifacts whenever MIDI evidence is relevant:
 
 1. **Export JSON** from the MIDI monitor for the raw captured bytes.
 2. **Export evidence manifest** from the hardware evidence session for sanitized identity, measurements, result states and MIDI summary counts.
+3. Run **Physical evidence package** over the sanitized session files and export the **correlation receipt** after the manifest is uniquely linked to the raw MIDI export.
 
-After completing both browser sessions, import the sanitized manifests into **FM-1 delivery evidence gate** and export the compact gate receipt. The gate receipt stores validation results and source filenames but does not embed the imported manifests, raw SysEx or WAV data.
+For the Chrome/Edge delivery prerequisite, keep the manifest, raw MIDI export and correlation receipt from each browser session. Import both hardware manifests and both correlation receipts into **FM-1 delivery evidence gate v2** and export the compact v2 gate receipt. The receipt stores validation results, source filenames and SHA-256 bindings but does not embed imported manifest bodies, raw MIDI events, SysEx or WAV data. The historical v1 evaluator remains embedded as the manifest-completeness layer and cannot by itself make v2 READY.
 
-The manifest intentionally does not duplicate raw SysEx bytes or audio samples. Review tester names, device labels and free-text notes before committing sanitized evidence.
+The hardware manifest intentionally does not duplicate raw SysEx bytes or audio samples. Review tester names, device labels and free-text notes before retaining or committing sanitized evidence.
 
 ## Test identity
 
@@ -79,7 +80,7 @@ Run the following matrix in both browsers:
 
 For each case record browser, result, visible error/status text, whether MIDI remained usable and whether Windows still showed the endpoint in use after disconnect. Mark **Note-off/Panic recovery** and **MIDI channel selection** separately in the hardware evidence manifest; these checks are required by the delivery evidence gate.
 
-For the Pages/delivery prerequisite, create one complete sanitized manifest in branded Chrome and one in branded Microsoft Edge while running the same editor commit against the same FM-1 firmware and Windows build on the intended HTTPS origin. Each browser manifest must include a captured standard 4,104-byte merged-bank send plus sections A and C evidence. Import both manifests into **FM-1 delivery evidence gate**; do not treat a single-browser result or an origin/commit mismatch as delivery-ready.
+For the Pages/delivery prerequisite, create one complete sanitized manifest in branded Chrome and one in branded Microsoft Edge while running the same editor commit against the same FM-1 firmware and Windows build on the intended HTTPS origin. Each browser manifest must include a captured standard 4,104-byte merged-bank send plus sections A and C evidence. For each browser session export the raw MIDI monitor JSON without changing/clearing the captured session first, then use **Physical evidence package** to create a structurally consistent correlation receipt that binds the exact hardware-manifest SHA-256 to that raw MIDI export SHA-256. Import both manifests and both correlation receipts into **FM-1 delivery evidence gate v2**. Do not treat a single-browser result, origin/commit mismatch, missing correlation receipt, reused raw capture or ambiguous hash binding as delivery-ready.
 
 ## C. FM-1 merged 32-voice bank import
 
@@ -166,10 +167,13 @@ Store each completed session under a dated folder outside the application reposi
 - this protocol with results filled in;
 - exported hardware evidence manifest;
 - MIDI monitor JSON export;
+- exported hash-bound physical-evidence correlation receipt for the manifest/raw-MIDI pair;
 - original and merged `.syx` files with SHA-256 values;
 - saved WAV samples;
 - sequencer capture pairs where exactly one pattern property changed;
-- exported delivery evidence gate receipt when validating Chrome/Edge delivery readiness;
+- exported **v2** delivery evidence gate receipt when validating Chrome/Edge delivery readiness;
 - screenshots or a short screen-state timeline;
 - exact failure/recovery notes;
 - a proposed `PLAN.md` item to close, linked to the evidence.
+
+For a Chrome/Edge delivery proposal, retain both browser manifests, both distinct raw MIDI exports, both correlation receipts and the final v2 gate receipt. A v1 manifest-completeness result, package index or correlation receipt alone is not sufficient to close delivery/Pages readiness.
