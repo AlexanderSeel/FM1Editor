@@ -1,0 +1,93 @@
+name: Validate hashed real-reference evidence document
+
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/validate-real-reference-evidence-document.yml']
+
+permissions:
+  contents: write
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Run acceptance stages
+        shell: bash
+        run: |
+          set +e
+          : > stages.txt
+          run_stage() {
+            name="$1"
+            shift
+            "$@" > "$name.log" 2>&1
+            code=$?
+            cat "$name.log"
+            echo "$name=$code" >> stages.txt
+          }
+          run_stage install npm install --no-audit --no-fund
+          run_stage typecheck npm run typecheck
+          run_stage lint npm run lint
+          run_stage evidence-document npm test -- src/audio/realReferenceAggregateEvidenceDocument.test.ts
+          run_stage aggregate npm test -- src/audio/realReferenceBenchmarkAggregate.test.ts
+          run_stage full-test npm run test
+          run_stage build npm run build
+          exit 0
+
+      - name: Persist receipt
+        if: always()
+        shell: python
+        run: |
+          from pathlib import Path
+          import os
+          codes={}
+          p=Path('stages.txt')
+          if p.exists():
+            for line in p.read_text().splitlines():
+              if '=' in line:
+                k,v=line.split('=',1)
+                try: codes[k]=int(v)
+                except ValueError: codes[k]=999
+          stages=['install','typecheck','lint','evidence-document','aggregate','full-test','build']
+          ok=all(codes.get(stage)==0 for stage in stages)
+          rows=['| Stage | Exit |','| --- | ---: |']+[f'| {stage} | {codes.get(stage,"?")} |' for stage in stages]
+          failures=[]
+          if not ok:
+            for stage in stages:
+              if codes.get(stage)==0: continue
+              log=Path(f'{stage}.log')
+              text=log.read_text(errors='replace') if log.exists() else 'missing log'
+              failures += ['',f'## {stage} failure tail','','```text',text[-12000:],'```']
+          Path('docs/validation/real-reference-evidence-document.md').write_text('\n'.join([
+            '# Real-reference hashed evidence-document software acceptance','',
+            f"Source commit: `{os.environ['GITHUB_SHA']}`",'',
+            f"Software acceptance: **{'SUCCESS' if ok else 'FAILED'}**",'',
+            *rows,'',
+            '- aggregate JSON and SHA-256 use one shared serialization function, so the Markdown hash identifies the exact exported JSON bytes',
+            '- closure Markdown generation fails closed unless current three-way 2+2+2 readiness is true',
+            '- Markdown includes three-way distance/runtime summaries, structured listening distributions and retained receipt SHA-256 identities',
+            '- no raw reference samples are introduced into the aggregate or Markdown evidence','',
+            *failures,''
+          ]),encoding='utf-8')
+          Path('.github/workflows/validate-real-reference-evidence-document.yml').unlink(missing_ok=True)
+          for path in Path('.').glob('*.log'): path.unlink(missing_ok=True)
+          Path('stages.txt').unlink(missing_ok=True)
+
+      - name: Commit receipt
+        if: always()
+        shell: bash
+        run: |
+          status=$(grep -F 'Software acceptance:' docs/validation/real-reference-evidence-document.md | grep -oE 'SUCCESS|FAILED' | head -1)
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add -A
+          git commit -m "test(audio): record hashed evidence document $status" || true
+          git pull --rebase origin main
+          git push origin HEAD:main
