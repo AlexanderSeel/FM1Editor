@@ -5,6 +5,7 @@ import {
   type PhysicalEvidenceArtifactInput,
   type PhysicalEvidenceTarget,
 } from '../validation/physicalEvidencePackage'
+import { validatePhysicalEvidenceConsistency } from '../validation/physicalEvidenceConsistency'
 
 const JSON_INSPECTION_LIMIT_BYTES = 16 * 1024 * 1024
 
@@ -58,6 +59,7 @@ export function PhysicalEvidencePackagePanel() {
   const [error, setError] = useState<string | null>(null)
 
   const manifest = useMemo(() => createPhysicalEvidencePackageManifest(artifacts, { target }), [artifacts, target])
+  const consistency = useMemo(() => validatePhysicalEvidenceConsistency(artifacts, target), [artifacts, target])
 
   const importFiles = async (files: FileList | null) => {
     if (!files || files.length === 0) return
@@ -132,6 +134,37 @@ export function PhysicalEvidencePackagePanel() {
           </div>
         )}
 
+        {manifest.artifactCount > 0 && (
+          <div className={`rounded-lg border p-2 ${consistency.structurallyConsistent ? 'border-emerald-300/20 bg-emerald-300/[0.03]' : 'border-rose-300/20 bg-rose-300/[0.03]'}`}>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <p className={`text-[10px] font-bold uppercase tracking-[0.12em] ${consistency.structurallyConsistent ? 'text-emerald-200' : 'text-rose-200'}`}>
+                MIDI evidence correlation · {consistency.structurallyConsistent ? 'STRUCTURALLY CONSISTENT' : 'REVIEW REQUIRED'}
+              </p>
+              <span className="text-[9px] text-slate-500">{consistency.hardwareManifestCount} manifests · {consistency.midiMonitorCount} raw MIDI exports</span>
+            </div>
+            {consistency.links.length > 0 && (
+              <div className="mt-2 grid gap-1">
+                {consistency.links.map((link) => (
+                  <p className="text-[9px] leading-4 text-slate-400" key={`${link.target}-${link.manifestName}`}>
+                    <span className="font-semibold text-slate-300">{link.manifestName}</span> → {link.matchedMidiMonitorName ?? 'no unique raw capture'}
+                    {link.summaryMismatchFields.length > 0 ? ` · differs: ${link.summaryMismatchFields.join(', ')}` : ''}
+                  </p>
+                ))}
+              </div>
+            )}
+            {consistency.issues.length > 0 && (
+              <ul className="mt-2 grid gap-1 pl-4 text-[9px] leading-4 text-slate-400">
+                {consistency.issues.map((issue, index) => (
+                  <li className={`list-disc ${issue.severity === 'error' ? 'text-rose-200' : 'text-amber-200'}`} key={`${issue.code}-${index}`}>
+                    {issue.message}
+                  </li>
+                ))}
+              </ul>
+            )}
+            <p className="mt-2 text-[9px] leading-4 text-slate-500">Structural consistency only: matching raw MIDI summary metadata can catch mixed-up files, but it cannot validate tester observations, device-screen behavior, audio content or a PLAN item.</p>
+          </div>
+        )}
+
         {manifest.warnings.length > 0 && (
           <div className="rounded-lg border border-amber-300/15 bg-amber-300/[0.03] p-2">
             <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-amber-200">Package review</p>
@@ -159,7 +192,7 @@ export function PhysicalEvidencePackagePanel() {
             Clear package
           </button>
         </div>
-        <p className="text-[10px] leading-4 text-slate-500">Warnings describe package coverage only. A complete-looking file set is not proof that any physical check passed; the target-specific evidence manifests and protocols remain authoritative.</p>
+        <p className="text-[10px] leading-4 text-slate-500">Warnings describe package coverage only. A complete-looking or structurally consistent file set is not proof that any physical check passed; the target-specific evidence manifests and protocols remain authoritative.</p>
       </div>
     </details>
   )
