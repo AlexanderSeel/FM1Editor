@@ -86,7 +86,7 @@ export function runSpiegelibSimpleFmMlp(
     throw new Error(`SpiegeLib MLP input must contain exactly ${model.inputSize} standardized MFCC values.`)
   }
 
-  let current = new Float32Array(model.inputSize)
+  let current: Float32Array = new Float32Array(model.inputSize)
   for (let index = 0; index < model.inputSize; index += 1) {
     const value = standardizedFeatures[index]
     if (value === undefined || !Number.isFinite(value)) throw new Error(`SpiegeLib MLP input[${index}] must be finite.`)
