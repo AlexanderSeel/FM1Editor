@@ -1,0 +1,80 @@
+name: Sync delivery v3 evidence docs
+
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/sync-delivery-v3-docs.yml']
+
+permissions:
+  contents: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Update physical evidence instructions
+        shell: python
+        run: |
+          from pathlib import Path
+
+          protocol=Path('docs/validation/fm1-hardware-test-protocol.md')
+          p=protocol.read_text(encoding='utf-8')
+          replacements={
+            '**FM-1 delivery evidence gate v2** retains the validated v1 manifest-completeness checks and adds a hash-bound integrity requirement. The selected Chrome and Edge manifests must still share the same FM-1 firmware, editor commit, Windows build and intended HTTPS origin and must contain the required physical USB-audio, bank, note-off recovery and channel-selection observations. In addition, each exact manifest SHA-256 must be backed by one structurally consistent **Physical evidence package → Export correlation receipt** that uniquely links it to its raw MIDI-monitor export. Chrome and Edge must use distinct manifest hashes and distinct raw-MIDI capture hashes. A v2 READY result is still an evidence-completeness/integrity result only; it does not enable deployment automatically or imply device readback, live-parameter, sequencer, BLE MIDI or virtual-synth validation.':
+            '**FM-1 delivery evidence gate v3** retains the validated v1 manifest-completeness checks and v2 manifest/raw-MIDI hash binding, then adds package-level evidence coverage. The selected Chrome and Edge manifests must share the same FM-1 firmware, editor commit, Windows build and intended HTTPS origin and contain the required physical USB-audio, bank, note-off recovery and channel-selection observations. Each exact manifest SHA-256 must be backed by one structurally consistent correlation receipt that uniquely links it to its raw MIDI-monitor export. Finally, each browser session must have one FM-1 physical-evidence package index containing that exact manifest/raw-MIDI pair plus at least one WAV, one SysEx artifact and screenshot-or-notes evidence. Chrome and Edge must use distinct manifest, raw-MIDI, package-index and WAV hashes; the controlled merged-bank SysEx may be shared. A v3 READY result remains evidence-completeness/integrity only; it does not enable deployment automatically or imply device readback, live-parameter, sequencer, BLE MIDI or virtual-synth validation.',
+            '3. Run **Physical evidence package** over the sanitized session files and export the **correlation receipt** after the manifest is uniquely linked to the raw MIDI export.':
+            '3. Run **Physical evidence package** over the sanitized session files and export both the **package index** and **correlation receipt** after the manifest is uniquely linked to the raw MIDI export. Include the session WAV, relevant `.syx` and screenshot-or-notes evidence in that same package index.',
+            'For the Chrome/Edge delivery prerequisite, keep the manifest, raw MIDI export and correlation receipt from each browser session. Import both hardware manifests and both correlation receipts into **FM-1 delivery evidence gate v2** and export the compact v2 gate receipt. The receipt stores validation results, source filenames and SHA-256 bindings but does not embed imported manifest bodies, raw MIDI events, SysEx or WAV data. The historical v1 evaluator remains embedded as the manifest-completeness layer and cannot by itself make v2 READY.':
+            'For the Chrome/Edge delivery prerequisite, keep the manifest, raw MIDI export, correlation receipt and physical-evidence package index from each browser session. Import both complete session sets into **FM-1 delivery evidence gate v3** and export the compact v3 gate receipt. The receipt stores validation results, source filenames and SHA-256 artifact bindings but does not embed imported manifest bodies, raw MIDI events, SysEx bytes or WAV content. The v1 manifest evaluator and v2 raw-MIDI binding remain embedded prerequisites and cannot by themselves make v3 READY.',
+            'Import both manifests and both correlation receipts into **FM-1 delivery evidence gate v2**. Do not treat a single-browser result, origin/commit mismatch, missing correlation receipt, reused raw capture or ambiguous hash binding as delivery-ready.':
+            'Import both manifests, both correlation receipts and both package indexes into **FM-1 delivery evidence gate v3**. Do not treat a single-browser result, origin/commit mismatch, missing correlation/package, reused raw capture or WAV, incomplete package coverage or ambiguous hash binding as delivery-ready.',
+            '- exported **v2** delivery evidence gate receipt when validating Chrome/Edge delivery readiness;':
+            '- exported **v3** delivery evidence gate receipt when validating Chrome/Edge delivery readiness;',
+            'For a Chrome/Edge delivery proposal, retain both browser manifests, both distinct raw MIDI exports, both correlation receipts and the final v2 gate receipt. A v1 manifest-completeness result, package index or correlation receipt alone is not sufficient to close delivery/Pages readiness.':
+            'For a Chrome/Edge delivery proposal, retain both browser manifests, both distinct raw MIDI exports, both correlation receipts, both distinct physical-evidence package indexes with distinct WAV recordings, and the final v3 gate receipt. A v1/v2 result, package index or correlation receipt alone is not sufficient to close delivery/Pages readiness.'
+          }
+          for old,new in replacements.items():
+            if old not in p: raise SystemExit(f'protocol anchor missing: {old[:90]}')
+            p=p.replace(old,new,1)
+          protocol.write_text(p,encoding='utf-8')
+
+          pkg=Path('docs/validation/physical-evidence-package.md')
+          q=pkg.read_text(encoding='utf-8')
+          replacements={
+            '- `fm1-editor.fm1-delivery-evidence-gate.v2` as the final hash-bound FM-1 delivery-gate receipt;':
+            '- `fm1-editor.fm1-delivery-evidence-gate.v2` as the manifest/raw-MIDI hash-bound intermediate gate receipt;\n- `fm1-editor.fm1-delivery-evidence-gate.v3` as the final package-bound FM-1 delivery-gate receipt;',
+            '## FM-1 delivery gate v2 linkage': '## FM-1 delivery gate v2/v3 linkage',
+            'For Chrome/Edge delivery validation, create a separate correlation receipt for each physical browser session from the exact hardware manifest and raw MIDI export produced by that session. Then import both manifests and their correlation receipts into **FM-1 delivery evidence gate v2**.':
+            'For Chrome/Edge delivery validation, create a separate correlation receipt and physical-evidence package index for each browser session. The package index must contain the exact hardware manifest and raw MIDI export produced by that session plus its WAV, relevant SysEx and screenshot-or-notes evidence. The v2 layer consumes manifests/correlations; the final v3 layer also consumes both package indexes.',
+            'The v2 receipt records the source/hash bindings but not the imported manifest bodies or MIDI payloads. This closes file/session ambiguity only; the physical observations in the manifests remain tester evidence governed by the hardware protocol.':
+            'The v2 receipt records the manifest/raw-MIDI source/hash bindings but not imported bodies or MIDI payloads. The final v3 gate additionally requires one `fm1-editor.physical-evidence-package.v1` index per selected browser session containing the exact manifest SHA-256 and raw-MIDI SHA-256 already selected by v2, at least one WAV, at least one SysEx artifact and screenshot-or-notes evidence. Chrome and Edge package-index hashes and WAV hashes must be distinct; the same controlled merged-bank SysEx input may be present in both packages. v3 stores artifact identities/coverage metadata only and does not embed WAV, SysEx or MIDI payloads. These layers close evidence ambiguity only; physical observations remain tester evidence governed by the hardware protocol.',
+            '8. For FM-1 Chrome/Edge delivery, repeat this for both browser sessions and then export the final **v2 delivery gate receipt** from both manifests plus both correlation receipts.':
+            '8. For FM-1 Chrome/Edge delivery, repeat this for both browser sessions and then export the final **v3 delivery gate receipt** from both manifests, both correlation receipts and both package indexes.',
+            '9. When proposing a `PLAN.md` item for closure, cite the package index and correlation-receipt hashes together with the target manifest/protocol result; for delivery/Pages also cite the v2 gate receipt. These integrity artifacts are not substitutes for the physical observations.':
+            '9. When proposing a `PLAN.md` item for closure, cite the package index and correlation-receipt hashes together with the target manifest/protocol result; for delivery/Pages also cite the v3 gate receipt. These integrity artifacts are not substitutes for the physical observations.'
+          }
+          for old,new in replacements.items():
+            if old not in q: raise SystemExit(f'package-doc anchor missing: {old[:90]}')
+            q=q.replace(old,new,1)
+          pkg.write_text(q,encoding='utf-8')
+
+      - name: Verify current guidance
+        shell: bash
+        run: |
+          grep -F 'FM-1 delivery evidence gate v3' docs/validation/fm1-hardware-test-protocol.md
+          grep -F 'final v3 gate' docs/validation/physical-evidence-package.md
+          grep -F 'fm1-editor.fm1-delivery-evidence-gate.v3' docs/validation/physical-evidence-package.md
+          ! grep -F 'final v2 gate receipt' docs/validation/fm1-hardware-test-protocol.md
+      - name: Commit synced docs
+        shell: bash
+        run: |
+          rm .github/workflows/sync-delivery-v3-docs.yml
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add -A
+          git commit -m 'docs(validation): sync delivery v3 evidence workflow'
+          git pull --rebase origin main
+          git push origin HEAD:main
