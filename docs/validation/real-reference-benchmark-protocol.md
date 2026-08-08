@@ -86,15 +86,29 @@ The panel may report **Current three-way mixed evidence set complete** only when
 
 Legacy blocked learned receipts remain parseable and can be inspected, but `currentThreeWayComplete` is false while any such receipt remains in the retained aggregate.
 
+## Closure artifact export
+
+When the aggregate is closure-ready, export both artifacts from the evidence panel:
+
+1. **Export aggregate JSON** — the machine-readable aggregate used as the evidence source of truth;
+2. **Export closure Markdown + SHA-256** — a repository-ready summary containing the SHA-256 of the exact UTF-8 JSON serialization exported by the panel.
+
+Both exports use the same aggregate serialization function. The SHA-256 in the Markdown therefore identifies the exact aggregate JSON bytes, including the trailing newline; do not reformat the JSON before verifying or committing the pair.
+
+The generated Markdown contains:
+
+- aggregate schema, creation time, receipt count and aggregate JSON SHA-256;
+- 2+2+2/current-three-way closure state;
+- distance and runtime median/range for all three approaches;
+- CMA metric/listening summary;
+- structured learned listening distribution;
+- every retained reference filename/SHA/class/metrics/listening verdict and optional note;
+- the interpretation/privacy boundary.
+
+The Markdown exporter fails closed while `readyForAggregateEvidence` is false, so a historical or incomplete set cannot be accidentally emitted as final closure evidence.
+
 ## Closing the PLAN item
 
-Create a short aggregate validation document that lists every retained receipt and reports:
+Commit the unmodified exported aggregate JSON and its generated closure Markdown together. The Markdown is the short aggregate validation document; its embedded hash binds it to the JSON evidence.
 
-- median and range of retrieval, evolutionary and learned distances;
-- median and range of retrieval, evolutionary and learned runtimes;
-- how often constrained CMA-ES improved the retrieval start;
-- cases where the metric improved but retrieval/CMA listening quality did not;
-- learned listening distribution and cases where learned numerical distance disagrees with the perceptual verdict;
-- clear failure classes and known six-operator-FM / fixed-base learned-model limitations.
-
-The roadmap item can be closed when the current three-way mixed real-reference set has been run, both structured listening assessments are complete, the aggregate reports closure ready, and the aggregate hash/summary evidence is committed. Exact reconstruction and learned-model superiority are not acceptance criteria.
+The roadmap item can be closed when the current three-way mixed real-reference set has been run, both structured listening assessments are complete, the aggregate reports closure ready, and the generated JSON/Markdown hash evidence is committed. Exact reconstruction and learned-model superiority are not acceptance criteria.
