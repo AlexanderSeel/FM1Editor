@@ -1,20 +1,23 @@
-# Current software and browser validation
+# Current same-source software and responsive browser gate
 
-Validated source commit: `ffb582b5245d5de6cffbeaf3cceac212dce04f1a`
+Source commit: `1f7cf0bf805def731ebdc507ed23bb46671a2276`
 
-- Ubuntu software job: **SUCCESS**
-- Windows Chrome/Edge job: **FAILURE**
-- Overall gate: **FAILED**
+Overall gate: **FAILED**
 
-The software job runs dependency installation, TypeScript typecheck, ESLint and JSX accessibility, the full Vitest suite, and the production build.
+| Software stage | Exit |
+| --- | ---: |
+| auditVirtual | 0 |
+| auditResearch | 0 |
+| typecheck | 0 |
+| lint | 0 |
+| tests | 0 |
+| build | 0 |
 
-Browser coverage includes:
+| Browser | Target | Product | Desktop | Narrow | Mobile touch | MIDI requests | Result |
+| --- | --- | --- | --- | --- | --- | ---: | --- |
+| chrome | FM1 | FAILED | — | — | — | — | Timed out waiting for document.body?.textContent?.includes('FM1 Editor') |
+| chrome | DX7 | FAILED | — | — | — | — | Timed out waiting for document.body?.textContent?.includes('FM1 Editor') |
+| edge | FM1 | FAILED | — | — | — | — | Timed out waiting for document.body?.textContent?.includes('FM1 Editor') |
+| edge | DX7 | FAILED | — | — | — | — | Timed out waiting for document.body?.textContent?.includes('FM1 Editor') |
 
-- FM-1 wide desktop, compact desktop, tablet and mobile layouts;
-- 340–410 px desktop sidebar width, vertical-only scrolling and long-label containment;
-- FM-1 bank controls and 25-key virtual piano bounds;
-- Yamaha DX7 guarded voice parameters `0–155` and function parameters `64–77`;
-- exactly one voice/function panel, locked without output, SysEx and hardware confirmations;
-- DX7 operator-mask controls and 25-key virtual piano bounds.
-
-No physical FM-1 or Yamaha DX7 hardware behavior was validated by this workflow.
+All software checks and branded-browser matrices are executed from the same checkout/build. The responsive matrix covers desktop 1440×900, desktop-narrow 1024×768 and mobile-touch 390×844 for both FM-1 and DX7 target modes in Chrome and Edge. It validates application layout/navigation/error containment only; it does not validate physical MIDI/audio hardware.
