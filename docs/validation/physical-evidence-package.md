@@ -45,7 +45,8 @@ The helper recognizes:
 
 - `fm1-editor.hardware-validation-evidence.v1` as an FM-1 hardware manifest;
 - `fm1-editor.dx7-hardware-validation-evidence.v1` as a stock-DX7 hardware manifest;
-- `fm1-editor.fm1-delivery-evidence-gate.v1` as an FM-1 delivery-gate receipt;
+- `fm1-editor.fm1-delivery-evidence-gate.v1` as the historical FM-1 manifest-completeness gate receipt;
+- `fm1-editor.fm1-delivery-evidence-gate.v2` as the final hash-bound FM-1 delivery-gate receipt;
 - version-1 MIDI-monitor JSON exports;
 - `.syx`, WAV, common screenshot image formats and text/CSV/Markdown notes.
 
@@ -77,6 +78,19 @@ The **Export correlation receipt** action persists this result and binds each su
 
 This is **structural correlation only**. Matching summaries are evidence that the selected files came from the same captured message set; they do not prove what the hardware did, that the device accepted a message, that audio is correct, or that a tester-entered PASS is valid.
 
+## FM-1 delivery gate v2 linkage
+
+For Chrome/Edge delivery validation, create a separate correlation receipt for each physical browser session from the exact hardware manifest and raw MIDI export produced by that session. Then import both manifests and their correlation receipts into **FM-1 delivery evidence gate v2**.
+
+The v2 gate hashes those imported JSON files again and accepts final READY only when:
+
+- the embedded v1 manifest-completeness evaluator accepts a matching Chrome/Edge firmware/editor/Windows/HTTPS tuple;
+- the selected Chrome manifest SHA-256 appears in exactly one structurally consistent FM-1 correlation link with a raw-MIDI SHA-256;
+- the selected Edge manifest SHA-256 appears in exactly one structurally consistent FM-1 correlation link with a raw-MIDI SHA-256;
+- Chrome and Edge use distinct manifest hashes and distinct raw-MIDI capture hashes.
+
+The v2 receipt records the source/hash bindings but not the imported manifest bodies or MIDI payloads. This closes file/session ambiguity only; the physical observations in the manifests remain tester evidence governed by the hardware protocol.
+
 ## Package warnings
 
 Warnings are coverage hints, not physical failures. Depending on the selected target, the helper warns when the package lacks:
@@ -100,7 +114,8 @@ A package may legitimately retain warnings or correlation errors when it covers 
 5. Run **Physical evidence package** over that exact sanitized file set and review both package-coverage warnings and the raw-MIDI correlation result.
 6. Resolve accidental mixed-session/ambiguous raw-capture errors before proposing closure. Do not alter legitimate failed observations merely to make the package look green.
 7. Export **both** the package index and the correlation receipt from the same selected file set. Retain the raw sanitized files with those receipts externally, or commit only the artifacts appropriate for the repository.
-8. When proposing a `PLAN.md` item for closure, cite the package index and correlation-receipt hashes together with the target manifest/protocol result. The package index and correlation result are not substitutes for those results.
+8. For FM-1 Chrome/Edge delivery, repeat this for both browser sessions and then export the final **v2 delivery gate receipt** from both manifests plus both correlation receipts.
+9. When proposing a `PLAN.md` item for closure, cite the package index and correlation-receipt hashes together with the target manifest/protocol result; for delivery/Pages also cite the v2 gate receipt. These integrity artifacts are not substitutes for the physical observations.
 
 ## Security and evidence boundary
 
