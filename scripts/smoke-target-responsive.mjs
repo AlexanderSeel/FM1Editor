@@ -126,7 +126,7 @@ try {
     Object.defineProperty(navigator,'requestMIDIAccess',{configurable:true,value:async()=>{window.__targetSmokeMidiRequests+=1;return {inputs:new Map(),outputs:new Map(),sysexEnabled:true,onstatechange:null};}});
   ` })
   await cdp.send('Page.navigate', { url: server.url })
-  await waitFor(cdp, `document.body?.textContent?.includes('FM1 Editor')`, 20_000)
+  await waitFor(cdp, `document.querySelector('.fm1-app') && document.querySelector('nav[aria-label="Workspace navigation"]')`, 20_000)
 
   const selected = await evaluate(cdp, `(() => {
     const label=${JSON.stringify(target.label)};
