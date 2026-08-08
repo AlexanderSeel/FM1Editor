@@ -155,6 +155,17 @@ if (sourceRoot) {
   }
 }
 
+const applicationLoaderPath = resolve(repoRoot, 'src/audio/msfaOfflineEngine.ts')
+check(existsSync(applicationLoaderPath), 'MSFA application loader is missing')
+if (existsSync(applicationLoaderPath)) {
+  const applicationLoader = readFileSync(applicationLoaderPath, 'utf8')
+  check(applicationLoader.includes("fetch(url, { cache: 'no-cache' })"), 'MSFA public module must be fetched as a static public asset')
+  check(applicationLoader.includes("new Blob([source], { type: 'text/javascript' })"), 'MSFA public module must be evaluated from a blob URL rather than imported through Vite')
+  check(applicationLoader.includes('locateFile: (path) => assetSiblingUrl(moduleUrl, path)'), 'MSFA blob loader must resolve WASM beside the original public module URL')
+  check(!applicationLoader.includes('import(/* @vite-ignore */ moduleUrl)'), 'MSFA public module must not be dynamically imported from its public URL')
+  check(!applicationLoader.includes('?import'), 'MSFA application loader must not depend on Vite ?import semantics for public artifacts')
+}
+
 if (notes.length > 0) {
   console.log('Computed source hashes (record these before vendoring):')
   for (const note of notes) console.log(`  ${note}`)
