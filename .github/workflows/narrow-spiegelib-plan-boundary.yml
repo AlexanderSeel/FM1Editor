@@ -1,0 +1,48 @@
+name: Narrow unresolved SpiegeLib PLAN boundary
+
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/narrow-spiegelib-plan-boundary.yml']
+
+permissions:
+  contents: write
+
+jobs:
+  narrow:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Narrow only if learned admission is still unresolved
+        shell: python
+        run: |
+          from pathlib import Path
+          path=Path('PLAN.md')
+          text=path.read_text(encoding='utf-8')
+          lines=text.splitlines()
+          replacement='- [ ] Complete the independent Python 3.7.7 + Librosa 0.7.2 numerical MFCC admission for the implemented SpiegeLib simple-FM learned candidate before enabling the benchmark row. Model/scaler provenance, browser-safe tensors, exact historical nine-output order, standards-valid nine-OP2-controls + fixed-base semantic mapping and the local candidate software gate are complete; keep the 572-value compatibility tolerance strict.'
+          changed=False
+          out=[]
+          for line in lines:
+              if line.lstrip().startswith('- [ ]') and 'SpiegeLib' in line and ('Reproduce and pin' in line or 'pre-trained model' in line):
+                  out.append(replacement)
+                  changed=True
+              else:
+                  out.append(line)
+          path.write_text('\n'.join(out)+'\n',encoding='utf-8')
+          Path('plan-narrow-status.txt').write_text(('CHANGED' if changed else 'ALREADY_COMPLETE_OR_NARROW')+'\n')
+          Path('.github/workflows/narrow-spiegelib-plan-boundary.yml').unlink(missing_ok=True)
+      - name: Commit roadmap boundary cleanup
+        shell: bash
+        run: |
+          status=$(cat plan-narrow-status.txt)
+          rm -f plan-narrow-status.txt
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add -A
+          git commit -m "docs(plan): narrow SpiegeLib learned boundary ($status)" || true
+          git pull --rebase origin main
+          git push origin HEAD:main
