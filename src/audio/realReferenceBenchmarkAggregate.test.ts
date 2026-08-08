@@ -8,6 +8,7 @@ import {
 } from './realReferenceBenchmarkAggregate'
 import {
   REAL_REFERENCE_LEARNED_BLOCK,
+  REAL_REFERENCE_LEARNED_STATUS,
   REAL_REFERENCE_RECONSTRUCTION_BENCHMARK_SCHEMA,
   type RealReferenceReconstructionBenchmarkReport,
 } from './realReferenceReconstructionBenchmark'
@@ -18,6 +19,7 @@ function receipt(
   evolutionaryDistance: number,
   retrievalRuntimeMs = 10,
   evolutionaryRuntimeMs = 30,
+  learned?: { readonly distance: number; readonly runtimeMs?: number },
 ): RealReferenceReconstructionBenchmarkReport {
   const hash = hashCharacter.repeat(64)
   return {
@@ -78,7 +80,20 @@ function receipt(
           metrics: { total: evolutionaryDistance },
           failure: null,
         },
-        {
+        learned ? {
+          caseId: `real:${hash.slice(0, 16)}`,
+          caseLabel: `${hashCharacter}.wav`,
+          caseKind: 'real-isolated-sound',
+          approachId: 'learned-initialization',
+          approachLabel: 'SpiegeLib learned initialization',
+          runtimeMs: learned.runtimeMs ?? 4,
+          candidateCount: 1,
+          bestDistance: learned.distance,
+          bestCandidateIndex: 0,
+          sourceInitialization: 'SpiegeLib simple-FM MLP · nine OP2 controls + fixed training base',
+          metrics: { total: learned.distance },
+          failure: null,
+        } : {
           caseId: `real:${hash.slice(0, 16)}`,
           caseLabel: `${hashCharacter}.wav`,
           caseKind: 'real-isolated-sound',
@@ -95,7 +110,7 @@ function receipt(
       ],
     },
     retrievalVsEvolutionaryDelta: retrievalDistance - evolutionaryDistance,
-    learnedStatus: REAL_REFERENCE_LEARNED_BLOCK,
+    learnedStatus: learned ? REAL_REFERENCE_LEARNED_STATUS : REAL_REFERENCE_LEARNED_BLOCK,
     note: 'test receipt',
   }
 }
@@ -115,7 +130,7 @@ function item(
 }
 
 describe('real-reference benchmark evidence aggregation', () => {
-  it('summarizes a complete mixed 2+2+2 evidence set', () => {
+  it('summarizes a complete mixed 2+2+2 evidence set and preserves legacy blocked learned receipts', () => {
     const aggregate = aggregateRealReferenceBenchmarkEvidence([
       item('a', 'fm-friendly-electronic', 'cma-better', 0.5, 0.3),
       item('b', 'fm-friendly-electronic', 'similar', 0.4, 0.35),
@@ -141,10 +156,38 @@ describe('real-reference benchmark evidence aggregation', () => {
     expect(aggregate.cmaMetricImprovedCount).toBe(5)
     expect(aggregate.cmaListeningBetterCount).toBe(2)
     expect(aggregate.metricImprovedButListeningNotBetterCount).toBe(3)
+    expect(aggregate.learnedInitializationSuccessCount).toBe(0)
     expect(aggregate.learnedInitializationUnavailableCount).toBe(6)
+    expect(aggregate.learnedInitializationFailedCount).toBe(0)
+    expect(aggregate.learnedDistance).toBeNull()
+    expect(aggregate.learnedRuntimeMs).toBeNull()
     expect(aggregate.retrievalDistance).toMatchObject({ count: 6, minimum: 0.4, maximum: 1.2 })
     expect(aggregate.evolutionaryDistance).toMatchObject({ count: 6, minimum: 0.3, maximum: 1.1 })
     expect(JSON.stringify(aggregate)).not.toContain('"samples"')
+  })
+
+  it('aggregates successful learned rows without breaking blocked historical receipts', () => {
+    const aggregate = aggregateRealReferenceBenchmarkEvidence([
+      {
+        report: receipt('a', 0.5, 0.3, 10, 30, { distance: 0.42, runtimeMs: 4 }),
+        category: 'fm-friendly-electronic',
+        listeningAssessment: 'similar',
+      },
+      {
+        report: receipt('b', 0.6, 0.45, 11, 32, { distance: 0.38, runtimeMs: 5 }),
+        category: 'pitched-acoustic',
+        listeningAssessment: 'cma-better',
+      },
+      item('c', 'difficult-transient-noisy', 'both-poor', 1.1, 0.9),
+    ])
+
+    expect(aggregate.learnedInitializationSuccessCount).toBe(2)
+    expect(aggregate.learnedInitializationUnavailableCount).toBe(1)
+    expect(aggregate.learnedInitializationFailedCount).toBe(0)
+    expect(aggregate.learnedDistance).toMatchObject({ count: 2, minimum: 0.38, maximum: 0.42 })
+    expect(aggregate.learnedRuntimeMs).toMatchObject({ count: 2, minimum: 4, maximum: 5 })
+    expect(aggregate.receipts[0]?.learnedDistance).toBe(0.42)
+    expect(aggregate.receipts[2]?.learnedDistance).toBeNull()
   })
 
   it('reports missing categories and listening assessments', () => {
@@ -165,6 +208,7 @@ describe('real-reference benchmark evidence aggregation', () => {
 
   it('parses only privacy-safe real-reference benchmark receipts', () => {
     expect(parseRealReferenceBenchmarkReceipt(receipt('a', 0.5, 0.4)).reference.filename).toBe('a.wav')
+    expect(parseRealReferenceBenchmarkReceipt(receipt('b', 0.6, 0.5, 10, 20, { distance: 0.4 })).learnedStatus).toBe(REAL_REFERENCE_LEARNED_STATUS)
     expect(() => parseRealReferenceBenchmarkReceipt({ schema: 'wrong' })).toThrow(/Unsupported real-reference benchmark receipt schema/)
   })
 })
