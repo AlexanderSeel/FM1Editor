@@ -25,7 +25,7 @@ This document distinguishes application implementation, software validation and 
 | FM-1 individual voice-parameter writes | Blocked | The official frame exists, but no semantic parameter table is published | Do not infer FM-1 meanings from DX7 unpacked byte offsets. |
 | FM-1 device backup/readback | Blocked | No supported bank-request or repeatable device-originated dump workflow is known | The app requires an exact app-side base or recovery bank. |
 | FM-1 internal sequence transfer | Blocked | No stable pattern dump/restore protocol is known | Use the local `.fm1seq.json` project format and external MIDI playback only; physical protocol section F is discovery-only and does not authorize guessed pattern messages. |
-| Yamaha DX7 single-voice and 32-voice bulk send | Implemented and guarded | Message construction and application safety routing are software-testable; a dedicated stock-DX7 physical protocol is now repository-owned | Reception, interrupted-transfer behavior and recovery remain physically unverified on a stock DX7. |
+| Yamaha DX7 single-voice and 32-voice bulk send | Implemented and guarded | Message construction and application safety routing are software-testable; a dedicated stock-DX7 physical protocol and target-specific evidence manifest are repository-owned | Reception, interrupted-transfer behavior and recovery remain physically unverified on a stock DX7. |
 | Yamaha DX7 voice parameters `0–155` | Implemented and guarded | Semantic mapping, ranges, diffing and frame construction have tests; physical test coverage is specified in `dx7-hardware-test-protocol.md` | Hardware reception, operator-mask behavior and throttled live editing require a stock DX7 test. |
 | Yamaha DX7 function parameters `64–77` | Implemented and guarded | Yamaha group-2 frame construction and semantic ranges have tests; physical test coverage is specified in `dx7-hardware-test-protocol.md` | Mono/poly, bend, portamento and controller-assignment behavior require a stock DX7 test. |
 | Yamaha DX7 programmatic dump request | Not implemented | Yamaha's reviewed MIDI Data Format defines bulk transmission/reception but no stock-DX7 request frame | Initiate outgoing voice or bank dumps from the DX7 front panel. |
@@ -33,7 +33,7 @@ This document distinguishes application implementation, software validation and 
 | Chrome/Edge responsive layouts | Permanent FM-1 and DX7 matrices implemented | Same-source Windows receipt is **SUCCESS** in `docs/validation/current-software-browser-gate.md`: Chrome and Edge pass FM-1/DX7 at 1440×900, 1024×768 and 390×844 touch emulation | This is layout/browser evidence only; the smoke intentionally issues no MIDI requests and does not validate physical MIDI/audio. |
 | BLE MIDI | No verified support claim | No recorded browser/platform/device matrix | Test only where the operating system and Chromium Web MIDI implementation expose the BLE device. |
 | GitHub Pages deployment | Build/routing readiness implemented; deployment still disabled | `/FM1Editor/` subpath build, PWA/static routing, catalog and virtual-DX7 asset paths are software-validated in `docs/validation/pages-subpath-readiness.md` | Do not publish until Web MIDI/SysEx and USB/Web Audio are physically verified on the intended HTTPS origin. |
-| Physical evidence capture helper | Implemented | Software acceptance recorded under `docs/validation/`; raw MIDI JSON and a sanitized FM-1 evidence manifest can be exported from the MIDI monitor | The helper never converts traffic patterns into hardware PASS results. |
+| Physical evidence capture and protocol discovery helpers | Implemented | Raw MIDI JSON, FM-1 and stock-DX7 sanitized evidence manifests, and structural latest-SysEx byte deltas are available in the MIDI monitor | No helper converts traffic patterns or outgoing message structure into hardware PASS results or protocol semantics. |
 
 ## Recorded hardware and browser combinations
 
@@ -50,7 +50,7 @@ This observation is enough to keep both methods disabled, but not enough to defi
 
 ### Yamaha DX7
 
-No stock Yamaha DX7 hardware combination is recorded as physically verified. Use `docs/validation/dx7-hardware-test-protocol.md` for the first stock-DX7 evidence package.
+No stock Yamaha DX7 hardware combination is recorded as physically verified. Use `docs/validation/dx7-hardware-test-protocol.md` and the in-app **Stock DX7 hardware evidence session** for the first evidence package.
 
 ### Browser layout automation
 
@@ -165,9 +165,9 @@ For FM-1 use `docs/validation/fm1-hardware-test-protocol.md`; for stock DX7 use 
 - selected MIDI/audio endpoint labels and channels;
 - original and transmitted files with SHA-256 hashes;
 - raw MIDI monitor JSON export;
-- the sanitized in-app FM-1 hardware evidence manifest when applicable;
+- the matching sanitized in-app FM-1 or stock-DX7 evidence manifest;
 - device-screen timeline;
 - audible recordings where audio is involved;
 - exact recovery result after an intentional or observed failure.
 
-A screenshot of an endpoint name, a successful software build or an emitted MIDI frame is not physical-device verification.
+A screenshot of an endpoint name, a successful software build, a structural SysEx delta or an emitted MIDI frame is not physical-device verification.
