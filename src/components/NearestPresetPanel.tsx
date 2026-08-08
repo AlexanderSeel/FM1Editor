@@ -3,7 +3,10 @@ import type { Dx7Voice } from '../domain/voice'
 import {
   createAudioDescriptorProfile,
 } from '../audio/audioDescriptors'
-import { createAudioDescriptorFingerprint } from '../audio/audioDescriptorFingerprint'
+import {
+  createAudioDescriptorFingerprint,
+  type AudioDescriptorFingerprint,
+} from '../audio/audioDescriptorFingerprint'
 import {
   buildCompactPresetDescriptorIndex,
   COMPACT_PRESET_DESCRIPTOR_CONFIG,
@@ -15,6 +18,10 @@ import {
   type CompactPresetRankedCandidate,
 } from '../audio/compactPresetIndex'
 import { loadBundledCatalogPresetCandidates } from '../audio/catalogPresetCandidates'
+import {
+  refineRetrievedDx7Candidates,
+  type Dx7RetrievedRefinementResult,
+} from '../audio/dx7CmaEsRefinement'
 import { createMsfaOfflineEngine } from '../audio/msfaOfflineEngine'
 import { frequencyToMidiNote, type PresetRenderProbe } from '../audio/nearestPreset'
 import {
@@ -27,9 +34,11 @@ import type { PreparedReferenceAudio } from '../audio/referenceAudio'
 const QUICK_SCAN_VOICES = 256
 const INDEX_SAMPLE_RATE = 48_000 as const
 const INDEX_CHUNK_SIZE = 16
+const REFINEMENT_STARTS = 3
+const REFINEMENT_SEED = 2026
 
 type SearchScope = 'quick' | 'full'
-type SearchPhase = 'idle' | 'catalog' | 'indexing' | 'ready' | 'cancelled' | 'error'
+type SearchPhase = 'idle' | 'catalog' | 'indexing' | 'refining' | 'ready' | 'cancelled' | 'error'
 
 interface NearestPresetPanelProps {
   reference: PreparedReferenceAudio | null
@@ -42,6 +51,15 @@ interface SearchProgress {
   completed: number
   total: number
   current: string
+}
+
+interface RefinementProgress {
+  startIndex: number
+  startCount: number
+  generation: number
+  evaluations: number
+  bestDistance: number
+  sourceName: string
 }
 
 function errorMessage(cause: unknown): string {
@@ -118,6 +136,9 @@ export function NearestPresetPanel({
   const [cacheHits, setCacheHits] = useState(0)
   const [candidateCount, setCandidateCount] = useState(0)
   const [results, setResults] = useState<readonly CompactPresetRankedCandidate[]>([])
+  const [referenceFingerprint, setReferenceFingerprint] = useState<AudioDescriptorFingerprint | null>(null)
+  const [refinementResults, setRefinementResults] = useState<readonly Dx7RetrievedRefinementResult[]>([])
+  const [refinementProgress, setRefinementProgress] = useState<RefinementProgress | null>(null)
   const [status, setStatus] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [referencePlaying, setReferencePlaying] = useState(false)
@@ -142,6 +163,9 @@ export function NearestPresetPanel({
   useEffect(() => {
     cancelSearch()
     setResults([])
+    setReferenceFingerprint(null)
+    setRefinementResults([])
+    setRefinementProgress(null)
     setCandidateCount(0)
     setCacheHits(0)
     setProgress({ completed: 0, total: 0, current: '' })
@@ -195,6 +219,16 @@ export function NearestPresetPanel({
     }
   }, [onAuditionVoice, stopReferencePlayback])
 
+  const auditionRefinedVoice = useCallback(async (voice: Dx7Voice) => {
+    stopReferencePlayback()
+    setError(null)
+    try {
+      await onAuditionVoice(voice)
+    } catch (cause) {
+      setError(`Refined candidate audition failed: ${errorMessage(cause)}`)
+    }
+  }, [onAuditionVoice, stopReferencePlayback])
+
   const search = useCallback(async () => {
     if (!reference) return
     cancelSearch()
@@ -205,6 +239,9 @@ export function NearestPresetPanel({
     const signal = controller.signal
     setPhase('catalog')
     setResults([])
+    setReferenceFingerprint(null)
+    setRefinementResults([])
+    setRefinementProgress(null)
     setCacheHits(0)
     setCandidateCount(0)
     setError(null)
@@ -225,9 +262,10 @@ export function NearestPresetPanel({
 
       const probe = probeForReference(reference)
       const referenceSamples = resampleMonoLinear(reference.samples, reference.sampleRate, INDEX_SAMPLE_RATE)
-      const referenceFingerprint = createAudioDescriptorFingerprint(
+      const nextReferenceFingerprint = createAudioDescriptorFingerprint(
         createAudioDescriptorProfile(referenceSamples, INDEX_SAMPLE_RATE, COMPACT_PRESET_DESCRIPTOR_CONFIG),
       )
+      setReferenceFingerprint(nextReferenceFingerprint)
       const engine = createMsfaOfflineEngine()
       const fingerprintCache = createFingerprintCache()
       const entries: CompactPresetIndexEntry[] = []
@@ -271,7 +309,7 @@ export function NearestPresetPanel({
         probes: [{ ...probe }],
         entries,
       }
-      const ranked = rankCompactPresetDescriptorIndex(referenceFingerprint, index, {
+      const ranked = rankCompactPresetDescriptorIndex(nextReferenceFingerprint, index, {
         limit: 8,
         referencePitchHz: reference.analysisPitchHz,
       })
@@ -293,7 +331,65 @@ export function NearestPresetPanel({
     }
   }, [cancelSearch, onStopAudition, reference, scope, stopReferencePlayback])
 
-  const working = phase === 'catalog' || phase === 'indexing'
+  const refineTopCandidates = useCallback(async () => {
+    if (!referenceFingerprint || results.length === 0) return
+    cancelSearch()
+    stopReferencePlayback()
+    void onStopAudition().catch(() => undefined)
+    const controller = new AbortController()
+    abortRef.current = controller
+    const signal = controller.signal
+    setPhase('refining')
+    setRefinementResults([])
+    setRefinementProgress(null)
+    setError(null)
+    setStatus('Refining top retrieved voices · operator output levels + feedback only…')
+
+    try {
+      const refined = await refineRetrievedDx7Candidates(results, referenceFingerprint, createMsfaOfflineEngine(), {
+        startCount: Math.min(REFINEMENT_STARTS, results.length),
+        groups: ['output-feedback'],
+        seed: REFINEMENT_SEED,
+        descriptorConfig: COMPACT_PRESET_DESCRIPTOR_CONFIG,
+        fingerprintCache: createFingerprintCache(),
+        signal,
+        cmaEs: {
+          populationSize: 8,
+          maxGenerations: 8,
+          sigma: 0.2,
+          targetScore: 0,
+        },
+        onProgress: (item) => {
+          setRefinementProgress({
+            startIndex: item.startIndex,
+            startCount: item.startCount,
+            generation: item.generation,
+            evaluations: item.evaluations,
+            bestDistance: item.bestDistance,
+            sourceName: item.sourceCandidate.voice.name || item.sourceCandidate.sourceLabel,
+          })
+        },
+      })
+      setRefinementResults(refined)
+      setStatus(`Refined ${refined.length} retrieved start${refined.length === 1 ? '' : 's'} · seed ${REFINEMENT_SEED} · output/feedback only`)
+      setPhase('ready')
+      abortRef.current = null
+    } catch (cause) {
+      abortRef.current = null
+      if (cause instanceof DOMException && cause.name === 'AbortError') {
+        setPhase('cancelled')
+        setStatus('CMA-ES refinement cancelled. Retrieval results and cached fingerprints remain available.')
+        return
+      }
+      setPhase('error')
+      setStatus(null)
+      setError(errorMessage(cause))
+    }
+  }, [cancelSearch, onStopAudition, referenceFingerprint, results, stopReferencePlayback])
+
+  const searchWorking = phase === 'catalog' || phase === 'indexing'
+  const refinementWorking = phase === 'refining'
+  const working = searchWorking || refinementWorking
   const progressPercent = progress.total > 0 ? Math.round(progress.completed * 100 / progress.total) : 0
 
   return (
@@ -302,7 +398,7 @@ export function NearestPresetPanel({
         <div>
           <p className="text-xs font-semibold uppercase tracking-[0.16em] text-cyan-200">Nearest preset · local retrieval</p>
           <p className="mt-1 max-w-3xl text-xs leading-5 text-slate-400">
-            Render checksum-valid bundled DX7 voices through the deterministic local engine and rank compact fingerprints against the prepared reference. Nothing is uploaded, loaded into the editor, or sent to hardware automatically.
+            Render checksum-valid bundled DX7 voices through the deterministic local engine and rank compact fingerprints against the prepared reference. After retrieval, an explicit constrained CMA-ES step can refine operator output levels and feedback only. Nothing is uploaded, loaded into the editor, or sent to hardware automatically.
           </p>
         </div>
         <span className="rounded-lg border border-white/10 px-2 py-1 text-[10px] uppercase tracking-[0.12em] text-slate-400">
@@ -331,6 +427,15 @@ export function NearestPresetPanel({
         >
           {phase === 'ready' ? 'Search again' : 'Build / search local index'}
         </button>
+        {!working && results.length > 0 && referenceFingerprint && (
+          <button
+            className="rounded-xl bg-amber-200 px-4 py-2.5 text-sm font-black text-slate-950"
+            onClick={() => void refineTopCandidates()}
+            type="button"
+          >
+            Refine top {Math.min(REFINEMENT_STARTS, results.length)} · output + feedback
+          </button>
+        )}
         {working && (
           <button className="rounded-xl border border-rose-300/30 px-4 py-2.5 text-sm font-bold text-rose-200" onClick={cancelSearch} type="button">
             Cancel
@@ -346,7 +451,7 @@ export function NearestPresetPanel({
         </button>
       </div>
 
-      {working && (
+      {searchWorking && (
         <div className="mt-4 rounded-xl border border-white/10 bg-black/20 p-3">
           <div className="flex items-center justify-between gap-3 text-xs text-slate-400">
             <span>{phase === 'catalog' ? 'Reading local catalog' : `Indexing ${progress.completed}/${progress.total}`}</span>
@@ -358,6 +463,16 @@ export function NearestPresetPanel({
             </div>
           )}
           {progress.current && <p className="mt-2 truncate text-[11px] text-slate-500">{progress.current}</p>}
+        </div>
+      )}
+
+      {refinementWorking && refinementProgress && (
+        <div className="mt-4 rounded-xl border border-amber-200/20 bg-amber-200/[0.035] p-3" aria-label="CMA-ES refinement progress">
+          <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-slate-400">
+            <span>Start {refinementProgress.startIndex + 1}/{refinementProgress.startCount} · {refinementProgress.sourceName}</span>
+            <span>generation {refinementProgress.generation} · {refinementProgress.evaluations} evals</span>
+          </div>
+          <p className="mt-2 text-[11px] text-amber-100">Best fingerprint distance {refinementProgress.bestDistance.toFixed(5)}</p>
         </div>
       )}
 
@@ -395,6 +510,43 @@ export function NearestPresetPanel({
                 <span>CENT {metric(candidate.metrics.centroid)}</span>
                 <span>ROLL {metric(candidate.metrics.rolloff)}</span>
                 <span>FLAT {metric(candidate.metrics.flatness)}</span>
+              </div>
+            </article>
+          ))}
+        </div>
+      )}
+
+      {refinementResults.length > 0 && (
+        <div className="mt-5 grid gap-3" aria-label="CMA-ES refined candidates">
+          <div>
+            <h4 className="text-sm font-black uppercase tracking-[0.12em] text-amber-100">CMA-ES refined candidates</h4>
+            <p className="mt-1 text-[11px] text-slate-500">Seed {REFINEMENT_SEED} · six operator output levels + feedback only · each result starts from a ranked catalog voice.</p>
+          </div>
+          {refinementResults.map((item, index) => (
+            <article className="rounded-xl border border-amber-200/15 bg-amber-200/[0.025] p-3" key={`${item.sourceCandidate.id}:refined`}>
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-amber-200">#{index + 1} refined · {item.improvement > 0 ? `improved ${item.improvement.toFixed(5)}` : 'no improvement'}</p>
+                  <h5 className="mt-1 text-base font-black text-white">{item.bestVoice.name || 'UNTITLED'}</h5>
+                  <p className="mt-1 break-words text-[11px] text-slate-500">Start: {item.sourceCandidate.sourceLabel}</p>
+                  <p className="mt-1 text-[10px] text-slate-600">distance {item.initialDistance.toFixed(5)} → {item.bestDistance.toFixed(5)} · {item.optimizer.generationsCompleted} generations · {item.optimizer.evaluations} evaluations</p>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <button className="rounded-lg border border-amber-200/30 px-3 py-2 text-xs font-bold text-amber-100" onClick={() => void auditionRefinedVoice(item.bestVoice)} type="button">
+                    ▶ Audition refined
+                  </button>
+                  <button className="rounded-lg bg-emerald-300 px-3 py-2 text-xs font-black text-slate-950" onClick={() => onLoadVoice(item.bestVoice)} type="button">
+                    Load refined
+                  </button>
+                </div>
+              </div>
+              <div className="mt-3 grid grid-cols-3 gap-2 text-[10px] text-slate-500 sm:grid-cols-6">
+                <span>ENV {metric(item.bestMetrics.envelope)}</span>
+                <span>MEL {metric(item.bestMetrics.mel)}</span>
+                <span>MFCC {metric(item.bestMetrics.mfcc)}</span>
+                <span>CENT {metric(item.bestMetrics.centroid)}</span>
+                <span>ROLL {metric(item.bestMetrics.rolloff)}</span>
+                <span>FLAT {metric(item.bestMetrics.flatness)}</span>
               </div>
             </article>
           ))}
