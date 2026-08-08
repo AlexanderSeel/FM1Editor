@@ -1,0 +1,65 @@
+name: Validate packaged synthetic reconstruction comparison
+
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/validate-synthetic-reconstruction-comparison.yml']
+
+permissions:
+  contents: write
+
+jobs:
+  compare:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - run: npm install --no-audit --no-fund
+      - run: npm run audit:virtual-dx7
+      - run: npm run audit:reconstruction-upstreams
+      - run: npm run typecheck
+      - run: npm run lint
+      - name: Run packaged synthetic comparison
+        env:
+          FM1_RECONSTRUCTION_COMPARISON_RESULT: docs/validation/synthetic-reconstruction-comparison.json
+        run: npm test -- src/audio/reconstructionComparison.integration.test.ts
+      - run: npm run test
+      - run: npm run build
+      - name: Persist readable receipt
+        shell: python
+        run: |
+          import json, os
+          from pathlib import Path
+          result_path=Path('docs/validation/synthetic-reconstruction-comparison.json')
+          data=json.loads(result_path.read_text(encoding='utf-8'))
+          results={entry['approachId']:entry for entry in data['results']}
+          retrieval=results['retrieval']; evolutionary=results['evolutionary']; learned=results['learned-initialization']
+          delta=data['benchmark']['retrievalVsEvolutionaryDelta']
+          lines=[
+            '# Packaged-engine synthetic reconstruction comparison','',
+            f"Source commit: `{os.environ['GITHUB_SHA']}`",'',
+            'Overall benchmark gate: **SUCCESS**','',
+            '| Approach | Candidates | Best distance | Runtime ms | Source / failure |',
+            '| --- | ---: | ---: | ---: | --- |',
+            f"| Retrieval only | {retrieval['candidateCount']} | {retrieval['bestDistance']:.8f} | {retrieval['runtimeMs']:.3f} | {retrieval.get('sourceInitialization') or '—'} |",
+            f"| Seeded constrained CMA-ES | {evolutionary['candidateCount']} | {evolutionary['bestDistance']:.8f} | {evolutionary['runtimeMs']:.3f} | {evolutionary.get('sourceInitialization') or '—'} |",
+            f"| Learned initialization | {learned['candidateCount']} | — | {learned['runtimeMs']:.3f} | {learned.get('failure') or '—'} |",'',
+            f"Retrieval minus evolutionary best-distance delta: `{delta:.8f}`. Positive means CMA-ES produced a lower distance on this fixture.",'',
+            f"Engine: `{data['benchmark']['engineId']}` / `{data['benchmark']['engineVersion']}` at 48 kHz using probe `{data['benchmark']['probe']['id']}`.",'',
+            'Scope is deliberately narrow: one repository-owned synthetic ground-truth voice rendered by the packaged DX7-compatible MSFA engine. This is not a real isolated-sound benchmark and does not establish a learned-initialization result; the learned row intentionally records the current licensing/implementation blocker.','',
+            'Upstream audit, strict typecheck, lint, focused packaged-engine comparison, full test suite and production build passed.',''
+          ]
+          Path('docs/validation/synthetic-reconstruction-comparison.md').write_text('\n'.join(lines),encoding='utf-8')
+          Path('.github/workflows/validate-synthetic-reconstruction-comparison.yml').unlink(missing_ok=True)
+      - name: Commit benchmark evidence
+        shell: bash
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add -A
+          git commit -m 'test(audio): record synthetic reconstruction comparison'
+          git pull --rebase origin main
+          git push origin HEAD:main
