@@ -4,6 +4,8 @@ dist/
 coverage/
 public/catalog/sync-manifest.json
 public/catalog/yamaha-black-boxes/
+cma-refinement-*.json
+virtual-fm1-preview-*.json
 *.local
 .DS_Store
 Thumbs.db
