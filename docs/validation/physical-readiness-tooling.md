@@ -1,6 +1,6 @@
 # Physical validation readiness tooling
 
-Source commit: `3dc3a5a5d5b4280b17494de498e1e2b988873fd7`
+Source commit: `55a286bad078df45b5f0eb8d3efde47ad90fea2a`
 
 Software acceptance: **SUCCESS**
 
@@ -14,6 +14,6 @@ Software acceptance: **SUCCESS**
 | full-test | 0 |
 | build | 0 |
 
-The accepted repository state contains the FM-1-only in-app hardware evidence session, raw MIDI-monitor export, explicit FM-1 physical protocol sections A–F including sequencer discovery, and a separate stock Yamaha DX7 physical protocol for bulk reception, guarded parameters/functions and browser/interface resilience.
+This exact repository state contains the FM-1-only MIDI-monitor hardware evidence session, raw MIDI JSON export, FM-1 physical protocol sections A–F including discovery-first sequencer validation, the stock Yamaha DX7 physical protocol, current PLAN links, and the synchronized support/recovery matrix.
 
-The evidence recorder recognizes standard outgoing Yamaha 4,104-byte bank and 163-byte single-voice frames only as metadata. All FM-1 physical results, sequencer protocol semantics and all DX7 hardware results remain unresolved until real-device observations/captures are attached. No software validation in this receipt closes a hardware-dependent PLAN item.
+The recorder recognizes outgoing standard Yamaha 4,104-byte bank and 163-byte single-voice frames as metadata only. No traffic pattern, test, build, responsive browser smoke or documentation result closes any hardware-dependent PLAN item; real FM-1/DX7 observations and captures are still required.
