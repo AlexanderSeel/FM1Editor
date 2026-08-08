@@ -7,6 +7,7 @@ import {
   type MidiMonitorEntry,
 } from '../midi/monitor'
 import { Dx7HardwareEvidenceRecorder } from './Dx7HardwareEvidenceRecorder'
+import { Fm1DeliveryEvidenceGatePanel } from './Fm1DeliveryEvidenceGatePanel'
 import { HardwareEvidenceRecorder } from './HardwareEvidenceRecorder'
 
 interface MidiMonitorProps {
@@ -113,6 +114,7 @@ export function MidiMonitor({ entries, onClear }: MidiMonitorProps) {
 
         <HardwareEvidenceRecorder entries={entries} />
         <Dx7HardwareEvidenceRecorder entries={entries} />
+        <Fm1DeliveryEvidenceGatePanel />
       </div>
     </details>
   )
