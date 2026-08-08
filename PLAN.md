@@ -58,7 +58,6 @@ Known limitations, current evidence and conservative recovery procedures are mai
 The staged technical decision and reviewed libraries/research are documented in [`docs/research/audio-to-fm-and-virtual-synth.md`](./docs/research/audio-to-fm-and-virtual-synth.md).
 
 - [ ] Compare retrieval-only, evolutionary and learned-initialization approaches using synthetic ground-truth patches and real isolated sounds; report similarity metrics, runtime and failure cases rather than promising exact reconstruction.
-- [ ] Reproduce and license-audit Sound2Synth, SpiegeLib/Dexed sound matching, DDX7 and related DDSP approaches before using code, weights, datasets or preprocessing in production.
 - [ ] Add optional server/Python acceleration only behind explicit upload consent, documented retention/deletion, model/version metadata and a fully local fallback for normal editing and audition.
 
 ## 10. Virtual DX7 / FM-1-inspired synthesizer
