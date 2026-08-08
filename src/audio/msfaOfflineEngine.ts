@@ -33,11 +33,22 @@ export interface MsfaEmscriptenModule {
   ): number
 }
 
-export type MsfaEmscriptenModuleFactory = () => Promise<MsfaEmscriptenModule>
+export interface MsfaModuleFactoryOptions {
+  readonly locateFile?: (path: string) => string
+}
+
+export type MsfaEmscriptenModuleFactory = (options?: MsfaModuleFactoryOptions) => Promise<MsfaEmscriptenModule>
 
 export interface MsfaOfflineEngineOptions {
   moduleFactory?: MsfaEmscriptenModuleFactory
   moduleUrl?: string
+}
+
+export interface MsfaPublicModuleLoaderDependencies {
+  readonly fetchText?: (url: string) => Promise<string>
+  readonly createObjectUrl?: (source: string) => string
+  readonly revokeObjectUrl?: (url: string) => void
+  readonly importObjectUrl?: (url: string) => Promise<{ default?: unknown }>
 }
 
 function defaultModuleUrl(): string {
@@ -45,12 +56,44 @@ function defaultModuleUrl(): string {
   return `${base}${MSFA_OFFLINE_MODULE_PATH}`
 }
 
-async function importModuleFactory(moduleUrl: string): Promise<MsfaEmscriptenModuleFactory> {
-  const imported = await import(/* @vite-ignore */ moduleUrl) as { default?: unknown }
-  if (typeof imported.default !== 'function') {
-    throw new TypeError('The packaged virtual DX7 module does not export an Emscripten factory')
+function assetSiblingUrl(moduleUrl: string, path: string): string {
+  return new URL(path, new URL(moduleUrl, globalThis.location?.href ?? 'http://localhost/')).href
+}
+
+async function defaultFetchText(url: string): Promise<string> {
+  const response = await fetch(url, { cache: 'no-cache' })
+  if (!response.ok) throw new Error(`Unable to load virtual DX7 module (${response.status})`)
+  return response.text()
+}
+
+function defaultCreateObjectUrl(source: string): string {
+  return URL.createObjectURL(new Blob([source], { type: 'text/javascript' }))
+}
+
+async function defaultImportObjectUrl(url: string): Promise<{ default?: unknown }> {
+  return import(/* @vite-ignore */ url) as Promise<{ default?: unknown }>
+}
+
+export async function importPublicMsfaModuleFactory(
+  moduleUrl: string,
+  dependencies: MsfaPublicModuleLoaderDependencies = {},
+): Promise<MsfaEmscriptenModuleFactory> {
+  const fetchText = dependencies.fetchText ?? defaultFetchText
+  const createObjectUrl = dependencies.createObjectUrl ?? defaultCreateObjectUrl
+  const revokeObjectUrl = dependencies.revokeObjectUrl ?? URL.revokeObjectURL.bind(URL)
+  const importObjectUrl = dependencies.importObjectUrl ?? defaultImportObjectUrl
+  const source = await fetchText(moduleUrl)
+  const objectUrl = createObjectUrl(source)
+  try {
+    const imported = await importObjectUrl(objectUrl)
+    if (typeof imported.default !== 'function') {
+      throw new TypeError('The packaged virtual DX7 module does not export an Emscripten factory')
+    }
+    const factory = imported.default as MsfaEmscriptenModuleFactory
+    return () => factory({ locateFile: (path) => assetSiblingUrl(moduleUrl, path) })
+  } finally {
+    revokeObjectUrl(objectUrl)
   }
-  return imported.default as MsfaEmscriptenModuleFactory
 }
 
 function abortError(): Error {
@@ -92,7 +135,7 @@ export function createMsfaOfflineEngine(options: MsfaOfflineEngineOptions = {}):
   const loadModule = async (): Promise<MsfaEmscriptenModule> => {
     if (!modulePromise) {
       modulePromise = (async () => {
-        const factory = options.moduleFactory ?? await importModuleFactory(options.moduleUrl ?? defaultModuleUrl())
+        const factory = options.moduleFactory ?? await importPublicMsfaModuleFactory(options.moduleUrl ?? defaultModuleUrl())
         const module = await factory()
         assertCompatibleModule(module)
         return module
