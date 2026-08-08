@@ -1,0 +1,83 @@
+name: Validate fixed SpiegeLib local learned stack
+
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/validate-spiegelib-local-stack-v2.yml']
+
+permissions:
+  contents: write
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm install --no-audit --no-fund
+      - name: Run exact local learned-stack gate
+        shell: bash
+        run: |
+          set +e
+          : > stage-codes.txt
+          run_stage() { name="$1"; shift; "$@" > "stage-$name.log" 2>&1; code=$?; cat "stage-$name.log"; echo "$name=$code" >> stage-codes.txt; }
+          run_stage typecheck npm run typecheck
+          run_stage lint npm run lint
+          run_stage initializer npm test -- src/audio/spiegelibSimpleFmInitializer.test.ts
+          run_stage mlp npm test -- src/audio/spiegelibSimpleFmMlp.test.ts
+          run_stage model npm test -- src/audio/spiegelibSimpleFmModel.test.ts
+          run_stage scaler npm test -- src/audio/spiegelibSimpleFmScaler.test.ts
+          run_stage full-test npm run test
+          run_stage build npm run build
+          exit 0
+      - name: Persist corrected receipt
+        if: always()
+        shell: python
+        run: |
+          from pathlib import Path
+          import os
+          codes = {}
+          p = Path('stage-codes.txt')
+          if p.exists():
+              for line in p.read_text(encoding='utf-8').splitlines():
+                  if '=' in line:
+                      name, value = line.split('=', 1)
+                      try: codes[name] = int(value)
+                      except ValueError: codes[name] = 999
+          stages = ['typecheck','lint','initializer','mlp','model','scaler','full-test','build']
+          ok = all(codes.get(stage) == 0 for stage in stages)
+          rows = ['| Stage | Exit |','| --- | ---: |'] + [f'| {stage} | {codes.get(stage, "?")} |' for stage in stages]
+          tails = []
+          if not ok:
+              for stage in stages:
+                  if codes.get(stage) == 0: continue
+                  log = Path(f'stage-{stage}.log')
+                  text = log.read_text(encoding='utf-8', errors='replace') if log.exists() else 'missing log'
+                  tails += ['', f'## {stage} failure tail', '', '```text', text[-12000:], '```']
+          Path('docs/validation/spiegelib-local-stack.md').write_text('\n'.join([
+              '# SpiegeLib local learned-stack software acceptance','',
+              f"Source commit: `{os.environ['GITHUB_SHA']}`",'',
+              f"Software acceptance: **{'SUCCESS' if ok else 'FAILED'}**",'',
+              *rows,'',
+              'This exact state validates the browser-safe converted MLP tensors/runner, pinned H5 reference output, nine historical Dexed-output semantic adapter, dedicated Librosa-compatible MFCC source and the archived-scaler/input contract. External archive conversion and historical Librosa numerical compatibility remain separately evidenced.','',
+              *tails,''
+          ]), encoding='utf-8')
+          for name in ['.github/workflows/validate-spiegelib-local-stack-v2.yml', '.github/workflows/validate-spiegelib-local-stack.yml']:
+              Path(name).unlink(missing_ok=True)
+          for path in Path('.').glob('stage-*.log'): path.unlink(missing_ok=True)
+          Path('stage-codes.txt').unlink(missing_ok=True)
+      - name: Commit corrected validation receipt
+        if: always()
+        shell: bash
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add -A
+          git commit -m 'test(audio): record fixed SpiegeLib stack acceptance' || true
+          git pull --rebase origin main
+          git push origin HEAD:main
