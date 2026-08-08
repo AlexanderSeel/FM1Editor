@@ -1,5 +1,4 @@
 import { useMemo, useState } from 'react'
-import type { DeviceTarget } from '../domain/deviceTarget'
 import type { MidiMonitorEntry } from '../midi/monitor'
 import {
   HARDWARE_EVIDENCE_SCHEMA,
@@ -52,7 +51,6 @@ function saveManifest(manifest: HardwareEvidenceManifest): void {
 export function HardwareEvidenceRecorder({ entries }: HardwareEvidenceRecorderProps) {
   const browser = useMemo(browserEnvironment, [])
   const midiCapture = useMemo(() => summarizeHardwareMidiCapture(entries), [entries])
-  const [target, setTarget] = useState<DeviceTarget>('fm1')
   const [identity, setIdentity] = useState<HardwareTestIdentity>({
     tester: '',
     firmwareVersion: '',
@@ -93,7 +91,7 @@ export function HardwareEvidenceRecorder({ entries }: HardwareEvidenceRecorderPr
     saveManifest({
       schema: HARDWARE_EVIDENCE_SCHEMA,
       createdAt: new Date().toISOString(),
-      target,
+      target: 'fm1',
       midiPermission: entries.length > 0 ? 'traffic-captured; permission state not independently recorded' : 'not recorded',
       sysexEnabled: sysexObserved,
       selectedMidiInput: midiCapture.inputPorts.join(' | ') || null,
@@ -111,10 +109,10 @@ export function HardwareEvidenceRecorder({ entries }: HardwareEvidenceRecorderPr
   return (
     <details className="rounded-xl border border-amber-300/15 bg-amber-300/[0.025] p-3">
       <summary className="cursor-pointer list-none text-xs font-semibold uppercase tracking-[0.15em] text-amber-200">
-        Hardware evidence session · {outstanding.length} pending
+        FM-1 hardware evidence session · {outstanding.length} pending
       </summary>
       <div className="mt-3 grid gap-3">
-        <p className="text-[11px] leading-5 text-slate-400">Use this beside the raw MIDI export during the physical protocol. Auto-detected traffic is evidence metadata only; every PASS/FAIL remains a tester observation.</p>
+        <p className="text-[11px] leading-5 text-slate-400">Use this beside the raw MIDI export during the FM-1 physical protocol. Auto-detected traffic is evidence metadata only; every PASS/FAIL remains a tester observation. Stock DX7 validation uses its separate repository protocol.</p>
 
         <div className="rounded-lg border border-white/10 bg-black/20 p-2 text-[10px] leading-4 text-slate-400">
           {midiCapture.messageCount} messages · SysEx IN {midiCapture.sysexInputCount} · SysEx OUT {midiCapture.sysexOutputCount} · 4,104-byte Yamaha bank OUT {midiCapture.yamahaBankOutputCount} · 163-byte voice OUT {midiCapture.yamahaSingleVoiceOutputCount}<br />
@@ -122,9 +120,8 @@ export function HardwareEvidenceRecorder({ entries }: HardwareEvidenceRecorderPr
         </div>
 
         <div className="grid gap-2 sm:grid-cols-2">
-          <label className="grid gap-1 text-[10px] text-slate-400">Target<select className="rounded-lg border border-white/10 bg-slate-950 px-2 py-1.5 text-xs text-white" value={target} onChange={(event) => setTarget(event.target.value as DeviceTarget)}><option value="fm1">FM-1</option><option value="dx7">DX7</option></select></label>
           <label className="grid gap-1 text-[10px] text-slate-400">Tester / initials<input className="rounded-lg border border-white/10 bg-black/20 px-2 py-1.5 text-xs text-white" value={identity.tester} onChange={(event) => setIdentityValue('tester', event.target.value)} /></label>
-          <label className="grid gap-1 text-[10px] text-slate-400">Firmware version<input className="rounded-lg border border-white/10 bg-black/20 px-2 py-1.5 text-xs text-white" value={identity.firmwareVersion} onChange={(event) => setIdentityValue('firmwareVersion', event.target.value)} /></label>
+          <label className="grid gap-1 text-[10px] text-slate-400">FM-1 firmware version<input className="rounded-lg border border-white/10 bg-black/20 px-2 py-1.5 text-xs text-white" value={identity.firmwareVersion} onChange={(event) => setIdentityValue('firmwareVersion', event.target.value)} /></label>
           <label className="grid gap-1 text-[10px] text-slate-400">Editor commit SHA<input className="rounded-lg border border-white/10 bg-black/20 px-2 py-1.5 font-mono text-[10px] text-white" value={identity.editorCommit} onChange={(event) => setIdentityValue('editorCommit', event.target.value)} /></label>
           <label className="grid gap-1 text-[10px] text-slate-400">Windows edition / build<input className="rounded-lg border border-white/10 bg-black/20 px-2 py-1.5 text-xs text-white" value={identity.windowsVersion} onChange={(event) => setIdentityValue('windowsVersion', event.target.value)} /></label>
           <label className="grid gap-1 text-[10px] text-slate-400">Driver version<input className="rounded-lg border border-white/10 bg-black/20 px-2 py-1.5 text-xs text-white" value={identity.driverVersion} onChange={(event) => setIdentityValue('driverVersion', event.target.value)} /></label>
