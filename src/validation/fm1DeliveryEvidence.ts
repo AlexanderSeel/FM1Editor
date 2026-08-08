@@ -60,6 +60,14 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
 
+function isNullableNumber(value: unknown): value is number | null {
+  return value === null || (typeof value === 'number' && Number.isFinite(value))
+}
+
+function isNullableString(value: unknown): value is string | null {
+  return value === null || typeof value === 'string'
+}
+
 function normalizedOrigin(value: string): string {
   return value.trim().replace(/\/+$/, '')
 }
@@ -75,10 +83,30 @@ function browserFamily(value: string): DeliveryBrowserFamily {
 }
 
 function parseManifest(value: unknown): HardwareEvidenceManifest | null {
-  if (!isRecord(value)) return null
-  if (value.schema !== HARDWARE_EVIDENCE_SCHEMA || value.target !== 'fm1') return null
+  if (!isRecord(value) || value.schema !== HARDWARE_EVIDENCE_SCHEMA || value.target !== 'fm1') return null
+  if (typeof value.createdAt !== 'string' || typeof value.midiPermission !== 'string' || typeof value.sysexEnabled !== 'boolean') return null
+  if (!isNullableString(value.selectedMidiInput) || !isNullableString(value.selectedMidiOutput)) return null
   if (!isRecord(value.identity) || !isRecord(value.browser) || !isRecord(value.audio) || !isRecord(value.midiCapture) || !isRecord(value.checks)) return null
-  if (typeof value.createdAt !== 'string' || typeof value.sysexEnabled !== 'boolean') return null
+
+  const identity = value.identity
+  for (const key of ['tester', 'firmwareVersion', 'editorCommit', 'windowsVersion', 'browserVersion', 'driverVersion', 'usbTopology', 'audioInputLabel'] as const) {
+    if (typeof identity[key] !== 'string') return null
+  }
+  if (!isNullableNumber(identity.midiChannel) || typeof identity.destinationBank !== 'string' || !isNullableNumber(identity.targetSlot)) return null
+
+  const browser = value.browser
+  for (const key of ['origin', 'userAgent', 'platform', 'language'] as const) {
+    if (typeof browser[key] !== 'string') return null
+  }
+  if (typeof browser.secureContext !== 'boolean') return null
+
+  const audio = value.audio
+  if (!isNullableNumber(audio.sampleRateHz) || !isNullableNumber(audio.savedWavBitDepth) || !isNullableNumber(audio.browserChannelCount) || !isNullableNumber(audio.approximateLatencyMs)) return null
+  if (typeof audio.channelLayout !== 'string' || !['unknown', 'yes', 'no'].includes(String(audio.masterAffectsUsbLevel))) return null
+
+  const midiCapture = value.midiCapture
+  if (typeof midiCapture.yamahaBankOutputCount !== 'number' || !Number.isFinite(midiCapture.yamahaBankOutputCount) || midiCapture.yamahaBankOutputCount < 0) return null
+
   return value as unknown as HardwareEvidenceManifest
 }
 
