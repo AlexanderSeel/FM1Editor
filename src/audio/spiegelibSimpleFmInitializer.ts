@@ -109,7 +109,7 @@ export function createSpiegelibSimpleFmBaseVoice(name = 'SPGL SIMPLE'): Dx7Voice
 }
 
 export function applySpiegelibSimpleFmPrediction(
-  prediction: readonly number[],
+  prediction: ArrayLike<number>,
   name = 'SPGL MLP',
 ): Dx7Voice {
   if (prediction.length !== SPIEGELIB_SIMPLE_FM_OUTPUT_SIZE) {
