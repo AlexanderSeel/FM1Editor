@@ -1,6 +1,6 @@
 # SpiegeLib composed learned-candidate software acceptance
 
-Source commit: `c0c0f341ef1994129666017e7eb2d69febecf68b`
+Source commit: `8055a323ebb17d8bc0953404993975181d839cdb`
 
 Software acceptance: **FAILED**
 
