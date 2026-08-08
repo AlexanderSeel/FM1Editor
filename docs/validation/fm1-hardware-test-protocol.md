@@ -124,6 +124,31 @@ For each candidate mono/poly, portamento, pitch-bend or other performance contro
 
 Live parameter writes remain disabled until the semantic map and framing are both verified. Parameter `155` operator state and Yamaha function parameters must remain outside voice payloads.
 
+## F. FM-1 sequencer protocol discovery
+
+Do not send guessed sequencer SysEx. This section is discovery-first and must establish a repeatable device-originated format before any app transfer implementation is enabled.
+
+1. Create a minimal pattern on the FM-1: one active step, fixed note, fixed velocity, no ties/accents/automation where the device permits.
+2. Start MIDI capture and exercise every front-panel operation that could plausibly send/export/copy the pattern. Record whether any MIDI or SysEx appears.
+3. Change exactly one pattern property at a time—step position, note, velocity, gate/tie, accent, pattern length and tempo where stored in-pattern—and repeat the capture.
+4. Compare message lengths and byte deltas between captures. Record stable header/footer bytes, candidate length fields, checksums and the byte positions that correlate with each single changed property.
+5. Repeat the same source pattern in at least two pattern slots to determine whether slot identity is embedded in the payload or selected separately on the device.
+6. If a complete device-originated pattern message is found, capture at least three distinct patterns and verify the framing/checksum rule repeats.
+7. Only after a stable format is identified, replay one previously captured unmodified device-originated message to a sacrificial pattern slot and verify exact round-trip behavior.
+8. Power-cycle and verify the restored pattern persists as expected.
+9. Capture any acknowledgement, busy, completion or error response separately; do not conflate a transport response with pattern payload data.
+
+A protocol is considered stable enough for implementation only when:
+
+- a complete pattern payload boundary is repeatable;
+- changed pattern fields produce explainable, repeatable byte changes;
+- any checksum/length rule is understood;
+- target slot semantics are understood;
+- one captured unmodified message round-trips successfully to hardware;
+- failure/recovery behavior is documented.
+
+If no device-originated pattern transfer exists, record that negative result across at least two sessions/firmware-identical reconnects and leave app-side internal-pattern transfer disabled.
+
 ## Evidence package
 
 Store each completed session under a dated folder outside the application repository until privacy-sensitive device paths and user names are removed. The sanitized evidence package should contain:
@@ -133,6 +158,7 @@ Store each completed session under a dated folder outside the application reposi
 - MIDI monitor JSON export;
 - original and merged `.syx` files with SHA-256 values;
 - saved WAV samples;
+- sequencer capture pairs where exactly one pattern property changed;
 - screenshots or a short screen-state timeline;
 - exact failure/recovery notes;
 - a proposed `PLAN.md` item to close, linked to the evidence.
