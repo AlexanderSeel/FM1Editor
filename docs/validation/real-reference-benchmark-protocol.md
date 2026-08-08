@@ -30,7 +30,7 @@ Each current receipt compares the same reference against three distinct approach
 
 The learned row is intentionally not CMA-refined. It is not a full 155-parameter DX7 predictor and must not be described as original-patch recovery. Its preprocessing/model admission is documented in [`../research/learned-initializer-admission.md`](../research/learned-initializer-admission.md) and [`spiegelib-learned-benchmark-admission.md`](./spiegelib-learned-benchmark-admission.md).
 
-Older exported receipts created before learned-model admission may still contain the explicit unavailable learned row. The aggregator accepts those for provenance/history, but the final retained 2+2+2 evidence set should be rerun with the admitted learned row so all three current approaches are measured on the same references.
+Older exported receipts created before learned-model admission may still contain the explicit unavailable learned row. The aggregator accepts those for provenance/history, but they cannot satisfy current closure readiness. The final retained 2+2+2 evidence set must be rerun with successful current learned rows so all three approaches are measured on the same references.
 
 ## Per-reference procedure
 
@@ -40,8 +40,10 @@ Older exported receipts created before learned-model admission may still contain
 4. Run the quick benchmark first. Run the full bundled-catalog benchmark for the final retained receipt when browser performance permits.
 5. Confirm that retrieval, seeded CMA-ES and **SpiegeLib learned** each have a result row. The learned row should contain one candidate and no failure.
 6. Export the JSON receipt.
-7. Listen to the best retrieval, refined CMA and learned candidate separately from the numerical score. The aggregate panel currently records one listening assessment focused on retrieval-versus-CMA; use the notes field to record whether the learned candidate is perceptually better, similar, worse, or clearly outside its nine-control/fixed-base scope.
-8. Keep the reference file outside the repository unless its redistribution rights are explicit. The repository needs the receipt/hash and summary, not copyrighted source audio.
+7. Listen to the best retrieval and refined CMA candidates, then choose the structured **Retrieval / CMA listening** verdict.
+8. Listen to the learned candidate against the better local alternative and choose the structured **Learned listening** verdict: learned best, perceptually similar, clearly worse, or poor/out-of-scope.
+9. Use optional notes for concrete perceptual details such as attack, decay, brightness, pitch character, noise/transient mismatch or the fixed-base learned-model limitation.
+10. Keep the reference file outside the repository unless its redistribution rights are explicit. The repository needs the receipt/hash and summary, not copyrighted source audio.
 
 ## Required report fields
 
@@ -57,19 +59,42 @@ Each retained current receipt must contain:
 - retrieval-minus-evolutionary distance delta;
 - no embedded raw audio samples.
 
-The learned source/status should identify the admitted local SpiegeLib simple-FM MLP and its nine-OP2-controls + fixed-training-base limitation. A learned failure is evidence and must not be silently replaced by another approach.
+The learned source/status should identify the admitted local SpiegeLib simple-FM MLP and its nine-OP2-controls + fixed-training-base limitation. A learned failure is evidence and must not be silently replaced by another approach, but a receipt with no successful learned row cannot satisfy the current final-evidence closure gate.
+
+## Aggregate evidence requirements
+
+Import the retained JSON receipts into the in-app **Evidence set · aggregate real-reference receipts** panel, assign the three evidence classes and complete both structured listening fields.
+
+The aggregate remains privacy-safe and stores classifications, metrics, runtimes, listening verdicts and optional notes, not raw reference samples. It reports:
+
+- category counts for the 2+2+2 minimum set;
+- median/range for retrieval, CMA and successful learned distances;
+- median/range for retrieval, CMA and successful learned runtimes;
+- CMA metric-improvement count/rate;
+- retrieval/CMA listening outcomes and metric/listening disagreement count;
+- learned success/unavailable/failure counts;
+- learned listening counts for best, similar, worse and poor/out-of-scope outcomes.
+
+### Closure readiness
+
+The panel may report **Current three-way mixed evidence set complete** only when all of the following are true:
+
+1. at least two retained receipts exist in each of the three evidence classes;
+2. no retrieval/CMA listening assessment is `not-assessed`;
+3. no successful learned row has a `not-assessed` learned listening verdict;
+4. every retained receipt contains a successful current admitted learned row.
+
+Legacy blocked learned receipts remain parseable and can be inspected, but `currentThreeWayComplete` is false while any such receipt remains in the retained aggregate.
 
 ## Closing the PLAN item
-
-Before creating the final aggregate validation document, import the retained JSON receipts into the in-app **Evidence set · aggregate real-reference receipts** panel, assign the three evidence classes and listening assessments, add learned perceptual notes, and export the aggregate JSON. The panel must report **Minimum mixed evidence set complete**.
 
 Create a short aggregate validation document that lists every retained receipt and reports:
 
 - median and range of retrieval, evolutionary and learned distances;
 - median and range of retrieval, evolutionary and learned runtimes;
 - how often constrained CMA-ES improved the retrieval start;
-- cases where the metric improved but listening quality did not;
-- learned success/failure counts and cases where the learned metric disagrees with perceptual notes;
+- cases where the metric improved but retrieval/CMA listening quality did not;
+- learned listening distribution and cases where learned numerical distance disagrees with the perceptual verdict;
 - clear failure classes and known six-operator-FM / fixed-base learned-model limitations.
 
-The roadmap item can be closed when the mixed real-reference set has been run with the current three-way benchmark, listening assessments/notes are complete, and the aggregate evidence is committed. Exact reconstruction and learned-model superiority are not acceptance criteria.
+The roadmap item can be closed when the current three-way mixed real-reference set has been run, both structured listening assessments are complete, the aggregate reports closure ready, and the aggregate hash/summary evidence is committed. Exact reconstruction and learned-model superiority are not acceptance criteria.
