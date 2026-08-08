@@ -1,0 +1,106 @@
+name: Validate physical readiness tooling
+
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/validate-physical-readiness-tooling.yml']
+
+permissions:
+  contents: write
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm install --no-audit --no-fund
+
+      - name: Run validation stages
+        shell: bash
+        run: |
+          set +e
+          : > validation-stage-codes.txt
+          run_stage() {
+            name="$1"
+            shift
+            "$@" > "validation-$name.log" 2>&1
+            code=$?
+            cat "validation-$name.log"
+            echo "$name=$code" >> validation-stage-codes.txt
+          }
+          run_stage audit-virtual npm run audit:virtual-dx7
+          run_stage audit-research npm run audit:reconstruction-upstreams
+          run_stage typecheck npm run typecheck
+          run_stage lint npm run lint
+          run_stage focused-test npm test -- src/validation/hardwareEvidence.test.ts
+          run_stage full-test npm run test
+          run_stage build npm run build
+          exit 0
+
+      - name: Persist readiness receipt
+        if: always()
+        shell: python
+        run: |
+          from pathlib import Path
+          import os
+
+          codes = {}
+          p = Path('validation-stage-codes.txt')
+          if p.exists():
+              for line in p.read_text(encoding='utf-8').splitlines():
+                  if '=' in line:
+                      name, value = line.split('=', 1)
+                      try:
+                          codes[name] = int(value)
+                      except ValueError:
+                          codes[name] = 999
+          stages = ['audit-virtual', 'audit-research', 'typecheck', 'lint', 'focused-test', 'full-test', 'build']
+          ok = all(codes.get(stage) == 0 for stage in stages)
+          rows = ['| Stage | Exit |', '| --- | ---: |'] + [f'| {stage} | {codes.get(stage, "?")} |' for stage in stages]
+          logs = []
+          if not ok:
+              for stage in stages:
+                  if codes.get(stage) == 0:
+                      continue
+                  log = Path(f'validation-{stage}.log')
+                  text = log.read_text(encoding='utf-8', errors='replace') if log.exists() else 'log missing'
+                  logs.extend(['', f'## {stage} failure tail', '', '```text', text[-16000:], '```'])
+
+          Path('docs/validation/physical-readiness-tooling.md').write_text('\n'.join([
+              '# Physical validation readiness tooling',
+              '',
+              f"Source commit: `{os.environ['GITHUB_SHA']}`",
+              '',
+              f"Software acceptance: **{'SUCCESS' if ok else 'FAILED'}**",
+              '',
+              *rows,
+              '',
+              'The accepted repository state contains the FM-1-only in-app hardware evidence session, raw MIDI-monitor export, explicit FM-1 physical protocol sections A–F including sequencer discovery, and a separate stock Yamaha DX7 physical protocol for bulk reception, guarded parameters/functions and browser/interface resilience.',
+              '',
+              'The evidence recorder recognizes standard outgoing Yamaha 4,104-byte bank and 163-byte single-voice frames only as metadata. All FM-1 physical results, sequencer protocol semantics and all DX7 hardware results remain unresolved until real-device observations/captures are attached. No software validation in this receipt closes a hardware-dependent PLAN item.',
+              *logs,
+              '',
+          ]), encoding='utf-8')
+
+          Path('.github/workflows/validate-physical-readiness-tooling.yml').unlink(missing_ok=True)
+          Path('.github/workflows/validate-hardware-evidence-recorder-v2.yml').unlink(missing_ok=True)
+          for path in Path('.').glob('validation-*.log'):
+              path.unlink(missing_ok=True)
+          Path('validation-stage-codes.txt').unlink(missing_ok=True)
+
+      - name: Commit permanent validation evidence
+        if: always()
+        shell: bash
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add -A
+          git commit -m 'test(validation): record physical readiness tooling acceptance' || true
+          git pull --rebase origin main
+          git push origin HEAD:main
