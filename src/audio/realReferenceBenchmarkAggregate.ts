@@ -18,10 +18,19 @@ export type RealReferenceListeningAssessment =
   | 'both-poor'
   | 'not-assessed'
 
+export type RealReferenceLearnedListeningAssessment =
+  | 'learned-better'
+  | 'learned-similar'
+  | 'learned-worse'
+  | 'learned-poor'
+  | 'not-assessed'
+  | 'unavailable'
+
 export interface RealReferenceEvidenceInput {
   readonly report: RealReferenceReconstructionBenchmarkReport
   readonly category: RealReferenceEvidenceCategory
   readonly listeningAssessment: RealReferenceListeningAssessment
+  readonly learnedListeningAssessment: RealReferenceLearnedListeningAssessment
   readonly notes?: string
 }
 
@@ -38,6 +47,7 @@ export interface RealReferenceBenchmarkAggregate {
   readonly receiptCount: number
   readonly categoryCounts: Readonly<Record<RealReferenceEvidenceCategory, number>>
   readonly listeningCounts: Readonly<Record<RealReferenceListeningAssessment, number>>
+  readonly learnedListeningCounts: Readonly<Record<RealReferenceLearnedListeningAssessment, number>>
   readonly retrievalDistance: RealReferenceMetricStats
   readonly evolutionaryDistance: RealReferenceMetricStats
   readonly learnedDistance: RealReferenceMetricStats | null
@@ -54,6 +64,8 @@ export interface RealReferenceBenchmarkAggregate {
   readonly closureReadiness: {
     readonly mixedSetComplete: boolean
     readonly listeningAssessmentsComplete: boolean
+    readonly learnedListeningAssessmentsComplete: boolean
+    readonly currentThreeWayComplete: boolean
     readonly readyForAggregateEvidence: boolean
     readonly missing: readonly string[]
   }
@@ -62,6 +74,7 @@ export interface RealReferenceBenchmarkAggregate {
     readonly filename: string
     readonly category: RealReferenceEvidenceCategory
     readonly listeningAssessment: RealReferenceListeningAssessment
+    readonly learnedListeningAssessment: RealReferenceLearnedListeningAssessment
     readonly notes: string | null
     readonly retrievalDistance: number
     readonly evolutionaryDistance: number
@@ -87,6 +100,15 @@ export const REAL_REFERENCE_LISTENING_ASSESSMENTS: readonly RealReferenceListeni
   'similar',
   'both-poor',
   'not-assessed',
+]
+
+export const REAL_REFERENCE_LEARNED_LISTENING_ASSESSMENTS: readonly RealReferenceLearnedListeningAssessment[] = [
+  'learned-better',
+  'learned-similar',
+  'learned-worse',
+  'learned-poor',
+  'not-assessed',
+  'unavailable',
 ]
 
 function finiteNonNegative(value: unknown, label: string): number {
@@ -166,6 +188,14 @@ export function aggregateRealReferenceBenchmarkEvidence(
     'both-poor': 0,
     'not-assessed': 0,
   }
+  const learnedListeningCounts: Record<RealReferenceLearnedListeningAssessment, number> = {
+    'learned-better': 0,
+    'learned-similar': 0,
+    'learned-worse': 0,
+    'learned-poor': 0,
+    'not-assessed': 0,
+    unavailable: 0,
+  }
   const receipts: RealReferenceBenchmarkAggregate['receipts'][number][] = []
   const retrievalDistances: number[] = []
   const evolutionaryDistances: number[] = []
@@ -184,6 +214,7 @@ export function aggregateRealReferenceBenchmarkEvidence(
     assertReport(input.report)
     if (!REAL_REFERENCE_EVIDENCE_CATEGORIES.includes(input.category)) throw new Error(`Unsupported evidence category: ${String(input.category)}.`)
     if (!REAL_REFERENCE_LISTENING_ASSESSMENTS.includes(input.listeningAssessment)) throw new Error(`Unsupported listening assessment: ${String(input.listeningAssessment)}.`)
+    if (!REAL_REFERENCE_LEARNED_LISTENING_ASSESSMENTS.includes(input.learnedListeningAssessment)) throw new Error(`Unsupported learned listening assessment: ${String(input.learnedListeningAssessment)}.`)
     const hash = input.report.reference.contentSha256.toLowerCase()
     if (seenHashes.has(hash)) throw new Error(`Duplicate real-reference SHA-256: ${hash}.`)
     seenHashes.add(hash)
@@ -201,14 +232,17 @@ export function aggregateRealReferenceBenchmarkEvidence(
     let learnedDistance: number | null = null
     let learnedRuntimeMs: number | null = null
     if (learned.failure === null) {
+      if (input.learnedListeningAssessment === 'unavailable') throw new Error(`${input.report.reference.filename} has a successful learned row but is marked unavailable for listening.`)
       learnedDistance = finiteNonNegative(learned.bestDistance, 'learned distance')
       learnedRuntimeMs = finiteNonNegative(learned.runtimeMs, 'learned runtime')
       learnedDistances.push(learnedDistance)
       learnedRuntimes.push(learnedRuntimeMs)
       learnedInitializationSuccessCount += 1
     } else if (learned.failure === REAL_REFERENCE_LEARNED_BLOCK || input.report.learnedStatus === REAL_REFERENCE_LEARNED_BLOCK) {
+      if (input.learnedListeningAssessment !== 'unavailable') throw new Error(`${input.report.reference.filename} has no admitted learned result and must use the unavailable learned listening status.`)
       learnedInitializationUnavailableCount += 1
     } else {
+      if (input.learnedListeningAssessment !== 'unavailable') throw new Error(`${input.report.reference.filename} has a failed learned row and must use the unavailable learned listening status.`)
       learnedInitializationFailedCount += 1
     }
 
@@ -218,6 +252,7 @@ export function aggregateRealReferenceBenchmarkEvidence(
     evolutionaryRuntimes.push(evolutionaryRuntimeMs)
     categoryCounts[input.category] += 1
     listeningCounts[input.listeningAssessment] += 1
+    learnedListeningCounts[input.learnedListeningAssessment] += 1
     if (metricImproved) cmaMetricImprovedCount += 1
     if (input.listeningAssessment === 'cma-better') cmaListeningBetterCount += 1
     if (metricImproved && input.listeningAssessment !== 'cma-better') metricImprovedButListeningNotBetterCount += 1
@@ -227,6 +262,7 @@ export function aggregateRealReferenceBenchmarkEvidence(
       filename: input.report.reference.filename,
       category: input.category,
       listeningAssessment: input.listeningAssessment,
+      learnedListeningAssessment: input.learnedListeningAssessment,
       notes: input.notes?.trim() || null,
       retrievalDistance,
       evolutionaryDistance,
@@ -246,7 +282,11 @@ export function aggregateRealReferenceBenchmarkEvidence(
   }
   const mixedSetComplete = REAL_REFERENCE_EVIDENCE_CATEGORIES.every((category) => categoryCounts[category] >= 2)
   const listeningAssessmentsComplete = listeningCounts['not-assessed'] === 0
-  if (!listeningAssessmentsComplete) missing.push(`${listeningCounts['not-assessed']} listening assessment${listeningCounts['not-assessed'] === 1 ? '' : 's'} still missing`)
+  if (!listeningAssessmentsComplete) missing.push(`${listeningCounts['not-assessed']} retrieval/CMA listening assessment${listeningCounts['not-assessed'] === 1 ? '' : 's'} still missing`)
+  const learnedListeningAssessmentsComplete = learnedListeningCounts['not-assessed'] === 0
+  if (!learnedListeningAssessmentsComplete) missing.push(`${learnedListeningCounts['not-assessed']} learned listening assessment${learnedListeningCounts['not-assessed'] === 1 ? '' : 's'} still missing`)
+  const currentThreeWayComplete = learnedInitializationSuccessCount === receipts.length
+  if (!currentThreeWayComplete) missing.push(`${receipts.length - learnedInitializationSuccessCount} receipt${receipts.length - learnedInitializationSuccessCount === 1 ? '' : 's'} must be rerun with the admitted learned row`)
 
   return {
     schema: REAL_REFERENCE_BENCHMARK_AGGREGATE_SCHEMA,
@@ -254,6 +294,7 @@ export function aggregateRealReferenceBenchmarkEvidence(
     receiptCount: receipts.length,
     categoryCounts,
     listeningCounts,
+    learnedListeningCounts,
     retrievalDistance: metricStats(retrievalDistances, 'retrieval distance'),
     evolutionaryDistance: metricStats(evolutionaryDistances, 'evolutionary distance'),
     learnedDistance: metricStatsOrNull(learnedDistances, 'learned distance'),
@@ -270,10 +311,12 @@ export function aggregateRealReferenceBenchmarkEvidence(
     closureReadiness: {
       mixedSetComplete,
       listeningAssessmentsComplete,
-      readyForAggregateEvidence: mixedSetComplete && listeningAssessmentsComplete,
+      learnedListeningAssessmentsComplete,
+      currentThreeWayComplete,
+      readyForAggregateEvidence: mixedSetComplete && listeningAssessmentsComplete && learnedListeningAssessmentsComplete && currentThreeWayComplete,
       missing,
     },
     receipts,
-    note: 'Aggregate contains benchmark metadata, metrics, classifications and listening assessments only. Learned statistics include successful learned rows only. It does not contain reference audio and does not establish exact patch identity or physical FM-1 equivalence.',
+    note: 'Aggregate contains benchmark metadata, metrics, classifications and structured listening assessments only. Legacy blocked learned receipts remain parseable but cannot satisfy current three-way closure readiness. It does not contain reference audio and does not establish exact patch identity or physical FM-1 equivalence.',
   }
 }
