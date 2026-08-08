@@ -25,7 +25,7 @@ const PROBE: PresetRenderProbe = {
 }
 
 function withTargetFields(voice: Dx7Voice, outputLevel: number, feedback: number): Dx7Voice {
-  const operators = [...voice.operators] as Dx7Voice['operators']
+  const operators = [...voice.operators] as [...Dx7Voice['operators']]
   operators[0] = { ...operators[0], outputLevel }
   return { ...voice, operators, feedback }
 }

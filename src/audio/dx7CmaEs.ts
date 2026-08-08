@@ -272,7 +272,12 @@ export async function refineDx7VoiceWithCmaEs(
         vector[dimension] = clamp((oldMean[dimension] ?? 0.5) + sigma * step, 0, 1)
       }
       const voice = decodeDx7EvolutionVector(initialVoice, parameters, vector)
-      const score = await objective(voice, { generation, candidateIndex, evaluation: evaluations, signal: options.signal })
+      const score = await objective(voice, {
+        generation,
+        candidateIndex,
+        evaluation: evaluations,
+        ...(options.signal === undefined ? {} : { signal: options.signal }),
+      })
       evaluations += 1
       if (!Number.isFinite(score)) throw new Error('DX7 CMA-ES objective must return a finite score.')
       candidates.push({ vector, normalizedStep, voice, score })
