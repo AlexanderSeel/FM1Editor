@@ -46,6 +46,9 @@ Each retained receipt must contain:
 
 ## Closing the PLAN item
 
+Before creating the final aggregate validation document, import the retained JSON receipts into the in-app **Evidence set · aggregate real-reference receipts** panel, assign the three evidence classes and listening assessments, and export the aggregate JSON. The panel must report **Minimum mixed evidence set complete**.
+
+
 Create a short aggregate validation document that lists every retained receipt and reports:
 
 - median and range of retrieval and evolutionary distances;
