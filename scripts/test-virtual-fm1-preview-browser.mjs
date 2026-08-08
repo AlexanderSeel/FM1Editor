@@ -161,7 +161,7 @@ try {
 
   await clickButton(cdp, 'Voice')
   await ensureSectionOpen(cdp, 'Virtual FM-1 preview')
-  await waitForExpression(cdp, `document.body.textContent.includes('Reference A/B · offline render') && document.body.textContent.includes('Virtual FM-1 render diagnostics')`, 15_000)
+  await waitForExpression(cdp, `Boolean(document.querySelector('[aria-label="Virtual FM-1 A/B and WAV rendering"]') && document.querySelector('[aria-label="Virtual FM-1 render diagnostics"]'))`, 15_000)
   await clickButton(cdp, 'Enable local audio')
   await waitForExpression(cdp, `document.body.textContent.includes('LOCAL AUDIO READY') && window.__fm1PreviewCompressors.length >= 1`, 20_000)
   await evaluate(cdp, `(() => { const limiter=window.__fm1PreviewCompressors[0]; const analyser=limiter.context.createAnalyser(); analyser.fftSize=2048; analyser.smoothingTimeConstant=0; const sink=limiter.context.createGain(); sink.gain.value=0; limiter.connect(analyser); analyser.connect(sink); sink.connect(limiter.context.destination); window.__fm1PreviewLimiterAnalyser=analyser; return true; })()`)
