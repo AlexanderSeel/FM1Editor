@@ -1,0 +1,177 @@
+name: Validate corrected same-source software and browser gate
+
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/validate-current-software-browser-gate-v4.yml']
+
+permissions:
+  contents: write
+
+jobs:
+  gate:
+    runs-on: windows-latest
+    timeout-minutes: 70
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm install --no-audit --no-fund
+
+      - name: Run software validation stages
+        shell: pwsh
+        run: |
+          $results = [ordered]@{}
+          function Stage([string]$name, [scriptblock]$command) {
+            Write-Host "=== $name ==="
+            & $command
+            $results[$name] = $LASTEXITCODE
+          }
+          Stage 'auditVirtual' { npm run audit:virtual-dx7 }
+          Stage 'auditResearch' { npm run audit:reconstruction-upstreams }
+          Stage 'typecheck' { npm run typecheck }
+          Stage 'lint' { npm run lint }
+          Stage 'tests' { npm run test }
+          Stage 'build' { npm run build }
+          Stage 'smokeSyntax' { node --check scripts/smoke-target-responsive.mjs }
+          $results | ConvertTo-Json | Set-Content -Encoding utf8 software-gate.json
+          exit 0
+
+      - name: Execute Chrome and Edge target matrices
+        shell: pwsh
+        run: |
+          Remove-Item responsive-*.json -Force -ErrorAction SilentlyContinue
+          $programFilesX86 = ${env:ProgramFiles(x86)}
+          $chrome = @(
+            (Join-Path $env:PROGRAMFILES 'Google\Chrome\Application\chrome.exe'),
+            (Join-Path $programFilesX86 'Google\Chrome\Application\chrome.exe')
+          ) | Where-Object { $_ -and (Test-Path $_) } | Select-Object -First 1
+          $edge = @(
+            (Join-Path $env:PROGRAMFILES 'Microsoft\Edge\Application\msedge.exe'),
+            (Join-Path $programFilesX86 'Microsoft\Edge\Application\msedge.exe')
+          ) | Where-Object { $_ -and (Test-Path $_) } | Select-Object -First 1
+          if (-not $chrome) { throw 'Chrome not found on windows-latest image.' }
+          if (-not $edge) { throw 'Edge not found on windows-latest image.' }
+
+          function Run-Matrix([string]$exe, [string]$browser, [string]$target) {
+            $result = "responsive-$target-$browser.json"
+            $code = 1
+            for ($attempt = 1; $attempt -le 2; $attempt++) {
+              Remove-Item $result -Force -ErrorAction SilentlyContinue
+              node scripts/smoke-target-responsive.mjs --browser-executable $exe --browser-name $browser --target $target --result $result
+              $code = $LASTEXITCODE
+              if ($code -eq 0) { break }
+              Start-Sleep -Seconds 1
+            }
+            if (-not (Test-Path $result)) {
+              @{ ok = $false; browserName = $browser; target = $target; error = "runner exited $code without result" } |
+                ConvertTo-Json | Set-Content -Encoding utf8 $result
+            }
+          }
+
+          Run-Matrix $chrome 'chrome' 'fm1'
+          Run-Matrix $chrome 'chrome' 'dx7'
+          Run-Matrix $edge 'edge' 'fm1'
+          Run-Matrix $edge 'edge' 'dx7'
+          exit 0
+
+      - name: Persist gate evidence and prune completed PLAN item
+        if: always()
+        shell: pwsh
+        run: |
+          @'
+          import json
+          import os
+          from pathlib import Path
+
+          def read_json(path, fallback):
+              p = Path(path)
+              if not p.exists():
+                  return fallback
+              try:
+                  return json.loads(p.read_text(encoding='utf-8-sig'))
+              except Exception as exc:
+                  return {**fallback, 'error': f'invalid json: {exc}'}
+
+          software = read_json('software-gate.json', {})
+          stages = ['auditVirtual', 'auditResearch', 'typecheck', 'lint', 'tests', 'build', 'smokeSyntax']
+          software_ok = all(software.get(stage) == 0 for stage in stages)
+          matrices = {
+              (browser, target): read_json(
+                  f'responsive-{target}-{browser}.json',
+                  {'ok': False, 'browserName': browser, 'target': target, 'error': 'result missing'},
+              )
+              for browser in ('chrome', 'edge')
+              for target in ('fm1', 'dx7')
+          }
+          browser_ok = all(bool(result.get('ok')) for result in matrices.values())
+          ok = software_ok and browser_ok
+
+          rows = ['| Software stage | Exit |', '| --- | ---: |']
+          rows.extend(f'| {stage} | {software.get(stage, "?")} |' for stage in stages)
+          matrix_rows = [
+              '| Browser | Target | Product | Desktop | Narrow | Mobile touch | MIDI requests | Result |',
+              '| --- | --- | --- | --- | --- | --- | ---: | --- |',
+          ]
+          for browser, target in [('chrome', 'fm1'), ('chrome', 'dx7'), ('edge', 'fm1'), ('edge', 'dx7')]:
+              value = matrices[(browser, target)]
+              if not value.get('ok'):
+                  matrix_rows.append(
+                      f'| {browser} | {target.upper()} | FAILED | — | — | — | — | {value.get("error", "unknown")} |'
+                  )
+                  continue
+              names = {item.get('viewport') for item in value.get('matrix', [])}
+              matrix_rows.append(
+                  f'| {browser} | {target.upper()} | {value.get("browserProduct")} | '
+                  f'{"PASS" if "desktop" in names else "MISS"} | '
+                  f'{"PASS" if "desktop-narrow" in names else "MISS"} | '
+                  f'{"PASS" if "mobile-touch" in names else "MISS"} | '
+                  f'{value.get("midiRequests", 0)} | PASS |'
+              )
+
+          Path('docs/validation/current-software-browser-gate.md').write_text(
+              '\n'.join([
+                  '# Current same-source software and responsive browser gate',
+                  '',
+                  f"Source commit: `{os.environ['GITHUB_SHA']}`",
+                  '',
+                  f"Overall gate: **{'SUCCESS' if ok else 'FAILED'}**",
+                  '',
+                  *rows,
+                  '',
+                  *matrix_rows,
+                  '',
+                  'All software checks and browser matrices ran from the same Windows checkout/build. '
+                  'The responsive matrix covers 1440×900, 1024×768 and 390×844 touch emulation for '
+                  'both FM-1 and DX7 target modes in branded Chrome and Edge. This is software/layout/browser '
+                  'evidence only and does not validate physical MIDI/audio hardware.',
+                  '',
+              ]),
+              encoding='utf-8',
+          )
+
+          if ok:
+              plan = Path('PLAN.md')
+              prefix = '- [ ] Execute typecheck, lint, the full test suite, production build and the permanent Chrome/Edge FM-1 + DX7 responsive matrices successfully on the same source commit.'
+              lines = plan.read_text(encoding='utf-8').splitlines()
+              plan.write_text('\n'.join(line for line in lines if not line.startswith(prefix)).rstrip() + '\n', encoding='utf-8')
+
+          for path in Path('.').glob('responsive-*.json'):
+              path.unlink(missing_ok=True)
+          Path('software-gate.json').unlink(missing_ok=True)
+          Path('.github/workflows/validate-current-software-browser-gate-v4.yml').unlink(missing_ok=True)
+          '@ | python
+
+      - name: Commit permanent receipt
+        if: always()
+        shell: bash
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add -A
+          git commit -m 'test(browser): record stable same-source responsive gate' || true
+          git pull --rebase origin main
+          git push origin HEAD:main
