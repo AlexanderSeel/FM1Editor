@@ -136,7 +136,7 @@ try {
   if(titleAfterSearch!==initialVoice) throw new Error(`Retrieval auto-loaded voice: ${initialVoice} -> ${titleAfterSearch}`)
 
   await clickButton(cdp,'Refine top',root)
-  await waitForExpression(cdp,`${root}?.querySelector('[aria-label="CMA-ES refinement progress"]')||${root}?.querySelector('[aria-label="CMA-ES refined candidates"]')`,30_000)
+  await waitForExpression(cdp,`Boolean(${root}?.querySelector('[aria-label="CMA-ES refinement progress"]')||${root}?.querySelector('[aria-label="CMA-ES refined candidates"]'))`,30_000)
   await waitForExpression(cdp,`${root}?.querySelector('[aria-label="CMA-ES refined candidates"]')?.querySelectorAll('article').length>=2`,360_000)
   const refinedCount=await evaluate(cdp,`${root}.querySelector('[aria-label="CMA-ES refined candidates"]').querySelectorAll('article').length`)
   const titleAfterRefine=await evaluate(cdp,`document.querySelector('.fm1-lcd-title')?.textContent?.trim()??''`)

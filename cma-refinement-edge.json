@@ -1,5 +1,5 @@
 {
   "ok": false,
   "browserName": "edge",
-  "error": "Runtime.evaluate: Object reference chain is too long"
+  "error": "Unable to read refined distance pairs: []"
 }
