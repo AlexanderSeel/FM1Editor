@@ -1,0 +1,366 @@
+name: Complete SpiegeLib learned roadmap atomically
+
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/complete-spiegelib-learned-roadmap.yml']
+
+permissions:
+  contents: write
+
+jobs:
+  complete:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Generate independent Librosa 0.7.2 oracle
+        id: oracle
+        shell: bash
+        run: |
+          set +e
+          status=SUCCESS
+          rm -rf librosa-ref
+          mkdir -p librosa-ref/stubs
+          cat > librosa-ref/stubs/soundfile.py <<'PY'
+          class SoundFileRuntimeError(RuntimeError): pass
+          class SoundFile:
+              def __init__(self,*args,**kwargs): raise SoundFileRuntimeError('native audio IO intentionally unavailable')
+          def read(*args,**kwargs): raise SoundFileRuntimeError('native audio IO intentionally unavailable')
+          def write(*args,**kwargs): raise SoundFileRuntimeError('native audio IO intentionally unavailable')
+          PY
+          cat > librosa-ref/stubs/resampy.py <<'PY'
+          class _Filters:
+              @staticmethod
+              def get_filter(name): return (None,None,1.0)
+          filters=_Filters()
+          def resample(*args,**kwargs): raise RuntimeError('resampling intentionally unavailable in 44.1 kHz oracle')
+          PY
+          cat > librosa-ref/Dockerfile <<'DOCKER'
+          FROM python:3.7.7-slim-buster
+          ENV NUMBA_DISABLE_JIT=1
+          ENV PYTHONPATH=/opt/stubs
+          RUN python -m pip install --no-cache-dir --disable-pip-version-check \
+            numpy==1.18.5 scipy==1.4.1 llvmlite==0.31.0 numba==0.48.0 joblib==0.14.1 \
+            scikit-learn==0.22.2.post1 audioread==2.1.8 librosa==0.7.2
+          COPY stubs /opt/stubs
+          COPY generate.py /opt/generate.py
+          ENTRYPOINT ["python","/opt/generate.py"]
+          DOCKER
+          cat > librosa-ref/generate.py <<'PY'
+          import hashlib,json,librosa,numpy as np,scipy
+          sr=44100
+          n=np.arange(sr,dtype=np.float64);t=n/sr
+          e=0.55+0.35*(n/(sr-1))
+          y=e*(0.37*np.sin(2*np.pi*220*t)+0.23*np.sin(2*np.pi*880*t+0.17)+0.11*np.cos(2*np.pi*1760*t+0.31))
+          y[0]+=0.19;y[1]-=0.07;y[-2]+=0.09;y[-1]-=0.13;y=y.astype(np.float32)
+          mfcc=librosa.feature.mfcc(y=y,sr=sr,n_mfcc=13,n_fft=2048,hop_length=1024)
+          if mfcc.shape!=(13,44): raise SystemExit('unexpected shape %r'%(mfcc.shape,))
+          flat=mfcc.T.astype(np.float32).reshape(-1)
+          print(json.dumps({'schema':'fm1-editor.spiegelib-mfcc-librosa-0.7.2-reference.v1','environment':{'python':'3.7.7','numpy':np.__version__,'scipy':scipy.__version__,'librosa':librosa.__version__},'signal':{'sampleRate':sr,'sampleCount':int(y.size),'formula':'deterministic multi-sine/envelope/edge-impulse fixture'},'featureShape':[44,13],'flatFloat32Sha256':hashlib.sha256(flat.tobytes()).hexdigest(),'values':[float(v) for v in flat]},separators=(',',':')))
+          PY
+          docker build -q -t fm1-librosa072-final:local librosa-ref > oracle-build.log 2>&1 || status=FAILED
+          if test "$status" = SUCCESS; then
+            docker run --rm --network none --read-only --cap-drop ALL --memory 1g --cpus 2 --pids-limit 128 \
+              --tmpfs /tmp:rw,noexec,nosuid,size=64m fm1-librosa072-final:local > oracle-reference.json 2>oracle-run.log || status=FAILED
+          fi
+          if test "$status" = SUCCESS; then python -m json.tool oracle-reference.json >/dev/null 2>oracle-json.log || status=FAILED; fi
+          echo "status=$status" > oracle-status.txt
+          echo "status=$status" >> "$GITHUB_OUTPUT"
+          exit 0
+
+      - name: Install dependencies and create permanent oracle test
+        if: steps.oracle.outputs.status == 'SUCCESS'
+        id: mfcc
+        shell: bash
+        run: |
+          set +e
+          status=SUCCESS
+          npm install --no-audit --no-fund > final-install.log 2>&1 || status=FAILED
+          if test "$status" = SUCCESS; then
+            mkdir -p src/audio/data
+            cp oracle-reference.json src/audio/data/spiegelib-mfcc-librosa-0.7.2-reference.json
+            cat > src/audio/spiegelibSimpleFmMfcc072.test.ts <<'TS'
+          import { describe, expect, it } from 'vitest'
+          import reference from './data/spiegelib-mfcc-librosa-0.7.2-reference.json'
+          import { extractSpiegelibSimpleFmRawMfcc072 } from './spiegelibSimpleFmMfcc072'
+
+          function fixture(): Float32Array {
+            const sr = 44_100
+            const out = new Float32Array(sr)
+            for (let i = 0; i < out.length; i += 1) {
+              const t = i / sr
+              const envelope = 0.55 + 0.35 * (i / (sr - 1))
+              out[i] = envelope * (
+                0.37 * Math.sin(2 * Math.PI * 220 * t)
+                + 0.23 * Math.sin(2 * Math.PI * 880 * t + 0.17)
+                + 0.11 * Math.cos(2 * Math.PI * 1760 * t + 0.31)
+              )
+            }
+            out[0] = (out[0] ?? 0) + 0.19
+            out[1] = (out[1] ?? 0) - 0.07
+            out[out.length - 2] = (out[out.length - 2] ?? 0) + 0.09
+            out[out.length - 1] = (out[out.length - 1] ?? 0) - 0.13
+            return out
+          }
+
+          describe('SpiegeLib exact Librosa 0.7.2 MFCC compatibility', () => {
+            it('matches all 572 historical coefficients', () => {
+              expect(reference.environment).toMatchObject({ python: '3.7.7', librosa: '0.7.2' })
+              const actual = extractSpiegelibSimpleFmRawMfcc072(fixture())
+              expect(actual).toHaveLength(reference.values.length)
+              let maxError = 0
+              let squared = 0
+              for (let index = 0; index < actual.length; index += 1) {
+                const error = Math.abs((actual[index] ?? 0) - (reference.values[index] ?? 0))
+                maxError = Math.max(maxError, error)
+                squared += error * error
+              }
+              const rms = Math.sqrt(squared / actual.length)
+              console.log(`MFCC072 compatibility maxError=${maxError} rms=${rms}`)
+              expect(maxError).toBeLessThan(0.01)
+              expect(rms).toBeLessThan(0.002)
+            })
+          })
+          TS
+            npx vitest run src/audio/spiegelibSimpleFmMfcc072.test.ts > final-mfcc.log 2>&1 || status=FAILED
+          fi
+          if test -f final-mfcc.log; then cat final-mfcc.log; fi
+          echo "status=$status" > mfcc-final-status.txt
+          echo "status=$status" >> "$GITHUB_OUTPUT"
+          exit 0
+
+      - name: Patch admitted benchmark, UI, docs and roadmap
+        if: steps.oracle.outputs.status == 'SUCCESS' && steps.mfcc.outputs.status == 'SUCCESS'
+        id: patch
+        shell: python
+        run: |
+          from pathlib import Path
+          import re
+
+          # Benchmark: always converge to the admitted, dynamically imported Candidate072 row.
+          path=Path('src/audio/realReferenceReconstructionBenchmark.ts')
+          text=path.read_text(encoding='utf-8')
+          text=text.replace("import { createSpiegelibSimpleFmCandidate072 } from './spiegelibSimpleFmCandidate072'\n",'')
+          old="export const REAL_REFERENCE_LEARNED_BLOCK = 'No license-admitted learned initializer/checkpoint is available yet.' as const"
+          status="export const REAL_REFERENCE_LEARNED_STATUS = 'SpiegeLib simple-FM MLP · MIT model · CC BY 4.0 scaler · Librosa 0.7.2 · nine historical Dexed OP2 controls + fixed base' as const"
+          if old in text: text=text.replace(old,status)
+          elif 'REAL_REFERENCE_LEARNED_STATUS' not in text: raise SystemExit('benchmark learned constant anchor missing')
+          text=text.replace('readonly learnedStatus: typeof REAL_REFERENCE_LEARNED_BLOCK','readonly learnedStatus: typeof REAL_REFERENCE_LEARNED_STATUS')
+          pattern=re.compile(r"  const learned: ReconstructionApproach<null> = \{.*?\n  \}\n\n  const objective",re.S)
+          replacement="""  const learned: ReconstructionApproach<null> = {
+    id: 'learned-initialization',
+    label: 'SpiegeLib simple-FM MLP',
+    async run() {
+      const { createSpiegelibSimpleFmCandidate072 } = await import('./spiegelibSimpleFmCandidate072')
+      const candidate = createSpiegelibSimpleFmCandidate072(reference.samples, reference.sampleRate, 'SPGL MLP')
+      return [{
+        voice: candidate.voice,
+        sourceInitialization: 'SpiegeLib simple-FM MLP · nine OP2 controls · fixed base · Librosa 0.7.2',
+      }]
+    },
+  }
+
+  const objective"""
+          text,count=pattern.subn(replacement,text,count=1)
+          if count != 1: raise SystemExit(f'could not converge learned approach block: {count}')
+          text=text.replace('learnedStatus: REAL_REFERENCE_LEARNED_BLOCK','learnedStatus: REAL_REFERENCE_LEARNED_STATUS')
+          text=text.replace('User-declared isolated reference; audio remains local and is not embedded in this report. Similarity metrics are comparative estimates, not proof of patch identity or exact FM-1 hardware equivalence.','User-declared isolated reference; audio remains local and is not embedded in this report. The learned row uses the admitted local SpiegeLib simple-FM MLP and predicts only nine historical Dexed OP2 controls on a pinned fixed base. Similarity metrics are comparative estimates, not proof of patch identity or exact FM-1 hardware equivalence.')
+          if 'REAL_REFERENCE_LEARNED_BLOCK' in text: raise SystemExit('obsolete learned block remains')
+          path.write_text(text,encoding='utf-8')
+
+          # Existing benchmark tests: replace failure expectations with active learned-row expectations.
+          test_path=Path('src/audio/realReferenceReconstructionBenchmark.test.ts')
+          test=test_path.read_text(encoding='utf-8').replace('REAL_REFERENCE_LEARNED_BLOCK','REAL_REFERENCE_LEARNED_STATUS')
+          lines=[]
+          for line in test.splitlines():
+              if 'expect(learned' in line and ('failure' in line or 'candidateCount' in line): continue
+              if 'expect(report.learnedStatus)' in line: continue
+              lines.append(line)
+          test='\n'.join(lines)+'\n'
+          marker="const learned = report.comparison.results.find((result) => result.approachId === 'learned-initialization')"
+          if marker in test:
+              test=test.replace(marker,marker+"\n    expect(learned?.failure).toBeNull()\n    expect(learned?.candidateCount).toBe(1)\n    expect(report.learnedStatus).toBe(REAL_REFERENCE_LEARNED_STATUS)")
+          test_path.write_text(test,encoding='utf-8')
+
+          ui_path=Path('src/components/ReconstructionBenchmarkPanel.tsx')
+          ui=ui_path.read_text(encoding='utf-8')
+          ui=ui.replace('Learned initialization remains unavailable until a separately license-admitted implementation/checkpoint exists.','Learned initialization runs locally with the admitted SpiegeLib simple-FM MLP: nine historical Dexed OP2 controls on a pinned fixed base, using Librosa 0.7.2-compatible MFCC preprocessing.')
+          ui=ui.replace('Learned initialization remains explicitly unavailable.','Learned initialization uses the admitted local SpiegeLib simple-FM MLP (nine OP2 controls + fixed base).')
+          ui=re.sub(r'Learned initialization remains unavailable[^<\n]*','Learned initialization runs locally with the admitted SpiegeLib simple-FM MLP (nine OP2 controls + fixed base).',ui)
+          ui_path.write_text(ui,encoding='utf-8')
+
+          protocol_path=Path('docs/validation/real-reference-benchmark-protocol.md')
+          protocol=protocol_path.read_text(encoding='utf-8')
+          protocol=protocol.replace('learned initialization remains explicitly unavailable until a separately license-admitted implementation/checkpoint exists','learned initialization uses the admitted local SpiegeLib simple-FM MLP (nine historical Dexed OP2 controls on a pinned fixed base)')
+          protocol=protocol.replace('learned initialization remains unavailable','learned initialization uses the admitted local SpiegeLib simple-FM MLP with its documented nine-control/fixed-base limitation')
+          if 'SpiegeLib simple-FM MLP' not in protocol:
+              protocol += '\n\n### Learned row scope\n\nThe learned row uses the admitted local SpiegeLib simple-FM MLP with Librosa 0.7.2-compatible preprocessing. It predicts nine historical Dexed OP2 controls on the pinned simple-FM fixed base; it is not a full 155-parameter learned DX7 model.\n'
+          protocol_path.write_text(protocol,encoding='utf-8')
+
+          admission_path=Path('docs/research/learned-initializer-admission.md')
+          admission=admission_path.read_text(encoding='utf-8')
+          admission=admission.replace('Decision: **implementation-ready candidate; benchmark admission pending the independent Librosa numerical receipt**.','Decision: **admitted for the local benchmark as SpiegeLib simple-FM MLP (nine historical Dexed OP2 controls + pinned fixed base)**.')
+          admission=admission.replace("Do not change the benchmark's `learned-initialization` row from explicit unavailable to active until that receipt is `SUCCESS`.",'The `learned-initialization` benchmark row is active only through the version-pinned local Candidate072 path validated by the permanent Librosa 0.7.2 oracle receipt.')
+          admission=admission.replace('The benchmark learned row remains disabled until the independent Librosa 0.7.2 compatibility test validates the TypeScript raw-MFCC path numerically.','The independent Librosa 0.7.2 compatibility test validates the TypeScript raw-MFCC path numerically, and the benchmark learned row is enabled through the admitted Candidate072 path.')
+          admission=admission.replace('If that gate passes, the row may be enabled as **SpiegeLib simple-FM MLP (nine OP2 controls + fixed base)** and must retain that limited scope in reports/UI.','The row is enabled as **SpiegeLib simple-FM MLP (nine OP2 controls + fixed base)** and retains that limited scope in reports/UI.')
+          admission_path.write_text(admission,encoding='utf-8')
+
+          research_path=Path('docs/research/audio-to-fm-and-virtual-synth.md')
+          research=research_path.read_text(encoding='utf-8')
+          if '## Admitted local learned initializer' not in research:
+              research += '''\n\n## Admitted local learned initializer\n\nThe real-reference benchmark includes the pinned SpiegeLib simple-FM MLP as a third active local approach. Its MIT H5 weights are converted to browser-safe tensors; its CC BY 4.0 MFCC scaler is pinned from Zenodo DOI `10.5281/zenodo.3722784`; and a Python 3.7.7 + Librosa 0.7.2 oracle validates the dedicated 572-value TypeScript preprocessing path. Historical training/prediction order is `[46,47,48,50,51,52,55,56,57]`.\n\nThe model predicts only nine OP2 controls and merges them into the pinned simple-FM fixed base. It is a constrained learned initialization candidate, not a full 155-parameter DX7 predictor or physical FM-1 equivalence claim. Inference is local and dynamically loaded only when the benchmark runs.\n'''
+          research_path.write_text(research,encoding='utf-8')
+
+          plan_path=Path('PLAN.md')
+          plan=plan_path.read_text(encoding='utf-8')
+          plan='\n'.join(line for line in plan.splitlines() if not (line.lstrip().startswith('- [ ]') and 'SpiegeLib' in line and ('Reproduce and pin' in line or 'pre-trained model' in line)))+'\n'
+          plan=plan.replace('Synthetic ground-truth comparison, real-reference receipts and aggregate validation are implemented; learned initialization remains explicitly unavailable until a separately license-admitted implementation/checkpoint exists.','Synthetic ground-truth comparison, real-reference receipts and aggregate validation are implemented; the admitted local SpiegeLib simple-FM MLP supplies the learned-initialization row with its explicit nine-OP2-controls + fixed-base limitation.')
+          plan=plan.replace('Implement and deploy an optional reconstruction accelerator only if committed real-reference benchmark receipts demonstrate a material runtime/quality need or a separately license-admitted learned initializer becomes available.','Implement and deploy an optional reconstruction accelerator only if committed real-reference benchmark receipts demonstrate a material runtime/quality need that cannot be met locally.')
+          plan=plan.replace('The disabled-by-default client boundary, capability/policy validation, one-shot SHA-bound consent, bounded automatic-deletion receipt enforcement, returned DX7 validation and fully local fallback are implemented; any service must satisfy','The admitted SpiegeLib initializer is fully local and does not by itself justify a remote service. The disabled-by-default client boundary, capability/policy validation, one-shot SHA-bound consent, bounded automatic-deletion receipt enforcement, returned DX7 validation and fully local fallback are implemented; any service must satisfy')
+          plan_path.write_text(plan,encoding='utf-8')
+
+          Path('atomic-patch-status.txt').write_text('SUCCESS\n')
+
+      - name: Run final repository acceptance
+        if: steps.oracle.outputs.status == 'SUCCESS' && steps.mfcc.outputs.status == 'SUCCESS' && steps.patch.outcome == 'success'
+        id: gate
+        shell: bash
+        run: |
+          set +e
+          : > atomic-codes.txt
+          run_stage() {
+            name="$1"
+            shift
+            "$@" > "atomic-$name.log" 2>&1
+            code=$?
+            cat "atomic-$name.log"
+            echo "$name=$code" >> atomic-codes.txt
+          }
+          run_stage audit-virtual npm run audit:virtual-dx7
+          run_stage audit-research npm run audit:reconstruction-upstreams
+          run_stage audit-learned npm run audit:learned-assets
+          run_stage typecheck npm run typecheck
+          run_stage lint npm run lint
+          run_stage mfcc npm test -- src/audio/spiegelibSimpleFmMfcc072.test.ts
+          run_stage scaler npm test -- src/audio/spiegelibSimpleFmScaler.test.ts src/audio/spiegelibSimpleFmScalerData.test.ts
+          run_stage model npm test -- src/audio/spiegelibSimpleFmMlp.test.ts src/audio/spiegelibSimpleFmModel.test.ts
+          run_stage candidate npm test -- src/audio/spiegelibSimpleFmInitializer.test.ts src/audio/spiegelibSimpleFmCandidate072.test.ts
+          run_stage benchmark npm test -- src/audio/realReferenceReconstructionBenchmark.test.ts
+          run_stage aggregate npm test -- src/audio/realReferenceBenchmarkAggregate.test.ts
+          run_stage full-test npm run test
+          run_stage build npm run build
+          if grep -Fq '96f1d58d3190fc7590f62d1293bb5d39d4d1dbde74c1a754ad5c576c26c32c4f' dist/index.html; then echo 'bundle=1' >> atomic-codes.txt; else echo 'bundle=0' >> atomic-codes.txt; fi
+          python - <<'PY'
+          from pathlib import Path
+          codes={}
+          for line in Path('atomic-codes.txt').read_text().splitlines():
+              if '=' in line:
+                  n,v=line.split('=',1)
+                  try:codes[n]=int(v)
+                  except ValueError:codes[n]=999
+          stages=['audit-virtual','audit-research','audit-learned','typecheck','lint','mfcc','scaler','model','candidate','benchmark','aggregate','full-test','build','bundle']
+          status='SUCCESS' if all(codes.get(s)==0 for s in stages) else 'FAILED'
+          Path('atomic-gate-status.txt').write_text(status+'\n')
+          print(status)
+          PY
+          echo "status=$(cat atomic-gate-status.txt)" >> "$GITHUB_OUTPUT"
+          exit 0
+
+      - name: Persist success receipts
+        if: steps.oracle.outputs.status == 'SUCCESS' && steps.mfcc.outputs.status == 'SUCCESS' && steps.patch.outcome == 'success' && steps.gate.outputs.status == 'SUCCESS'
+        shell: python
+        run: |
+          from pathlib import Path
+          import hashlib,os,re
+          fixture=Path('src/audio/data/spiegelib-mfcc-librosa-0.7.2-reference.json')
+          fixture_sha=hashlib.sha256(fixture.read_bytes()).hexdigest()
+          log=Path('final-mfcc.log').read_text(errors='replace')
+          match=re.search(r'MFCC072 compatibility maxError=([^ ]+) rms=([^\s]+)',log)
+          metrics=match.groups() if match else ('unknown','unknown')
+          Path('docs/research/spiegelib-mfcc-compatibility.md').write_text('\n'.join([
+              '# SpiegeLib MFCC preprocessing compatibility','',
+              f"FM1 Editor source commit: `{os.environ['GITHUB_SHA']}`",'',
+              'Compatibility status: **SUCCESS**','',
+              '- oracle: Python 3.7.7 + Librosa 0.7.2 on an in-memory 44.1 kHz deterministic fixture',
+              '- exact-version mel behavior: historical Librosa 0.7.2 default `norm=1` discrete L1 normalization',
+              '- 2048 FFT, 1024 hop, 128 mel bands, 13 MFCC, 44 frames / 572 time-major values',
+              f'- reference fixture SHA-256: `{fixture_sha}`',
+              f'- max absolute error: `{metrics[0]}`',
+              f'- RMS error: `{metrics[1]}`','',
+              'Unused Librosa native audio-I/O and resampling imports are inert stubs in the oracle container; neither path is called. The spectral/mel/power-to-dB/DCT implementation used as the oracle is Librosa 0.7.2.',''
+          ]),encoding='utf-8')
+          codes={}
+          for line in Path('atomic-codes.txt').read_text().splitlines():
+              if '=' in line:
+                  k,v=line.split('=',1);codes[k]=v
+          stages=['audit-virtual','audit-research','audit-learned','typecheck','lint','mfcc','scaler','model','candidate','benchmark','aggregate','full-test','build','bundle']
+          rows=['| Stage | Exit |','| --- | ---: |']+[f'| {s} | {codes.get(s,"?")} |' for s in stages]
+          Path('docs/validation/learned-initializer-benchmark-acceptance.md').write_text('\n'.join([
+              '# Learned initializer benchmark acceptance','',
+              f"Source commit: `{os.environ['GITHUB_SHA']}`",'',
+              'Acceptance: **SUCCESS**','',
+              *rows,'',
+              'The real-reference benchmark now has three active local approaches: catalog retrieval, retrieval-seeded CMA-ES, and the admitted SpiegeLib simple-FM MLP learned candidate. The learned candidate uses the permanent Librosa 0.7.2-compatible MFCC path, pinned archived CC BY scaler, pinned MIT model tensors, exact historical nine-output order and a fixed simple-FM base.','',
+              'The learned path is dynamically imported and is not a full 155-parameter predictor or a physical FM-1 equivalence claim. The dedicated SpiegeLib PLAN item is removed; the real 2+2+2 benchmark evidence item remains open.',''
+          ]),encoding='utf-8')
+          Path('docs/validation/spiegelib-lazy-load.md').write_text('\n'.join([
+              '# SpiegeLib learned asset lazy-load acceptance','',
+              f"Source commit: `{os.environ['GITHUB_SHA']}`",'',
+              'Acceptance: **SUCCESS**','',
+              'The benchmark uses `await import(\'./spiegelibSimpleFmCandidate072\')` inside the learned approach. The final bundle gate confirms the learned model source hash is not embedded in `dist/index.html`; learned model/scaler code is initialized only when the benchmark row runs.',''
+          ]),encoding='utf-8')
+
+      - name: Commit atomic success
+        if: steps.oracle.outputs.status == 'SUCCESS' && steps.mfcc.outputs.status == 'SUCCESS' && steps.patch.outcome == 'success' && steps.gate.outputs.status == 'SUCCESS'
+        shell: bash
+        run: |
+          rm -rf librosa-ref
+          rm -f oracle-reference.json oracle-build.log oracle-run.log oracle-json.log oracle-status.txt final-install.log final-mfcc.log mfcc-final-status.txt atomic-patch-status.txt atomic-codes.txt atomic-gate-status.txt atomic-*.log
+          rm -f .github/workflows/complete-spiegelib-learned-roadmap.yml
+          rm -f .github/workflows/confirm-spiegelib-mfcc-admission.yml
+          rm -f .github/workflows/integrate-spiegelib-learned-benchmark.yml
+          rm -f .github/workflows/finalize-spiegelib-learned-block.yml
+          rm -f .github/workflows/lazy-load-spiegelib-benchmark.yml
+          rm -f .github/workflows/validate-spiegelib-mfcc-compat*.yml
+          rm -f .github/workflows/validate-spiegelib-candidate*.yml
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add -A
+          git commit -m 'test(audio): complete SpiegeLib learned roadmap block atomically'
+          git pull --rebase origin main
+          git push origin HEAD:main
+
+      - name: Commit atomic failure diagnostic
+        if: steps.oracle.outputs.status != 'SUCCESS' || steps.mfcc.outputs.status != 'SUCCESS' || steps.patch.outcome == 'failure' || steps.gate.outputs.status != 'SUCCESS'
+        shell: bash
+        run: |
+          oracle=$(cat oracle-status.txt 2>/dev/null | cut -d= -f2 || echo NOT_RUN)
+          mfcc=$(cat mfcc-final-status.txt 2>/dev/null || echo NOT_RUN)
+          gate=$(cat atomic-gate-status.txt 2>/dev/null || echo NOT_RUN)
+          git reset --hard HEAD
+          mkdir -p docs/validation
+          cat > docs/validation/learned-roadmap-atomic-diagnostic.md <<EOF
+          # Learned roadmap atomic completion diagnostic
+
+          Oracle: **$oracle**
+
+          MFCC numerical comparison: **$mfcc**
+
+          Final repository gate: **$gate**
+
+          No benchmark/PLAN promotion from this run was committed. The learned row remains constrained by the last successful repository state; no tolerance was relaxed and no alternate preprocessing/model was substituted.
+          EOF
+          rm -f .github/workflows/complete-spiegelib-learned-roadmap.yml
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add -A
+          git commit -m 'test(audio): record atomic learned-roadmap diagnostic' || true
+          git pull --rebase origin main
+          git push origin HEAD:main
