@@ -1,0 +1,169 @@
+name: Inspect SpiegeLib Zenodo scaler archive
+
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/inspect-spiegelib-zenodo.yml']
+
+permissions:
+  contents: write
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Read Zenodo record metadata
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail --location --retry 3 --retry-all-errors \
+            https://zenodo.org/api/records/3722784 \
+            --output zenodo-record.json
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          record = json.loads(Path('zenodo-record.json').read_text(encoding='utf-8'))
+          files = []
+          for item in record.get('files', []):
+              files.append({
+                  'key': item.get('key'),
+                  'size': item.get('size'),
+                  'checksum': item.get('checksum'),
+                  'download': (item.get('links') or {}).get('self') or (item.get('links') or {}).get('content'),
+              })
+          result = {
+              'recordId': record.get('id'),
+              'doi': (record.get('metadata') or {}).get('doi'),
+              'title': (record.get('metadata') or {}).get('title'),
+              'files': files,
+          }
+          Path('zenodo-inventory.json').write_text(json.dumps(result, indent=2) + '\n', encoding='utf-8')
+          print(json.dumps(result, indent=2))
+          PY
+
+      - name: Inspect MFCC-sized candidate archive
+        shell: python
+        run: |
+          from pathlib import Path
+          import json
+          import os
+          import subprocess
+          import tarfile
+          import zipfile
+
+          inventory = json.loads(Path('zenodo-inventory.json').read_text(encoding='utf-8'))
+          files = inventory['files']
+          candidates = [f for f in files if f.get('key') and ('mfcc' in f['key'].lower() or 'simple_fm' in f['key'].lower())]
+          candidate = None
+          for item in sorted(candidates, key=lambda value: value.get('size') or 10**18):
+              if item.get('download') and isinstance(item.get('size'), int) and item['size'] <= 750_000_000:
+                  candidate = item
+                  break
+
+          result = {
+              'inventory': inventory,
+              'candidate': candidate,
+              'downloaded': False,
+              'members': [],
+              'scalerMembers': [],
+              'scalerSha256': {},
+          }
+          if candidate:
+              archive = Path('zenodo-candidate')
+              subprocess.run([
+                  'curl', '--fail', '--location', '--retry', '3', '--retry-all-errors',
+                  candidate['download'], '--output', str(archive),
+              ], check=True)
+              result['downloaded'] = True
+              key = candidate['key'].lower()
+              members = []
+              if key.endswith('.zip') or zipfile.is_zipfile(archive):
+                  with zipfile.ZipFile(archive) as handle:
+                      members = handle.namelist()
+                      for member in members:
+                          if member.lower().endswith('data_scaler.pkl'):
+                              data = handle.read(member)
+                              import hashlib
+                              result['scalerSha256'][member] = hashlib.sha256(data).hexdigest()
+              elif tarfile.is_tarfile(archive):
+                  with tarfile.open(archive) as handle:
+                      members = handle.getnames()
+                      for member in members:
+                          if member.lower().endswith('data_scaler.pkl'):
+                              extracted = handle.extractfile(member)
+                              if extracted:
+                                  import hashlib
+                                  result['scalerSha256'][member] = hashlib.sha256(extracted.read()).hexdigest()
+              result['members'] = members[:5000]
+              result['scalerMembers'] = [member for member in members if member.lower().endswith('data_scaler.pkl')]
+
+          Path('zenodo-inspection.json').write_text(json.dumps(result, indent=2) + '\n', encoding='utf-8')
+          print(json.dumps(result, indent=2))
+
+      - name: Persist archival inspection
+        if: always()
+        shell: python
+        run: |
+          from pathlib import Path
+          import json
+          import os
+
+          inspection_path = Path('zenodo-inspection.json')
+          inventory_path = Path('zenodo-inventory.json')
+          inspection = json.loads(inspection_path.read_text(encoding='utf-8')) if inspection_path.exists() else None
+          inventory = inspection['inventory'] if inspection else (json.loads(inventory_path.read_text(encoding='utf-8')) if inventory_path.exists() else None)
+          lines = [
+              '# SpiegeLib Zenodo dataset/scaler inspection',
+              '',
+              f"FM1 Editor source commit: `{os.environ['GITHUB_SHA']}`",
+              '',
+              'Archive DOI: `10.5281/zenodo.3722784`',
+              '',
+          ]
+          if inventory:
+              lines += ['## Zenodo files', '']
+              for item in inventory.get('files', []):
+                  lines.append(f"- `{item.get('key')}` — {item.get('size')} bytes — `{item.get('checksum')}`")
+          if inspection:
+              lines += [
+                  '',
+                  '## MFCC candidate',
+                  '',
+                  f"- selected: `{inspection.get('candidate')}`",
+                  f"- downloaded: `{inspection.get('downloaded')}`",
+                  f"- scaler members: `{inspection.get('scalerMembers')}`",
+                  f"- scaler SHA-256: `{inspection.get('scalerSha256')}`",
+                  '',
+              ]
+              if inspection.get('scalerMembers'):
+                  lines.append('Result: **SCALER ARCHIVE FOUND**. The scaler bytes are archived by the experiment DOI and can be pinned for a safe conversion/reproduction step without claiming that pickle deserialization is trusted by default.')
+              else:
+                  lines.append('Result: **SCALER NOT FOUND IN INSPECTED MFCC-SIZED ARCHIVE**. Keep raw-audio learned inference disabled unless another archived artifact contains the fitted scaler or the model is reproducibly retrained.')
+          else:
+              lines += ['', 'Result: **INSPECTION FAILED**. See workflow history; no archival availability claim is made.', '']
+          lines += [
+              '',
+              'No pickle file is deserialized by this workflow. Archive inspection is metadata/hash-only.',
+              '',
+          ]
+          Path('docs/research/spiegelib-zenodo-scaler.md').write_text('\n'.join(lines), encoding='utf-8')
+          Path('.github/workflows/inspect-spiegelib-zenodo.yml').unlink(missing_ok=True)
+          for name in ['zenodo-record.json', 'zenodo-inventory.json', 'zenodo-inspection.json', 'zenodo-candidate']:
+              path = Path(name)
+              if path.is_file(): path.unlink()
+
+      - name: Commit archival evidence
+        if: always()
+        shell: bash
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add -A
+          git commit -m 'docs(research): record SpiegeLib Zenodo scaler inspection' || true
+          git pull --rebase origin main
+          git push origin HEAD:main
