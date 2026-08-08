@@ -45,11 +45,13 @@ function aggregate(ready = true): RealReferenceBenchmarkAggregate {
     learnedInitializationSuccessCount: ready ? 6 : 5,
     learnedInitializationUnavailableCount: ready ? 0 : 1,
     learnedInitializationFailedCount: 0,
+    auditionEvidenceReceiptCount: ready ? 6 : 5,
     closureReadiness: {
       mixedSetComplete: true,
       listeningAssessmentsComplete: true,
       learnedListeningAssessmentsComplete: true,
       currentThreeWayComplete: ready,
+      auditionEvidenceComplete: ready,
       readyForAggregateEvidence: ready,
       missing: ready ? [] : ['1 receipt must be rerun with the admitted learned row'],
     },
@@ -68,6 +70,7 @@ function aggregate(ready = true): RealReferenceBenchmarkAggregate {
       learnedRuntimeMs: ready || index < 5 ? 4 + index * 0.2 : null,
       retrievalVsEvolutionaryDelta: 0.1,
       learnedStatus: ready || index < 5 ? 'SpiegeLib simple-FM MLP' : 'legacy unavailable',
+      auditionEvidenceComplete: ready || index < 5,
     })),
     note: 'test aggregate without raw samples',
   }

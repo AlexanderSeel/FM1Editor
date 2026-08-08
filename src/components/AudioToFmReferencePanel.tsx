@@ -49,8 +49,8 @@ export function AudioToFmReferencePanel({
         onStopAudition={onStopAudition}
         reference={reference}
       />
-      <ReconstructionBenchmarkPanel reference={reference} />
-      <ReconstructionBenchmarkSetPanel />
+      <ReconstructionBenchmarkPanel onAuditionVoice={onAuditionVoice} onStopAudition={onStopAudition} reference={reference} />
+      <ReconstructionBenchmarkSetPanel onAuditionVoice={onAuditionVoice} onStopAudition={onStopAudition} />
       <ReconstructionAccelerationPanel onLoadVoice={onLoadVoice} reference={reference} />
     </div>
   )

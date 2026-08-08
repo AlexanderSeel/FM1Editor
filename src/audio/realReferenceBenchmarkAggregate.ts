@@ -1,3 +1,4 @@
+import { createDx7VoiceSyxArtifact } from './dx7CandidateArtifacts'
 import {
   REAL_REFERENCE_LEARNED_BLOCK,
   REAL_REFERENCE_RECONSTRUCTION_BENCHMARK_SCHEMA,
@@ -61,11 +62,13 @@ export interface RealReferenceBenchmarkAggregate {
   readonly learnedInitializationSuccessCount: number
   readonly learnedInitializationUnavailableCount: number
   readonly learnedInitializationFailedCount: number
+  readonly auditionEvidenceReceiptCount: number
   readonly closureReadiness: {
     readonly mixedSetComplete: boolean
     readonly listeningAssessmentsComplete: boolean
     readonly learnedListeningAssessmentsComplete: boolean
     readonly currentThreeWayComplete: boolean
+    readonly auditionEvidenceComplete: boolean
     readonly readyForAggregateEvidence: boolean
     readonly missing: readonly string[]
   }
@@ -84,6 +87,7 @@ export interface RealReferenceBenchmarkAggregate {
     readonly learnedRuntimeMs: number | null
     readonly retrievalVsEvolutionaryDelta: number
     readonly learnedStatus: string
+    readonly auditionEvidenceComplete: boolean
   }[]
   readonly note: string
 }
@@ -143,6 +147,32 @@ function resultFor(report: RealReferenceReconstructionBenchmarkReport, approachI
   return result
 }
 
+function completeAuditionEvidence(report: RealReferenceReconstructionBenchmarkReport): boolean {
+  const candidates = report.auditionCandidates
+  if (!Array.isArray(candidates) || candidates.length !== 3) return false
+  const ids = new Set<string>()
+  for (const candidate of candidates) {
+    if (!['retrieval', 'evolutionary', 'learned-initialization'].includes(candidate.approachId)) return false
+    if (ids.has(candidate.approachId)) return false
+    ids.add(candidate.approachId)
+    const result = report.comparison.results.find((entry) => entry.approachId === candidate.approachId)
+    if (!result || result.failure !== null || result.bestDistance === null || result.bestCandidateIndex === null) return false
+    if (!Number.isFinite(candidate.distance) || candidate.distance < 0 || Math.abs(candidate.distance - result.bestDistance) > 1e-9) return false
+    if (candidate.sourceInitialization !== result.sourceInitialization) return false
+    if (!candidate.voice || typeof candidate.voice !== 'object' || 'source' in candidate.voice) return false
+    try {
+      createDx7VoiceSyxArtifact(candidate.voice)
+    } catch {
+      return false
+    }
+  }
+  return ids.size === 3
+}
+
+export function hasReproducibleBenchmarkAuditionEvidence(report: RealReferenceReconstructionBenchmarkReport): boolean {
+  return completeAuditionEvidence(report)
+}
+
 function assertReport(report: RealReferenceReconstructionBenchmarkReport): void {
   if (report.schema !== REAL_REFERENCE_RECONSTRUCTION_BENCHMARK_SCHEMA) throw new Error('Unsupported real-reference benchmark receipt schema.')
   if (report.reference.kind !== 'real-isolated-sound' || report.reference.declaredIsolated !== true) {
@@ -160,6 +190,9 @@ function assertReport(report: RealReferenceReconstructionBenchmarkReport): void 
   if (learned.failure === null) {
     finiteNonNegative(learned.bestDistance, `${report.reference.filename} learned distance`)
     finiteNonNegative(learned.runtimeMs, `${report.reference.filename} learned runtime`)
+  }
+  if (report.auditionCandidates !== undefined && !completeAuditionEvidence(report)) {
+    throw new Error(`${report.reference.filename} contains invalid benchmark audition-candidate evidence.`)
   }
 }
 
@@ -209,6 +242,7 @@ export function aggregateRealReferenceBenchmarkEvidence(
   let learnedInitializationSuccessCount = 0
   let learnedInitializationUnavailableCount = 0
   let learnedInitializationFailedCount = 0
+  let auditionEvidenceReceiptCount = 0
 
   for (const input of inputs) {
     assertReport(input.report)
@@ -257,6 +291,9 @@ export function aggregateRealReferenceBenchmarkEvidence(
     if (input.listeningAssessment === 'cma-better') cmaListeningBetterCount += 1
     if (metricImproved && input.listeningAssessment !== 'cma-better') metricImprovedButListeningNotBetterCount += 1
 
+    const auditionEvidenceComplete = completeAuditionEvidence(input.report)
+    if (auditionEvidenceComplete) auditionEvidenceReceiptCount += 1
+
     receipts.push({
       referenceSha256: hash,
       filename: input.report.reference.filename,
@@ -272,6 +309,7 @@ export function aggregateRealReferenceBenchmarkEvidence(
       learnedRuntimeMs,
       retrievalVsEvolutionaryDelta: delta,
       learnedStatus: learned.failure ?? learned.sourceInitialization ?? input.report.learnedStatus,
+      auditionEvidenceComplete,
     })
   }
 
@@ -287,6 +325,8 @@ export function aggregateRealReferenceBenchmarkEvidence(
   if (!learnedListeningAssessmentsComplete) missing.push(`${learnedListeningCounts['not-assessed']} learned listening assessment${learnedListeningCounts['not-assessed'] === 1 ? '' : 's'} still missing`)
   const currentThreeWayComplete = learnedInitializationSuccessCount === receipts.length
   if (!currentThreeWayComplete) missing.push(`${receipts.length - learnedInitializationSuccessCount} receipt${receipts.length - learnedInitializationSuccessCount === 1 ? '' : 's'} must be rerun with the admitted learned row`)
+  const auditionEvidenceComplete = auditionEvidenceReceiptCount === receipts.length
+  if (!auditionEvidenceComplete) missing.push(`${receipts.length - auditionEvidenceReceiptCount} receipt${receipts.length - auditionEvidenceReceiptCount === 1 ? '' : 's'} must be rerun with exact benchmark winner audition evidence`)
 
   return {
     schema: REAL_REFERENCE_BENCHMARK_AGGREGATE_SCHEMA,
@@ -308,15 +348,17 @@ export function aggregateRealReferenceBenchmarkEvidence(
     learnedInitializationSuccessCount,
     learnedInitializationUnavailableCount,
     learnedInitializationFailedCount,
+    auditionEvidenceReceiptCount,
     closureReadiness: {
       mixedSetComplete,
       listeningAssessmentsComplete,
       learnedListeningAssessmentsComplete,
       currentThreeWayComplete,
-      readyForAggregateEvidence: mixedSetComplete && listeningAssessmentsComplete && learnedListeningAssessmentsComplete && currentThreeWayComplete,
+      auditionEvidenceComplete,
+      readyForAggregateEvidence: mixedSetComplete && listeningAssessmentsComplete && learnedListeningAssessmentsComplete && currentThreeWayComplete && auditionEvidenceComplete,
       missing,
     },
     receipts,
-    note: 'Aggregate contains benchmark metadata, metrics, classifications and structured listening assessments only. Legacy blocked learned receipts remain parseable but cannot satisfy current three-way closure readiness. It does not contain reference audio and does not establish exact patch identity or physical FM-1 equivalence.',
+    note: 'Aggregate contains benchmark metadata, metrics, classifications and structured listening assessments only. Current closure additionally requires each receipt to carry the exact three semantic benchmark winner voices so listening evidence is reproducible; those voices are not copied into the aggregate. Legacy receipts remain parseable but cannot satisfy closure readiness. The aggregate does not contain reference audio and does not establish exact patch identity or physical FM-1 equivalence.',
   }
 }

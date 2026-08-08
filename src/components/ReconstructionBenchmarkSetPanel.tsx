@@ -1,4 +1,6 @@
 import { useMemo, useState } from 'react'
+import type { Dx7Voice } from '../domain/voice'
+import { createDx7VoiceSyxArtifact } from '../audio/dx7CandidateArtifacts'
 import {
   createRealReferenceAggregateEvidenceMarkdown,
   serializeRealReferenceBenchmarkAggregate,
@@ -81,7 +83,25 @@ function learnedResult(report: RealReferenceReconstructionBenchmarkReport) {
   return report.comparison.results.find((result) => result.approachId === 'learned-initialization')
 }
 
-export function ReconstructionBenchmarkSetPanel() {
+interface ReconstructionBenchmarkSetPanelProps {
+  onAuditionVoice?: (voice: Dx7Voice | Promise<Dx7Voice>) => Promise<void>
+  onStopAudition?: () => Promise<void>
+}
+
+function downloadWinnerSyx(voice: Dx7Voice): void {
+  const artifact = createDx7VoiceSyxArtifact(voice)
+  const blob = new Blob([artifact.bytes as Uint8Array<ArrayBuffer>], { type: artifact.mimeType })
+  const url = URL.createObjectURL(blob)
+  const anchor = document.createElement('a')
+  anchor.href = url
+  anchor.download = artifact.filename
+  document.body.append(anchor)
+  anchor.click()
+  anchor.remove()
+  URL.revokeObjectURL(url)
+}
+
+export function ReconstructionBenchmarkSetPanel({ onAuditionVoice, onStopAudition }: ReconstructionBenchmarkSetPanelProps = {}) {
   const [receipts, setReceipts] = useState<readonly LoadedReceipt[]>([])
   const [error, setError] = useState<string | null>(null)
   const [aggregate, setAggregate] = useState<RealReferenceBenchmarkAggregate | null>(null)
@@ -131,6 +151,17 @@ export function ReconstructionBenchmarkSetPanel() {
     setReceipts((current) => current.filter((item) => item.id !== id))
   }
 
+  const auditionWinner = async (voice: Dx7Voice) => {
+    if (!onAuditionVoice) return
+    setError(null)
+    try {
+      await onStopAudition?.().catch(() => undefined)
+      await onAuditionVoice(voice)
+    } catch (cause) {
+      setError(`Imported benchmark winner audition failed: ${errorMessage(cause)}`)
+    }
+  }
+
   const buildAggregate = () => {
     setError(null)
     try {
@@ -166,7 +197,7 @@ export function ReconstructionBenchmarkSetPanel() {
         <div>
           <p className="text-xs font-semibold uppercase tracking-[0.16em] text-emerald-200">Evidence set · aggregate real-reference receipts</p>
           <p className="mt-1 max-w-3xl text-xs leading-5 text-slate-400">
-            Import exported real-reference benchmark JSON receipts, classify each source and record separate retrieval/CMA and learned listening outcomes. Legacy pre-admission receipts remain importable for history, but only receipts containing a successful admitted learned row can satisfy the current three-way closure gate. The minimum set is two FM-friendly electronic, two pitched acoustic and two difficult/noisy references with both listening assessments completed.
+            Import exported real-reference benchmark JSON receipts, classify each source and record separate retrieval/CMA and learned listening outcomes. Legacy pre-admission receipts remain importable for history, but only receipts containing a successful admitted learned row can satisfy the current three-way closure gate. The minimum set is two FM-friendly electronic, two pitched acoustic and two difficult/noisy references with both listening assessments completed. Current closure also requires each receipt to preserve the exact three semantic benchmark winners used for those listening judgments.
           </p>
         </div>
         <span className="rounded-lg border border-white/10 px-2 py-1 text-[10px] uppercase tracking-[0.12em] text-slate-400">
@@ -222,6 +253,8 @@ export function ReconstructionBenchmarkSetPanel() {
           {receipts.map((item) => {
             const learned = learnedResult(item.report)
             const learnedAvailable = learned?.failure === null
+            const auditionWinners = item.report.auditionCandidates ?? []
+            const auditionEvidenceReady = auditionWinners.length === 3
             return (
               <article className="rounded-xl border border-white/10 bg-black/20 p-3" key={item.id}>
                 <div className="flex flex-wrap items-start justify-between gap-3">
@@ -232,9 +265,26 @@ export function ReconstructionBenchmarkSetPanel() {
                     <p className={`mt-2 text-[10px] ${learnedAvailable ? 'text-violet-200' : 'text-amber-200'}`}>
                       {learnedAvailable ? `Learned row ready · distance ${statistic(learned.bestDistance ?? Number.NaN)} · ${runtime(learned.runtimeMs)}` : `Legacy/failed learned row · ${learned?.failure ?? item.report.learnedStatus}`}
                     </p>
+                    <p className={`mt-1 text-[10px] ${auditionEvidenceReady ? 'text-emerald-200' : 'text-amber-200'}`}>
+                      {auditionEvidenceReady ? 'Exact retrieval/CMA/learned winners retained for reproducible listening' : 'Legacy receipt: exact benchmark winners missing · rerun before final closure'}
+                    </p>
                   </div>
                   <button className="text-xs font-bold text-rose-200" onClick={() => removeReceipt(item.id)} type="button">Remove</button>
                 </div>
+
+                {auditionWinners.length > 0 && (
+                  <div className="mt-3 rounded-xl border border-emerald-200/15 bg-emerald-200/[0.02] p-3" data-imported-audition-evidence={auditionEvidenceReady ? 'complete' : 'partial'}>
+                    <p className="text-[10px] uppercase tracking-[0.12em] text-emerald-200">Exact imported winners</p>
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      {auditionWinners.map((candidate) => (
+                        <div className="flex gap-1" key={candidate.approachId}>
+                          <button className="rounded-lg border border-emerald-200/25 px-2.5 py-1.5 text-[11px] font-bold text-emerald-100 disabled:opacity-40" disabled={!onAuditionVoice} onClick={() => void auditionWinner(candidate.voice)} type="button">▶ {candidate.approachId === 'retrieval' ? 'Retrieval' : candidate.approachId === 'evolutionary' ? 'CMA' : 'Learned'}</button>
+                          <button className="rounded-lg border border-white/10 px-2.5 py-1.5 text-[11px] text-slate-300" onClick={() => downloadWinnerSyx(candidate.voice)} type="button">.syx</button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
 
                 <div className="mt-3 grid gap-3 xl:grid-cols-3">
                   <label className="grid gap-1 text-[10px] uppercase tracking-[0.12em] text-slate-500">
@@ -252,6 +302,7 @@ export function ReconstructionBenchmarkSetPanel() {
                     Retrieval / CMA listening
                     <select
                       className="rounded-lg border border-white/10 bg-slate-950 px-3 py-2 text-sm normal-case tracking-normal text-slate-100"
+                      disabled={!auditionEvidenceReady}
                       onChange={(event) => updateReceipt(item.id, { listeningAssessment: event.target.value as RealReferenceListeningAssessment })}
                       value={item.listeningAssessment}
                     >
@@ -262,7 +313,7 @@ export function ReconstructionBenchmarkSetPanel() {
                     Learned listening
                     <select
                       className="rounded-lg border border-white/10 bg-slate-950 px-3 py-2 text-sm normal-case tracking-normal text-slate-100 disabled:opacity-55"
-                      disabled={!learnedAvailable}
+                      disabled={!learnedAvailable || !auditionEvidenceReady}
                       onChange={(event) => updateReceipt(item.id, { learnedListeningAssessment: event.target.value as RealReferenceLearnedListeningAssessment })}
                       value={item.learnedListeningAssessment}
                     >
@@ -292,7 +343,7 @@ export function ReconstructionBenchmarkSetPanel() {
           <div className={`rounded-xl border p-3 ${aggregate.closureReadiness.readyForAggregateEvidence ? 'border-emerald-300/25 bg-emerald-300/[0.035]' : 'border-amber-200/20 bg-amber-200/[0.025]'}`}>
             <p className="text-sm font-black text-white">{aggregate.closureReadiness.readyForAggregateEvidence ? 'Current three-way mixed evidence set complete' : 'Evidence set still incomplete'}</p>
             <p className="mt-1 text-[11px] leading-5 text-slate-400">
-              Electronic {aggregate.categoryCounts['fm-friendly-electronic']}/2 · Acoustic {aggregate.categoryCounts['pitched-acoustic']}/2 · Difficult {aggregate.categoryCounts['difficult-transient-noisy']}/2 · Retrieval/CMA unassessed {aggregate.listeningCounts['not-assessed']} · Learned unassessed {aggregate.learnedListeningCounts['not-assessed']} · Current learned rows {aggregate.learnedInitializationSuccessCount}/{aggregate.receiptCount}
+              Electronic {aggregate.categoryCounts['fm-friendly-electronic']}/2 · Acoustic {aggregate.categoryCounts['pitched-acoustic']}/2 · Difficult {aggregate.categoryCounts['difficult-transient-noisy']}/2 · Retrieval/CMA unassessed {aggregate.listeningCounts['not-assessed']} · Learned unassessed {aggregate.learnedListeningCounts['not-assessed']} · Current learned rows {aggregate.learnedInitializationSuccessCount}/{aggregate.receiptCount} · Reproducible audition receipts {aggregate.auditionEvidenceReceiptCount}/{aggregate.receiptCount}
             </p>
             {aggregate.closureReadiness.missing.length > 0 && <p className="mt-2 text-[11px] text-amber-200">Missing: {aggregate.closureReadiness.missing.join(' · ')}</p>}
           </div>

@@ -1,3 +1,4 @@
+import type { Dx7Voice } from '../domain/voice'
 import { createAudioDescriptorProfile } from './audioDescriptors'
 import { createAudioDescriptorFingerprint } from './audioDescriptorFingerprint'
 import {
@@ -22,6 +23,7 @@ import { createMemoryPresetFingerprintCache, type PresetFingerprintCache } from 
 import {
   compareReconstructionApproaches,
   type ReconstructionApproach,
+  type ReconstructionCandidate,
   type ReconstructionComparisonReport,
 } from './reconstructionComparison'
 import type { PreparedReferenceAudio } from './referenceAudio'
@@ -35,6 +37,16 @@ export const REAL_REFERENCE_BENCHMARK_DEFAULT_SEED = 2026
 /** Retained so older receipts with the pre-admission blocked row remain parseable. */
 export const REAL_REFERENCE_LEARNED_BLOCK = 'No license-admitted learned initializer/checkpoint is available yet.' as const
 export const REAL_REFERENCE_LEARNED_STATUS = 'Local SpiegeLib simple-FM MLP · 9 OP2 controls + fixed training base' as const
+
+export type RealReferenceAuditionApproachId = 'retrieval' | 'evolutionary' | 'learned-initialization'
+
+export interface RealReferenceBenchmarkAuditionCandidate {
+  readonly approachId: RealReferenceAuditionApproachId
+  readonly sourceInitialization: string
+  readonly distance: number
+  /** Exact semantic DX7 winner used for reproducible local audition; raw reference audio and packed provenance bytes are excluded. */
+  readonly voice: Dx7Voice
+}
 
 export type RealReferenceBenchmarkPhase = 'catalog' | 'index' | 'refinement' | 'comparison'
 
@@ -73,6 +85,8 @@ export interface RealReferenceReconstructionBenchmarkReport {
   readonly sharedPreparationMs: number
   readonly comparison: ReconstructionComparisonReport
   readonly retrievalVsEvolutionaryDelta: number | null
+  /** Present on current receipts so structured listening can reproduce the exact three metric winners. Legacy receipts may omit it. */
+  readonly auditionCandidates?: readonly RealReferenceBenchmarkAuditionCandidate[]
   readonly learnedStatus: string
   readonly note: string
 }
@@ -228,12 +242,18 @@ export async function runRealReferenceReconstructionBenchmark(
     return rankedPromise
   }
 
+  let retrievalCandidates: readonly ReconstructionCandidate[] = []
+  let evolutionaryCandidates: readonly ReconstructionCandidate[] = []
+  let learnedCandidates: readonly ReconstructionCandidate[] = []
+
   const retrieval: ReconstructionApproach<null> = {
     id: 'retrieval',
     label: 'Retrieval only',
     async run() {
       const ranked = await ensureRanked()
-      return ranked.map((candidate) => ({ voice: candidate.voice, sourceInitialization: candidate.sourceLabel }))
+      const output = ranked.map((candidate) => ({ voice: candidate.voice, sourceInitialization: candidate.sourceLabel }))
+      retrievalCandidates = output
+      return output
     },
   }
   const evolutionary: ReconstructionApproach<null> = {
@@ -258,10 +278,12 @@ export async function runRealReferenceReconstructionBenchmark(
           current: `${progress.sourceCandidate.voice.name || progress.sourceCandidate.sourceLabel} · generation ${progress.generation} · ${progress.evaluations} evaluations`,
         }),
       })
-      return refined.map((result) => ({
+      const output = refined.map((result) => ({
         voice: result.bestVoice,
         sourceInitialization: `CMA from ${result.sourceCandidate.sourceLabel}`,
       }))
+      evolutionaryCandidates = output
+      return output
     },
   }
   const learned: ReconstructionApproach<null> = {
@@ -273,10 +295,12 @@ export async function runRealReferenceReconstructionBenchmark(
       throwIfAborted(signal)
       const candidate = createSpiegelibSimpleFmCandidate072(reference.samples, reference.sampleRate, 'SPGL MLP')
       throwIfAborted(signal)
-      return [{
+      const output = [{
         voice: candidate.voice,
         sourceInitialization: `${candidate.source} · nine OP2 controls + fixed training base`,
       }]
+      learnedCandidates = output
+      return output
     },
   }
 
@@ -316,6 +340,26 @@ export async function runRealReferenceReconstructionBenchmark(
     ? retrievalResult.bestDistance - evolutionaryResult.bestDistance
     : null
 
+  const candidateSets: Readonly<Record<RealReferenceAuditionApproachId, readonly ReconstructionCandidate[]>> = {
+    retrieval: retrievalCandidates,
+    evolutionary: evolutionaryCandidates,
+    'learned-initialization': learnedCandidates,
+  }
+  const auditionCandidates: RealReferenceBenchmarkAuditionCandidate[] = []
+  for (const approachId of ['retrieval', 'evolutionary', 'learned-initialization'] as const) {
+    const result = comparison.results.find((entry) => entry.approachId === approachId)
+    if (!result || result.failure !== null || result.bestCandidateIndex === null || result.bestDistance === null) continue
+    const candidate = candidateSets[approachId][result.bestCandidateIndex]
+    if (!candidate) throw new Error(`Benchmark ${approachId} winner index no longer resolves to its evaluated candidate.`)
+    const { source: _source, ...semanticVoice } = candidate.voice
+    auditionCandidates.push({
+      approachId,
+      sourceInitialization: candidate.sourceInitialization,
+      distance: result.bestDistance,
+      voice: semanticVoice,
+    })
+  }
+
   return {
     schema: REAL_REFERENCE_RECONSTRUCTION_BENCHMARK_SCHEMA,
     createdAt: comparison.createdAt,
@@ -344,7 +388,8 @@ export async function runRealReferenceReconstructionBenchmark(
     sharedPreparationMs,
     comparison,
     retrievalVsEvolutionaryDelta,
+    auditionCandidates,
     learnedStatus: REAL_REFERENCE_LEARNED_STATUS,
-    note: 'User-declared isolated reference; audio remains local and is not embedded in this report. The learned row is a local SpiegeLib simple-FM MLP candidate that predicts nine historical Dexed OP2 controls over a fixed training base. Similarity metrics are comparative estimates, not proof of patch identity or exact FM-1 hardware equivalence.',
+    note: 'User-declared isolated reference; audio remains local and is not embedded in this report. Current receipts retain the exact semantic DX7 winner for each successful benchmark approach so listening evidence can be reproduced without embedding audio or packed catalog provenance bytes. The learned row is a local SpiegeLib simple-FM MLP candidate that predicts nine historical Dexed OP2 controls over a fixed training base. Similarity metrics are comparative estimates, not proof of patch identity or exact FM-1 hardware equivalence.',
   }
 }

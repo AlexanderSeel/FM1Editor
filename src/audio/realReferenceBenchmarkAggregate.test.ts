@@ -1,3 +1,4 @@
+import { createInitializedVoice } from '../domain/voice'
 import { describe, expect, it } from 'vitest'
 import {
   aggregateRealReferenceBenchmarkEvidence,
@@ -21,8 +22,12 @@ function receipt(
   retrievalRuntimeMs = 10,
   evolutionaryRuntimeMs = 30,
   learned?: { readonly distance: number; readonly runtimeMs?: number },
+  includeAudition = learned !== undefined,
 ): RealReferenceReconstructionBenchmarkReport {
   const hash = hashCharacter.repeat(64)
+  const retrievalVoice = createInitializedVoice('RETR WIN')
+  const evolutionaryVoice = createInitializedVoice('CMA WIN')
+  const learnedVoice = createInitializedVoice('MLP WIN')
   return {
     schema: REAL_REFERENCE_RECONSTRUCTION_BENCHMARK_SCHEMA,
     createdAt: '2026-08-08T08:00:00.000Z',
@@ -111,6 +116,11 @@ function receipt(
       ],
     },
     retrievalVsEvolutionaryDelta: retrievalDistance - evolutionaryDistance,
+    ...(includeAudition && learned ? { auditionCandidates: [
+      { approachId: 'retrieval' as const, sourceInitialization: 'retrieved', distance: retrievalDistance, voice: retrievalVoice },
+      { approachId: 'evolutionary' as const, sourceInitialization: 'CMA from retrieved', distance: evolutionaryDistance, voice: evolutionaryVoice },
+      { approachId: 'learned-initialization' as const, sourceInitialization: 'SpiegeLib simple-FM MLP · nine OP2 controls + fixed training base', distance: learned.distance, voice: learnedVoice },
+    ] } : {}),
     learnedStatus: learned ? REAL_REFERENCE_LEARNED_STATUS : REAL_REFERENCE_LEARNED_BLOCK,
     note: 'test receipt',
   }
@@ -171,6 +181,7 @@ describe('real-reference benchmark evidence aggregation', () => {
       listeningAssessmentsComplete: true,
       learnedListeningAssessmentsComplete: true,
       currentThreeWayComplete: false,
+      auditionEvidenceComplete: false,
       readyForAggregateEvidence: false,
     })
     expect(aggregate.closureReadiness.missing.join(' ')).toMatch(/rerun with the admitted learned row/)
@@ -201,6 +212,7 @@ describe('real-reference benchmark evidence aggregation', () => {
       listeningAssessmentsComplete: true,
       learnedListeningAssessmentsComplete: true,
       currentThreeWayComplete: true,
+      auditionEvidenceComplete: true,
       readyForAggregateEvidence: true,
       missing: [],
     })
@@ -210,6 +222,21 @@ describe('real-reference benchmark evidence aggregation', () => {
     expect(aggregate.learnedListeningCounts['learned-poor']).toBe(1)
     expect(aggregate.learnedDistance).toMatchObject({ count: 6, minimum: 0.31, maximum: 1.4 })
     expect(aggregate.learnedRuntimeMs).toMatchObject({ count: 6, minimum: 4, maximum: 4 })
+  })
+
+  it('keeps successful learned receipts without exact winner voices parseable but not closure-ready', () => {
+    const report = receipt('9', 0.5, 0.4, 10, 30, { distance: 0.45 }, false)
+    expect(parseRealReferenceBenchmarkReceipt(report).learnedStatus).toBe(REAL_REFERENCE_LEARNED_STATUS)
+    const aggregate = aggregateRealReferenceBenchmarkEvidence([{
+      report,
+      category: 'fm-friendly-electronic',
+      listeningAssessment: 'similar',
+      learnedListeningAssessment: 'learned-similar',
+    }])
+    expect(aggregate.closureReadiness.currentThreeWayComplete).toBe(true)
+    expect(aggregate.closureReadiness.auditionEvidenceComplete).toBe(false)
+    expect(aggregate.closureReadiness.readyForAggregateEvidence).toBe(false)
+    expect(aggregate.closureReadiness.missing.join(' ')).toMatch(/exact benchmark winner audition evidence/)
   })
 
   it('reports missing learned listening assessments on otherwise current receipts', () => {

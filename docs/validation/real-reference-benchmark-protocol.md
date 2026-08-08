@@ -39,11 +39,12 @@ Older exported receipts created before learned-model admission may still contain
 3. In **Comparison receipt · real isolated reference**, confirm the isolation declaration.
 4. Run the quick benchmark first. Run the full bundled-catalog benchmark for the final retained receipt when browser performance permits.
 5. Confirm that retrieval, seeded CMA-ES and **SpiegeLib learned** each have a result row. The learned row should contain one candidate and no failure.
-6. Export the JSON receipt.
-7. Listen to the best retrieval and refined CMA candidates, then choose the structured **Retrieval / CMA listening** verdict.
-8. Listen to the learned candidate against the better local alternative and choose the structured **Learned listening** verdict: learned best, perceptually similar, clearly worse, or poor/out-of-scope.
-9. Use optional notes for concrete perceptual details such as attack, decay, brightness, pitch character, noise/transient mismatch or the fixed-base learned-model limitation.
-10. Keep the reference file outside the repository unless its redistribution rights are explicit. The repository needs the receipt/hash and summary, not copyrighted source audio.
+6. Confirm the **Exact benchmark winners · reproducible listening** controls are present for retrieval, CMA and learned. These voices are the exact semantic candidates at the best indices recorded in the metrics.
+7. While the reference is still loaded, listen to the exact retrieval and refined CMA winners, then choose the structured **Retrieval / CMA listening** verdict.
+8. Listen to the exact learned winner against the better local alternative and choose the structured **Learned listening** verdict: learned best, perceptually similar, clearly worse, or poor/out-of-scope.
+9. Export the JSON receipt only after confirming all three exact winner voices are retained; the receipt contains semantic DX7 parameters but no raw reference audio or packed catalog bytes.
+10. Use optional notes for concrete perceptual details such as attack, decay, brightness, pitch character, noise/transient mismatch or the fixed-base learned-model limitation.
+11. Keep the reference file outside the repository unless its redistribution rights are explicit. The repository needs the receipt/hash and summary, not copyrighted source audio.
 
 ## Required report fields
 
@@ -57,7 +58,8 @@ Each retained current receipt must contain:
 - evolutionary candidate count, best distance and runtime;
 - learned candidate count, best distance, runtime and source/status;
 - retrieval-minus-evolutionary distance delta;
-- no embedded raw audio samples.
+- exact semantic DX7 winner voice, source label and recorded best distance for each successful retrieval/CMA/learned row;
+- no embedded raw audio samples and no packed/unpacked catalog provenance bytes.
 
 The learned source/status should identify the admitted local SpiegeLib simple-FM MLP and its nine-OP2-controls + fixed-training-base limitation. A learned failure is evidence and must not be silently replaced by another approach, but a receipt with no successful learned row cannot satisfy the current final-evidence closure gate.
 
@@ -82,7 +84,8 @@ The panel may report **Current three-way mixed evidence set complete** only when
 1. at least two retained receipts exist in each of the three evidence classes;
 2. no retrieval/CMA listening assessment is `not-assessed`;
 3. no successful learned row has a `not-assessed` learned listening verdict;
-4. every retained receipt contains a successful current admitted learned row.
+4. every retained receipt contains a successful current admitted learned row;
+5. every retained receipt contains all three exact semantic winner voices matching the recorded best indices/distances/source labels, so the listening evidence is reproducible.
 
 Legacy blocked learned receipts remain parseable and can be inspected, but `currentThreeWayComplete` is false while any such receipt remains in the retained aggregate.
 

@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import type { Dx7Voice } from '../domain/voice'
+import { createDx7VoiceSyxArtifact } from '../audio/dx7CandidateArtifacts'
 import {
   REAL_REFERENCE_BENCHMARK_DEFAULT_MAX_VOICES,
   runRealReferenceReconstructionBenchmark,
@@ -11,6 +13,8 @@ type BenchmarkScope = 'quick' | 'full'
 
 interface ReconstructionBenchmarkPanelProps {
   reference: PreparedReferenceAudio | null
+  onAuditionVoice?: (voice: Dx7Voice | Promise<Dx7Voice>) => Promise<void>
+  onStopAudition?: () => Promise<void>
 }
 
 function errorMessage(cause: unknown): string {
@@ -23,6 +27,19 @@ function distance(value: number | null | undefined): string {
 
 function runtime(value: number | null | undefined): string {
   return value === null || value === undefined || !Number.isFinite(value) ? '—' : `${value.toFixed(1)} ms`
+}
+
+function downloadVoiceSyx(voice: Dx7Voice): void {
+  const artifact = createDx7VoiceSyxArtifact(voice)
+  const blob = new Blob([artifact.bytes as Uint8Array<ArrayBuffer>], { type: artifact.mimeType })
+  const url = URL.createObjectURL(blob)
+  const anchor = document.createElement('a')
+  anchor.href = url
+  anchor.download = artifact.filename
+  document.body.append(anchor)
+  anchor.click()
+  anchor.remove()
+  URL.revokeObjectURL(url)
 }
 
 function downloadReport(report: RealReferenceReconstructionBenchmarkReport): void {
@@ -38,7 +55,7 @@ function downloadReport(report: RealReferenceReconstructionBenchmarkReport): voi
   URL.revokeObjectURL(url)
 }
 
-export function ReconstructionBenchmarkPanel({ reference }: ReconstructionBenchmarkPanelProps) {
+export function ReconstructionBenchmarkPanel({ reference, onAuditionVoice, onStopAudition }: ReconstructionBenchmarkPanelProps) {
   const [scope, setScope] = useState<BenchmarkScope>('quick')
   const [declaredIsolated, setDeclaredIsolated] = useState(false)
   const [progress, setProgress] = useState<RealReferenceBenchmarkProgress | null>(null)
@@ -93,6 +110,18 @@ export function ReconstructionBenchmarkPanel({ reference }: ReconstructionBenchm
   const retrieval = report?.comparison.results.find((result) => result.approachId === 'retrieval')
   const evolutionary = report?.comparison.results.find((result) => result.approachId === 'evolutionary')
   const learned = report?.comparison.results.find((result) => result.approachId === 'learned-initialization')
+  const auditionWinners = report?.auditionCandidates ?? []
+
+  const auditionWinner = useCallback(async (voice: Dx7Voice) => {
+    if (!onAuditionVoice) return
+    setError(null)
+    try {
+      await onStopAudition?.().catch(() => undefined)
+      await onAuditionVoice(voice)
+    } catch (cause) {
+      setError(`Exact benchmark winner audition failed: ${errorMessage(cause)}`)
+    }
+  }, [onAuditionVoice, onStopAudition])
 
   return (
     <section className="mt-4 rounded-2xl border border-violet-300/15 bg-violet-300/[0.035] p-4" aria-label="Reconstruction comparison benchmark">
@@ -100,7 +129,7 @@ export function ReconstructionBenchmarkPanel({ reference }: ReconstructionBenchm
         <div>
           <p className="text-xs font-semibold uppercase tracking-[0.16em] text-violet-200">Comparison receipt · real isolated reference</p>
           <p className="mt-1 max-w-3xl text-xs leading-5 text-slate-400">
-            Run retrieval-only, seeded constrained CMA-ES and the admitted local SpiegeLib simple-FM MLP against the same uploaded reference and export a reproducible JSON receipt. The learned model is loaded only when the benchmark runs, stays entirely local, and predicts nine historical Dexed OP2 controls over a fixed training base. The report contains file hash, selected-region metadata, metrics and runtimes only; raw audio is never embedded or uploaded.
+            Run retrieval-only, seeded constrained CMA-ES and the admitted local SpiegeLib simple-FM MLP against the same uploaded reference and export a reproducible JSON receipt. The learned model is loaded only when the benchmark runs, stays entirely local, and predicts nine historical Dexed OP2 controls over a fixed training base. The report contains file hash, selected-region metadata, metrics, runtimes and the exact semantic DX7 winner for each successful approach so listening evidence is reproducible. Raw reference audio and packed catalog provenance bytes are never embedded or uploaded.
           </p>
         </div>
         <span className="rounded-lg border border-white/10 px-2 py-1 text-[10px] uppercase tracking-[0.12em] text-slate-400">
@@ -210,6 +239,25 @@ export function ReconstructionBenchmarkPanel({ reference }: ReconstructionBenchm
               </tbody>
             </table>
           </div>
+
+          {auditionWinners.length > 0 && (
+            <div className="rounded-xl border border-violet-200/15 bg-violet-200/[0.025] p-3" data-benchmark-audition-evidence={auditionWinners.length === 3 ? 'complete' : 'partial'}>
+              <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-violet-200">Exact benchmark winners · reproducible listening</p>
+              <p className="mt-1 text-[11px] leading-5 text-slate-500">These are the exact semantic voices at the recorded best candidate indices. Compare them with the still-loaded reference before exporting the receipt.</p>
+              <div className="mt-3 flex flex-wrap gap-2">
+                {auditionWinners.map((candidate) => (
+                  <div className="flex flex-wrap gap-1" key={candidate.approachId}>
+                    <button className="rounded-lg border border-violet-200/30 px-3 py-2 text-xs font-bold text-violet-100 disabled:opacity-40" disabled={!onAuditionVoice} onClick={() => void auditionWinner(candidate.voice)} type="button">
+                      ▶ {candidate.approachId === 'retrieval' ? 'Retrieval' : candidate.approachId === 'evolutionary' ? 'CMA' : 'Learned'} winner
+                    </button>
+                    <button className="rounded-lg border border-white/10 px-3 py-2 text-xs font-bold text-slate-300" onClick={() => downloadVoiceSyx(candidate.voice)} type="button">
+                      Export .syx
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           <p className="text-[11px] leading-5 text-slate-500">
             Retrieval minus evolutionary distance: {distance(report.retrievalVsEvolutionaryDelta)}. Positive means constrained CMA-ES produced the lower fingerprint distance for this reference. Learned distance is reported independently and is not CMA-refined. This receipt is comparative evidence only and does not claim exact patch identity or physical FM-1 equivalence.

@@ -129,7 +129,21 @@ describe('real-reference reconstruction benchmark', () => {
     expect(report.comparison.results[2]?.sourceInitialization).toMatch(/SpiegeLib simple-FM MLP/)
     expect(report.learnedStatus).toBe(REAL_REFERENCE_LEARNED_STATUS)
     expect(Number.isFinite(report.sharedPreparationMs)).toBe(true)
+    expect(report.auditionCandidates?.map((candidate) => candidate.approachId)).toEqual([
+      'retrieval',
+      'evolutionary',
+      'learned-initialization',
+    ])
+    for (const candidate of report.auditionCandidates ?? []) {
+      const result = report.comparison.results.find((entry) => entry.approachId === candidate.approachId)
+      expect(candidate.distance).toBe(result?.bestDistance)
+      expect(candidate.sourceInitialization).toBe(result?.sourceInitialization)
+      expect(candidate.voice).not.toHaveProperty('source')
+      expect(candidate.voice.operators).toHaveLength(6)
+    }
     expect(JSON.stringify(report)).not.toContain('"samples"')
+    expect(JSON.stringify(report)).not.toContain('"packed"')
+    expect(JSON.stringify(report)).not.toContain('"unpacked"')
   })
 
   it('refuses to label a reference as real isolated sound without explicit declaration', async () => {
