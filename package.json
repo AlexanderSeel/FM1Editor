@@ -11,6 +11,7 @@
     "catalog:audit:check": "node scripts/catalog-release-audit.mjs --check",
     "audit:virtual-dx7": "node scripts/verify-msfa-source-audit.mjs",
     "audit:virtual-dx7:upstream": "node scripts/audit-msfa-upstream.mjs",
+    "audit:reconstruction-upstreams": "node scripts/verify-audio-reconstruction-upstreams.mjs",
     "prebuild": "node scripts/sync-patch-catalog.mjs --best-effort",
     "build": "tsc -b && vite build && node scripts/inject-service-worker-assets.mjs",
     "typecheck": "tsc -b --pretty false",
@@ -18,7 +19,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "preview": "vite preview",
-    "release:verify": "npm run catalog:sync && npm run catalog:audit:check && npm run audit:virtual-dx7 && npm run typecheck && npm run lint && npm run test && npm run build"
+    "release:verify": "npm run catalog:sync && npm run catalog:audit:check && npm run audit:virtual-dx7 && npm run audit:reconstruction-upstreams && npm run typecheck && npm run lint && npm run test && npm run build"
   },
   "dependencies": {
     "fflate": "^0.8.3",
