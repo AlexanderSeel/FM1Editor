@@ -1,0 +1,209 @@
+name: Finalize admitted SpiegeLib learned block
+
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/finalize-spiegelib-learned-block.yml']
+
+permissions:
+  contents: write
+
+jobs:
+  finalize:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Verify integrated source and permanent admission evidence
+        id: precheck
+        shell: bash
+        run: |
+          set +e
+          status=SUCCESS
+          reasons=()
+          grep -Fq "createSpiegelibSimpleFmCandidate072" src/audio/realReferenceReconstructionBenchmark.ts || { status=FAILED; reasons+=("benchmark does not import admitted Candidate072"); }
+          grep -Fq "label: 'SpiegeLib simple-FM MLP'" src/audio/realReferenceReconstructionBenchmark.ts || { status=FAILED; reasons+=("learned benchmark row is not active"); }
+          if grep -Fq 'REAL_REFERENCE_LEARNED_BLOCK' src/audio/realReferenceReconstructionBenchmark.ts; then status=FAILED; reasons+=("obsolete learned block constant remains"); fi
+          grep -Fq 'Compatibility status: **SUCCESS**' docs/research/spiegelib-mfcc-compatibility.md || { status=FAILED; reasons+=("MFCC receipt not SUCCESS"); }
+          grep -Fq 'Audit status: **SUCCESS**' docs/research/spiegelib-label-order.md || { status=FAILED; reasons+=("label-order audit not SUCCESS"); }
+          grep -Fq 'Software acceptance: **SUCCESS**' docs/validation/spiegelib-candidate.md || { status=FAILED; reasons+=("candidate receipt not SUCCESS"); }
+          test -f src/audio/spiegelibSimpleFmMfcc072.test.ts || { status=FAILED; reasons+=("permanent MFCC072 test missing"); }
+          test -f src/audio/data/spiegelib-mfcc-librosa-0.7.2-reference.json || { status=FAILED; reasons+=("MFCC oracle fixture missing"); }
+          printf 'status=%s\nreason=%s\n' "$status" "${reasons[*]:-none}" > learned-finalize-precheck.txt
+          cat learned-finalize-precheck.txt
+          echo "status=$status" >> "$GITHUB_OUTPUT"
+          exit 0
+      - name: Run exact-head learned benchmark gate
+        if: steps.precheck.outputs.status == 'SUCCESS'
+        id: gate
+        shell: bash
+        run: |
+          set +e
+          : > learned-finalize-codes.txt
+          run_stage() {
+            name="$1"
+            shift
+            "$@" > "learned-finalize-$name.log" 2>&1
+            code=$?
+            cat "learned-finalize-$name.log"
+            echo "$name=$code" >> learned-finalize-codes.txt
+          }
+          run_stage install npm install --no-audit --no-fund
+          run_stage audit-virtual npm run audit:virtual-dx7
+          run_stage audit-research npm run audit:reconstruction-upstreams
+          run_stage audit-learned npm run audit:learned-assets
+          run_stage typecheck npm run typecheck
+          run_stage lint npm run lint
+          run_stage mfcc npm test -- src/audio/spiegelibSimpleFmMfcc072.test.ts
+          run_stage scaler npm test -- src/audio/spiegelibSimpleFmScaler.test.ts src/audio/spiegelibSimpleFmScalerData.test.ts
+          run_stage model npm test -- src/audio/spiegelibSimpleFmMlp.test.ts src/audio/spiegelibSimpleFmModel.test.ts
+          run_stage candidate npm test -- src/audio/spiegelibSimpleFmInitializer.test.ts src/audio/spiegelibSimpleFmCandidate072.test.ts
+          run_stage benchmark npm test -- src/audio/realReferenceReconstructionBenchmark.test.ts
+          run_stage aggregate npm test -- src/audio/realReferenceBenchmarkAggregate.test.ts
+          run_stage full-test npm run test
+          run_stage build npm run build
+          python - <<'PY'
+          from pathlib import Path
+          codes={}
+          for line in Path('learned-finalize-codes.txt').read_text().splitlines():
+              if '=' in line:
+                  n,v=line.split('=',1)
+                  try:codes[n]=int(v)
+                  except ValueError:codes[n]=999
+          stages=['install','audit-virtual','audit-research','audit-learned','typecheck','lint','mfcc','scaler','model','candidate','benchmark','aggregate','full-test','build']
+          status='SUCCESS' if all(codes.get(s)==0 for s in stages) else 'FAILED'
+          Path('learned-finalize-status.txt').write_text(status+'\n')
+          print(status)
+          PY
+          status=$(cat learned-finalize-status.txt)
+          echo "status=$status" >> "$GITHUB_OUTPUT"
+          exit 0
+      - name: Update roadmap and admission documentation
+        if: steps.precheck.outputs.status == 'SUCCESS' && steps.gate.outputs.status == 'SUCCESS'
+        shell: python
+        run: |
+          from pathlib import Path
+          import os,re
+
+          plan_path=Path('PLAN.md')
+          plan=plan_path.read_text(encoding='utf-8')
+          lines=plan.splitlines()
+          filtered=[]
+          removed=0
+          for line in lines:
+              if line.lstrip().startswith('- [ ]') and 'SpiegeLib' in line and ('Reproduce and pin' in line or 'pre-trained model' in line):
+                  removed += 1
+                  continue
+              filtered.append(line)
+          plan='\n'.join(filtered)+'\n'
+          plan=plan.replace(
+              'Synthetic ground-truth comparison, real-reference receipts and aggregate validation are implemented; learned initialization remains explicitly unavailable until a separately license-admitted implementation/checkpoint exists.',
+              'Synthetic ground-truth comparison, real-reference receipts and aggregate validation are implemented; the admitted local SpiegeLib simple-FM MLP now supplies the learned-initialization row with its explicit nine-OP2-controls + fixed-base limitation.'
+          )
+          plan=plan.replace(
+              'Implement and deploy an optional reconstruction accelerator only if committed real-reference benchmark receipts demonstrate a material runtime/quality need or a separately license-admitted learned initializer becomes available.',
+              'Implement and deploy an optional reconstruction accelerator only if committed real-reference benchmark receipts demonstrate a material runtime/quality need that cannot be met locally.'
+          )
+          plan=plan.replace(
+              'The disabled-by-default client boundary, capability/policy validation, one-shot SHA-bound consent, bounded automatic-deletion receipt enforcement, returned DX7 validation and fully local fallback are implemented; any service must satisfy',
+              'The admitted SpiegeLib initializer is fully local and does not by itself justify a remote service. The disabled-by-default client boundary, capability/policy validation, one-shot SHA-bound consent, bounded automatic-deletion receipt enforcement, returned DX7 validation and fully local fallback are implemented; any service must satisfy'
+          )
+          if removed == 0 and 'Reproduce and pin one MIT-licensed SpiegeLib' in plan:
+              raise SystemExit('failed to remove completed SpiegeLib PLAN checkbox')
+          plan_path.write_text(plan,encoding='utf-8')
+
+          admission_path=Path('docs/research/learned-initializer-admission.md')
+          admission=admission_path.read_text(encoding='utf-8')
+          admission=admission.replace(
+              'Decision: **implementation-ready candidate; benchmark admission pending the independent Librosa numerical receipt**.',
+              'Decision: **admitted for the local benchmark as SpiegeLib simple-FM MLP (nine historical Dexed OP2 controls + pinned fixed base)**.'
+          )
+          admission=admission.replace(
+              'Do not change the benchmark\'s `learned-initialization` row from explicit unavailable to active until that receipt is `SUCCESS`.',
+              'The `learned-initialization` benchmark row is active only through the version-pinned local Candidate072 path validated by the permanent Librosa 0.7.2 oracle receipt.'
+          )
+          admission=admission.replace(
+              'The benchmark learned row remains disabled until the independent Librosa 0.7.2 compatibility test validates the TypeScript raw-MFCC path numerically.',
+              'The independent Librosa 0.7.2 compatibility test now validates the TypeScript raw-MFCC path numerically, and the benchmark learned row is enabled through the admitted Candidate072 path.'
+          )
+          admission=admission.replace(
+              'If that gate passes, the row may be enabled as **SpiegeLib simple-FM MLP (nine OP2 controls + fixed base)** and must retain that limited scope in reports/UI.',
+              'The row is enabled as **SpiegeLib simple-FM MLP (nine OP2 controls + fixed base)** and retains that limited scope in reports/UI.'
+          )
+          admission_path.write_text(admission,encoding='utf-8')
+
+          research_path=Path('docs/research/audio-to-fm-and-virtual-synth.md')
+          research=research_path.read_text(encoding='utf-8')
+          section='''\n\n## Admitted local learned initializer\n\nThe real-reference benchmark now includes a third active approach: the pinned SpiegeLib simple-FM MLP. Its MIT H5 weights were converted to browser-safe tensors; its CC BY 4.0 MFCC scaler was recovered from Zenodo DOI `10.5281/zenodo.3722784` and converted to plain JSON in an isolated no-network sandbox. A permanent Python 3.7.7 + Librosa 0.7.2 oracle validates the dedicated 572-value TypeScript MFCC path. Historical training and prediction ordering both resolve to Dexed host IDs `[46,47,48,50,51,52,55,56,57]`.\n\nThe learned model predicts only nine OP2 controls and merges them into the pinned simple-FM fixed base. It is therefore a constrained learned initialization candidate, not a full 155-parameter DX7 predictor and not evidence of physical FM-1 equivalence. Inference remains entirely local; this admission does not justify deployment of the optional remote reconstruction accelerator.\n'''
+          if '## Admitted local learned initializer' not in research:
+              research += section
+          research_path.write_text(research,encoding='utf-8')
+
+      - name: Persist exact-head acceptance receipt
+        if: always()
+        shell: python
+        run: |
+          from pathlib import Path
+          import os
+          pre={}
+          p=Path('learned-finalize-precheck.txt')
+          if p.exists():
+              for line in p.read_text().splitlines():
+                  if '=' in line:
+                      k,v=line.split('=',1);pre[k]=v
+          codes={}
+          c=Path('learned-finalize-codes.txt')
+          if c.exists():
+              for line in c.read_text().splitlines():
+                  if '=' in line:
+                      k,v=line.split('=',1)
+                      try:codes[k]=int(v)
+                      except ValueError:codes[k]=999
+          stages=['install','audit-virtual','audit-research','audit-learned','typecheck','lint','mfcc','scaler','model','candidate','benchmark','aggregate','full-test','build']
+          gate_status=Path('learned-finalize-status.txt').read_text().strip() if Path('learned-finalize-status.txt').exists() else 'NOT_RUN'
+          success=pre.get('status')=='SUCCESS' and gate_status=='SUCCESS'
+          rows=['| Stage | Exit |','| --- | ---: |']+[f'| {s} | {codes.get(s,"-")} |' for s in stages]
+          failures=[]
+          if not success:
+              for s in stages:
+                  if codes.get(s) in (None,0):continue
+                  log=Path(f'learned-finalize-{s}.log');text=log.read_text(errors='replace') if log.exists() else 'missing log'
+                  failures += ['',f'## {s} failure tail','','```text',text[-12000:],'```']
+          Path('docs/validation/learned-initializer-benchmark-acceptance.md').write_text('\n'.join([
+              '# Learned initializer benchmark acceptance','',
+              f"Source commit: `{os.environ['GITHUB_SHA']}`",'',
+              f"Acceptance: **{'SUCCESS' if success else 'FAILED'}**",'',
+              f"Precheck: `{pre.get('status','missing')}` — {pre.get('reason','missing')}",'',
+              *rows,'',
+              'SUCCESS means the real-reference benchmark contains three active local approaches: catalog retrieval, retrieval-seeded CMA-ES, and the admitted SpiegeLib simple-FM MLP learned candidate. The learned candidate predicts nine historical Dexed OP2 controls on a pinned fixed base using the permanent Librosa 0.7.2-compatible preprocessing path. It is not a full-voice predictor and does not validate physical FM-1 equivalence.','',
+              *failures,''
+          ]),encoding='utf-8')
+          Path('.github/workflows/finalize-spiegelib-learned-block.yml').unlink(missing_ok=True)
+          for path in Path('.').glob('learned-finalize-*.log'):path.unlink(missing_ok=True)
+          for name in ['learned-finalize-precheck.txt','learned-finalize-codes.txt','learned-finalize-status.txt']:
+              Path(name).unlink(missing_ok=True)
+      - name: Commit successful learned block completion
+        if: steps.precheck.outputs.status == 'SUCCESS' && steps.gate.outputs.status == 'SUCCESS'
+        shell: bash
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add -A
+          git commit -m 'test(audio): complete admitted SpiegeLib learned block' || true
+          git pull --rebase origin main
+          git push origin HEAD:main
+      - name: Commit failed finalization diagnostic
+        if: steps.precheck.outputs.status != 'SUCCESS' || steps.gate.outputs.status != 'SUCCESS'
+        shell: bash
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add -A
+          git commit -m 'test(audio): record incomplete SpiegeLib learned finalization' || true
+          git pull --rebase origin main
+          git push origin HEAD:main
