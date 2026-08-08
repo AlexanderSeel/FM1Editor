@@ -65,7 +65,7 @@ The staged technical decision and reviewed libraries/research are documented in 
 - [ ] Compare retrieval-only, evolutionary and learned-initialization approaches using synthetic ground-truth patches and real isolated sounds; report similarity metrics, runtime and failure cases rather than promising exact reconstruction.
 - [ ] Reproduce and license-audit Sound2Synth, SpiegeLib/Dexed sound matching, DDX7 and related DDSP approaches before using code, weights, datasets or preprocessing in production.
 - [ ] Add optional server/Python acceleration only behind explicit upload consent, documented retention/deletion, model/version metadata and a fully local fallback for normal editing and audition.
-- [ ] Return multiple editable candidates with semantic parameter diffs, source initialization, metric breakdown, `.syx` export and optional FM-1-inspired FX state; never auto-send a generated patch to hardware.
+- [x] Return multiple editable candidates with semantic parameter diffs, source initialization, metric breakdown, checksum-valid `.syx` export and optional detached FM-1-inspired FX snapshots. Audition, voice-only load, combined voice+FX load and export remain separate explicit actions; generated patches are never auto-sent to hardware. Evidence: [`docs/validation/dx7-candidate-artifacts-ui.md`](./docs/validation/dx7-candidate-artifacts-ui.md), [`docs/validation/dx7-candidate-fx-state-ui.md`](./docs/validation/dx7-candidate-fx-state-ui.md) and [`docs/validation/dx7-candidate-output-browser.md`](./docs/validation/dx7-candidate-output-browser.md).
 
 ## 10. Virtual DX7 / FM-1-inspired synthesizer
 
