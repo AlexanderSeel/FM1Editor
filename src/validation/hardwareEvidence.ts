@@ -18,6 +18,8 @@ export const HARDWARE_VALIDATION_CHECKS: readonly HardwareValidationCheckDefinit
   { id: 'audio-saved-wav', section: 'A', label: 'Saved WAV contains audible FM-1 synthesizer output' },
   { id: 'browser-chrome-resilience', section: 'B', label: 'Chrome permission/reconnect/removal/concurrent-MIDI matrix completed' },
   { id: 'browser-edge-resilience', section: 'B', label: 'Edge permission/reconnect/removal/concurrent-MIDI matrix completed' },
+  { id: 'browser-note-off-recovery', section: 'B', label: 'Note-off/Panic recovery verified after interruption or held-note scenario' },
+  { id: 'browser-channel-selection', section: 'B', label: 'Explicit MIDI channel selection verified against physical FM-1 response' },
   { id: 'bank-destination-prompt', section: 'C', label: 'Merged 32-voice send opens the A/B/C/D destination prompt' },
   { id: 'bank-edited-slot', section: 'C', label: 'Edited target slot is playable and contains the expected edit' },
   { id: 'bank-untouched-voices', section: 'C', label: 'All 31 untouched voices remain correct' },
