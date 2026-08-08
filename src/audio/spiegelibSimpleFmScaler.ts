@@ -20,7 +20,13 @@ export interface SpiegelibSimpleFmScaler {
     readonly license: string
     readonly creators: readonly string[]
   }
-  readonly fitShape: readonly [50000, 44, 13]
+  /**
+   * The archived experiment pickle reports (10, 44, 13). SpiegeLib stores the
+   * shape used when the scaler was fitted and later uses only its rank plus
+   * fitAxis to broadcast the persisted 44×13 mean/std matrices. The first
+   * dimension is provenance metadata, not a required inference batch size.
+   */
+  readonly fitShape: readonly [number, 44, 13]
   readonly fitAxis: readonly [0]
   readonly featureShape: readonly [44, 13]
   readonly mean: readonly (readonly number[])[]
@@ -38,7 +44,14 @@ export function validateSpiegelibSimpleFmScaler(value: unknown): asserts value i
   if (typeof value !== 'object' || value === null) throw new Error('SpiegeLib MFCC scaler must be an object.')
   const scaler = value as Partial<SpiegelibSimpleFmScaler>
   if (scaler.schema !== SPIEGELIB_SIMPLE_FM_SCALER_SCHEMA) throw new Error('Unsupported SpiegeLib MFCC scaler schema.')
-  if (!Array.isArray(scaler.fitShape) || scaler.fitShape.join(',') !== '50000,44,13') throw new Error('SpiegeLib scaler fit shape must be 50000×44×13.')
+  if (!Array.isArray(scaler.fitShape)
+    || scaler.fitShape.length !== 3
+    || !Number.isInteger(scaler.fitShape[0])
+    || (scaler.fitShape[0] ?? 0) < 1
+    || scaler.fitShape[1] !== SPIEGELIB_MFCC_FRAME_COUNT
+    || scaler.fitShape[2] !== SPIEGELIB_MFCC_COUNT) {
+    throw new Error('SpiegeLib scaler fit shape must be a positive batch dimension followed by 44×13.')
+  }
   if (!Array.isArray(scaler.fitAxis) || scaler.fitAxis.join(',') !== '0') throw new Error('SpiegeLib scaler fit axis must be 0.')
   if (!Array.isArray(scaler.featureShape) || scaler.featureShape.join(',') !== '44,13') throw new Error('SpiegeLib scaler feature shape must be 44×13.')
   if (!isFiniteMatrix(scaler.mean, SPIEGELIB_MFCC_FRAME_COUNT, SPIEGELIB_MFCC_COUNT, false)) throw new Error('SpiegeLib scaler mean must be a finite 44×13 matrix.')
