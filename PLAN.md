@@ -49,7 +49,6 @@ Execute sections C and D of [`docs/validation/fm1-hardware-test-protocol.md`](./
 
 Known limitations, current evidence and conservative recovery procedures are maintained in [`docs/validation/support-matrix-and-recovery.md`](./docs/validation/support-matrix-and-recovery.md).
 
-- [ ] Execute typecheck, lint, the full test suite, production build and the permanent Chrome/Edge FM-1 + DX7 responsive matrices successfully on the same source commit. [`docs/validation/current-software-browser-gate.md`](./docs/validation/current-software-browser-gate.md) records that the Ubuntu software job passed for `ffb582b5245d5de6cffbeaf3cceac212dce04f1a` while the Windows Chrome/Edge job failed, so the overall gate remains open.
 - [ ] Test Chrome and Edge on Windows with a physical FM-1 over USB MIDI and USB audio, including merged bank import, destination selection, preset recall, recording, note-off recovery and channel selection; test BLE MIDI where browser/platform support permits.
 - [ ] Add GitHub Pages deployment after secure-context routing and Web MIDI/Web Audio behavior are verified.
 
