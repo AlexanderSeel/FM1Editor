@@ -1,0 +1,194 @@
+name: Convert archived SpiegeLib MFCC scaler
+
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/convert-spiegelib-scaler.yml']
+
+permissions:
+  contents: write
+
+jobs:
+  convert:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Download pinned MFCC archive and extract safe inputs
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail --location --retry 3 --retry-all-errors \
+            https://zenodo.org/api/records/3722784/files/data_simple_FM_mfcc.zip/content \
+            --output mfcc.zip
+          echo '7c9357219b70c07a4ab115d332f78ef5  mfcc.zip' | md5sum --check --strict
+          unzip -p mfcc.zip data_simple_FM_mfcc/data_scaler.pkl > data_scaler.pkl
+          echo '99ec4350f824017d3b9e36f17edf7753af954458ed4f01442c62f4e243704dc4  data_scaler.pkl' | sha256sum --check --strict
+          unzip -p mfcc.zip data_simple_FM_mfcc/train_features.npy > train_features.npy
+
+      - name: Build isolated scaler converter image
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf scaler-image scaler-in scaler-out
+          mkdir -p scaler-image/spiegelib/features scaler-in scaler-out
+          cp data_scaler.pkl scaler-in/data_scaler.pkl
+          cat > scaler-image/spiegelib/__init__.py <<'PY'
+          PY
+          cat > scaler-image/spiegelib/features/__init__.py <<'PY'
+          PY
+          cat > scaler-image/spiegelib/features/standard_scaler.py <<'PY'
+          class StandardScaler:
+              pass
+          PY
+          cat > scaler-image/extract.py <<'PY'
+          import json
+          from pathlib import Path
+          import joblib
+          import numpy as np
+
+          scaler = joblib.load('/input/data_scaler.pkl')
+          mean = np.asarray(getattr(scaler, 'mean'), dtype=np.float64)
+          std = np.asarray(getattr(scaler, 'std'), dtype=np.float64)
+          fit_axis = getattr(scaler, 'fit_axis')
+          fit_shape = tuple(int(value) for value in getattr(scaler, 'fit_shape'))
+          if mean.shape != (44, 13):
+              raise SystemExit(f'unexpected mean shape: {mean.shape}')
+          if std.shape != (44, 13):
+              raise SystemExit(f'unexpected std shape: {std.shape}')
+          if fit_axis not in ((0,), [0]):
+              raise SystemExit(f'unexpected fit_axis: {fit_axis!r}')
+          if fit_shape != (50000, 44, 13):
+              raise SystemExit(f'unexpected fit_shape: {fit_shape}')
+          if not np.isfinite(mean).all() or not np.isfinite(std).all() or not (std > 0).all():
+              raise SystemExit('scaler contains non-finite/zero values')
+          payload = {
+              'schema': 'fm1-editor.spiegelib-simple-fm-mfcc-scaler.v1',
+              'source': {
+                  'doi': '10.5281/zenodo.3722784',
+                  'archive': 'data_simple_FM_mfcc.zip',
+                  'archiveMd5': '7c9357219b70c07a4ab115d332f78ef5',
+                  'member': 'data_simple_FM_mfcc/data_scaler.pkl',
+                  'memberSha256': '99ec4350f824017d3b9e36f17edf7753af954458ed4f01442c62f4e243704dc4',
+                  'license': 'CC-BY-4.0',
+                  'creators': ['Jordie Shier', 'George Tzanetakis', 'Kirk McNally'],
+              },
+              'fitShape': list(fit_shape),
+              'fitAxis': [0],
+              'featureShape': [44, 13],
+              'mean': mean.tolist(),
+              'std': std.tolist(),
+          }
+          Path('/output/scaler.json').write_text(json.dumps(payload, indent=2) + '\n', encoding='utf-8')
+          PY
+          cat > scaler-image/Dockerfile <<'DOCKER'
+          FROM python:3.11-slim
+          RUN python -m pip install --no-cache-dir --disable-pip-version-check numpy==1.26.4 joblib==1.4.2
+          COPY spiegelib /opt/modules/spiegelib
+          COPY extract.py /opt/extract.py
+          ENV PYTHONPATH=/opt/modules
+          ENTRYPOINT ["python", "/opt/extract.py"]
+          DOCKER
+          docker build --quiet --tag fm1-spiegelib-scaler:local scaler-image
+
+      - name: Convert pickle with no network or repository access
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker run --rm \
+            --network none \
+            --read-only \
+            --cap-drop ALL \
+            --memory 512m \
+            --cpus 1 \
+            --pids-limit 128 \
+            --tmpfs /tmp:rw,noexec,nosuid,size=32m \
+            --env PYTHONPATH=/opt/modules \
+            --volume "$PWD/scaler-in:/input:ro" \
+            --volume "$PWD/scaler-out:/output:rw" \
+            fm1-spiegelib-scaler:local
+          test -s scaler-out/scaler.json
+
+      - name: Validate archived scaled training features
+        shell: python
+        run: |
+          import json
+          from pathlib import Path
+          import numpy as np
+
+          train = np.load('train_features.npy', allow_pickle=False, mmap_mode='r')
+          if train.shape != (50000, 44, 13):
+              raise SystemExit(f'unexpected train feature shape: {train.shape}')
+          mean = np.asarray(train, dtype=np.float64).mean(axis=0)
+          std = np.asarray(train, dtype=np.float64).std(axis=0)
+          stats = {
+              'shape': list(train.shape),
+              'maxAbsScaledMean': float(np.abs(mean).max()),
+              'maxAbsScaledStdMinusOne': float(np.abs(std - 1.0).max()),
+          }
+          if stats['maxAbsScaledMean'] > 1e-4:
+              raise SystemExit(f'scaled training mean drift: {stats}')
+          if stats['maxAbsScaledStdMinusOne'] > 1e-4:
+              raise SystemExit(f'scaled training std drift: {stats}')
+          Path('scaled-feature-stats.json').write_text(json.dumps(stats, indent=2) + '\n', encoding='utf-8')
+          print(json.dumps(stats, indent=2))
+
+      - name: Persist plain scaler and provenance receipt
+        shell: python
+        run: |
+          from pathlib import Path
+          import hashlib
+          import json
+          import os
+
+          source = Path('scaler-out/scaler.json')
+          data = source.read_bytes()
+          sha = hashlib.sha256(data).hexdigest()
+          payload = json.loads(data)
+          flat_mean = [value for row in payload['mean'] for value in row]
+          flat_std = [value for row in payload['std'] for value in row]
+          if len(flat_mean) != 572 or len(flat_std) != 572:
+              raise SystemExit('converted scaler does not flatten to 572 values')
+          stats = json.loads(Path('scaled-feature-stats.json').read_text(encoding='utf-8'))
+
+          target = Path('src/audio/data/spiegelib-simple-fm-mfcc-scaler.json')
+          target.parent.mkdir(parents=True, exist_ok=True)
+          target.write_bytes(data)
+          Path('docs/research/spiegelib-simple-fm-scaler-conversion.md').write_text('\n'.join([
+              '# SpiegeLib simple-FM MFCC scaler conversion',
+              '',
+              f"FM1 Editor source commit: `{os.environ['GITHUB_SHA']}`",
+              '',
+              'Conversion status: **SUCCESS**',
+              '',
+              '- archive DOI: `10.5281/zenodo.3722784`',
+              '- archive: `data_simple_FM_mfcc.zip` — MD5 `7c9357219b70c07a4ab115d332f78ef5`',
+              '- archived scaler member SHA-256: `99ec4350f824017d3b9e36f17edf7753af954458ed4f01442c62f4e243704dc4`',
+              f'- converted plain JSON SHA-256: `{sha}`',
+              '- dataset/scaler license: CC BY 4.0; creators: Jordie Shier, George Tzanetakis, Kirk McNally',
+              '- scaler fit shape: `50000 × 44 × 13`; fit axis: `0`; flattened model feature count: `572`',
+              f"- archived scaled training feature max |mean|: `{stats['maxAbsScaledMean']}`",
+              f"- archived scaled training feature max |std-1|: `{stats['maxAbsScaledStdMinusOne']}`",
+              '',
+              'The original joblib pickle was deserialized only inside a Docker container with no network, no repository mount, a read-only root filesystem, dropped Linux capabilities and bounded CPU/memory/PIDs. Only plain numeric mean/std arrays and provenance metadata are committed.',
+              '',
+              'This conversion establishes the exact archived standardization parameters. It does not by itself prove which historical Librosa patch version produced the raw MFCC values, and it does not enable the learned benchmark row until raw-audio feature extraction plus checkpoint inference have an end-to-end compatibility test.',
+              '',
+          ]), encoding='utf-8')
+
+          Path('.github/workflows/convert-spiegelib-scaler.yml').unlink(missing_ok=True)
+          for path in [Path('mfcc.zip'), Path('data_scaler.pkl'), Path('train_features.npy'), Path('scaled-feature-stats.json')]:
+              path.unlink(missing_ok=True)
+
+      - name: Commit converted scaler evidence
+        shell: bash
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add -A
+          git commit -m 'feat(audio): pin archived SpiegeLib MFCC scaler' || true
+          git pull --rebase origin main
+          git push origin HEAD:main
