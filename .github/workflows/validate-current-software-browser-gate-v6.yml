@@ -1,0 +1,93 @@
+name: Validate same-source software and browser gate v6
+
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/validate-current-software-browser-gate-v6.yml']
+
+permissions:
+  contents: write
+
+jobs:
+  gate:
+    runs-on: windows-latest
+    timeout-minutes: 70
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - run: npm install --no-audit --no-fund
+      - name: Run software stages
+        shell: pwsh
+        run: |
+          $r=[ordered]@{}
+          function S([string]$n,[scriptblock]$c){& $c;$r[$n]=$LASTEXITCODE}
+          S 'auditVirtual' { npm run audit:virtual-dx7 }
+          S 'auditResearch' { npm run audit:reconstruction-upstreams }
+          S 'typecheck' { npm run typecheck }
+          S 'lint' { npm run lint }
+          S 'tests' { npm run test }
+          S 'build' { npm run build }
+          S 'smokeSyntax' { node --check scripts/smoke-target-responsive.mjs }
+          $r|ConvertTo-Json|Set-Content -Encoding utf8 software-gate.json
+          exit 0
+      - name: Run branded browser matrices
+        shell: pwsh
+        run: |
+          $x86=${env:ProgramFiles(x86)}
+          $chrome=@((Join-Path $env:PROGRAMFILES 'Google\Chrome\Application\chrome.exe'),(Join-Path $x86 'Google\Chrome\Application\chrome.exe'))|Where-Object{$_ -and(Test-Path $_)}|Select-Object -First 1
+          $edge=@((Join-Path $env:PROGRAMFILES 'Microsoft\Edge\Application\msedge.exe'),(Join-Path $x86 'Microsoft\Edge\Application\msedge.exe'))|Where-Object{$_ -and(Test-Path $_)}|Select-Object -First 1
+          if(-not $chrome){throw 'Chrome not found'};if(-not $edge){throw 'Edge not found'}
+          function R([string]$exe,[string]$browser,[string]$target){
+            $out="responsive-$target-$browser.json";$code=1
+            for($i=1;$i -le 2;$i++){
+              Remove-Item $out -Force -ErrorAction SilentlyContinue
+              node scripts/smoke-target-responsive.mjs --browser-executable $exe --browser-name $browser --target $target --result $out
+              $code=$LASTEXITCODE;if($code -eq 0){break};Start-Sleep -Seconds 1
+            }
+            if(-not(Test-Path $out)){@{ok=$false;browserName=$browser;target=$target;error="runner exited $code without result"}|ConvertTo-Json|Set-Content -Encoding utf8 $out}
+          }
+          R $chrome chrome fm1;R $chrome chrome dx7;R $edge edge fm1;R $edge edge dx7
+          exit 0
+      - name: Persist receipt and close gate only on success
+        if: always()
+        shell: pwsh
+        run: |
+          @'
+          import json,os
+          from pathlib import Path
+          def read(path,default):
+              p=Path(path)
+              if not p.exists(): return default
+              try:return json.loads(p.read_text(encoding='utf-8-sig'))
+              except Exception as exc:return {**default,'error':f'invalid json: {exc}'}
+          software=read('software-gate.json',{})
+          stages=['auditVirtual','auditResearch','typecheck','lint','tests','build','smokeSyntax']
+          matrices={(b,t):read(f'responsive-{t}-{b}.json',{'ok':False,'error':'result missing'}) for b in ('chrome','edge') for t in ('fm1','dx7')}
+          ok=all(software.get(s)==0 for s in stages) and all(bool(v.get('ok')) for v in matrices.values())
+          rows=['| Software stage | Exit |','| --- | ---: |']+[f'| {s} | {software.get(s,"?")} |' for s in stages]
+          browser=['| Browser | Target | Product | Desktop | Narrow | Mobile touch | MIDI requests | Result |','| --- | --- | --- | --- | --- | --- | ---: | --- |']
+          for b,t in [('chrome','fm1'),('chrome','dx7'),('edge','fm1'),('edge','dx7')]:
+              v=matrices[(b,t)]
+              if not v.get('ok'):
+                  browser.append(f'| {b} | {t.upper()} | FAILED | — | — | — | — | {v.get("error","unknown")} |');continue
+              names={x.get('viewport') for x in v.get('matrix',[])}
+              browser.append(f'| {b} | {t.upper()} | {v.get("browserProduct")} | {"PASS" if "desktop" in names else "MISS"} | {"PASS" if "desktop-narrow" in names else "MISS"} | {"PASS" if "mobile-touch" in names else "MISS"} | {v.get("midiRequests",0)} | PASS |')
+          Path('docs/validation/current-software-browser-gate.md').write_text('\n'.join(['# Current same-source software and responsive browser gate','',f"Source commit: `{os.environ['GITHUB_SHA']}`",'',f"Overall gate: **{'SUCCESS' if ok else 'FAILED'}**",'',*rows,'',*browser,'','All software checks and browser matrices ran from the same Windows checkout/build. The responsive matrix covers 1440×900, 1024×768 and 390×844 touch emulation for both FM-1 and DX7 target modes in branded Chrome and Edge. This is software/layout/browser evidence only and does not validate physical MIDI/audio hardware.','']),encoding='utf-8')
+          if ok:
+              plan=Path('PLAN.md');prefix='- [ ] Execute typecheck, lint, the full test suite, production build and the permanent Chrome/Edge FM-1 + DX7 responsive matrices successfully on the same source commit.';lines=plan.read_text(encoding='utf-8').splitlines();plan.write_text('\n'.join(x for x in lines if not x.startswith(prefix)).rstrip()+'\n',encoding='utf-8')
+          for p in Path('.').glob('responsive-*.json'):p.unlink(missing_ok=True)
+          Path('software-gate.json').unlink(missing_ok=True)
+          Path('.github/workflows/validate-current-software-browser-gate-v6.yml').unlink(missing_ok=True)
+          '@ | python
+      - name: Commit permanent evidence
+        if: always()
+        shell: bash
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add -A
+          git commit -m 'test(browser): record target-control responsive gate' || true
+          git pull --rebase origin main
+          git push origin HEAD:main
