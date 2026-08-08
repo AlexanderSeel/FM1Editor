@@ -1,6 +1,6 @@
 # Additional DX7 patch-provider review
 
-Last reviewed: 2026-08-06
+Last reviewed: 2026-08-08
 
 ## Admission criteria
 
@@ -57,6 +57,68 @@ Blocking findings:
 
 Decision: **no adapter**. The repository license does not remove the stated third-party provenance ambiguity.
 
+### `jphaenlin/DX7-patches`
+
+Repository:
+
+- https://github.com/jphaenlin/DX7-patches
+
+Positive findings:
+
+- direct downloadable ZIP packages and patch-name lists;
+- DX7-oriented data intended to work with Dexed;
+- simple versionable repository layout.
+
+Blocking findings:
+
+- the reviewed repository page does not publish a license;
+- its README says the selection contains patches made by the maintainer **or taken from the Bobby Blues DX7 database** and then modified/tuned for Dexed;
+- the mixed first-party/third-party provenance is not separated into an explicit machine-readable rights/attribution map;
+- therefore a repository mirror/adaptor cannot establish redistribution rights for every included bank.
+
+Decision: **no adapter**. Technical accessibility is adequate, but the patch-data rights and per-source provenance are not explicit enough.
+
+### MiniDexed community curated SysEx collection
+
+Reference:
+
+- https://github.com/probonopd/MiniDexed/discussions/456
+
+Positive findings:
+
+- very large DX7/Dexed-oriented SysEx collection;
+- files have been repaired/deduplicated and organized for synthesizer use;
+- the discussion documents technical provenance across several historical collections and tools.
+
+Blocking findings:
+
+- the collection is explicitly assembled from many older archives and named third-party patch collections;
+- no catalog-level data license or per-bank redistribution grant was found in the reviewed discussion;
+- a MiniDexed/Dexed software license cannot be assumed to relicense independently authored historical patch data;
+- a discussion attachment is not a stable versioned catalog/API contract suitable for automated synchronization.
+
+Decision: **no adapter**. It is useful research/test material only where separately permitted; it does not satisfy the built-in provider admission boundary.
+
+### Dexed bundled/credited programs
+
+Repository:
+
+- https://github.com/asb2m10/dexed
+
+Positive findings:
+
+- mature DX7-compatible project;
+- stable repository and explicit GPLv3 software license;
+- README credits multiple DX7 program authors/collections.
+
+Blocking findings:
+
+- the GPLv3 declaration applies to the project software and is not evidence that every credited DX7 program author transferred patch-data redistribution rights under GPLv3;
+- the README credits a mixture of independent DX7 program authors, so patch provenance is broader than a single repository-owned data set;
+- no separate machine-readable catalog/data license was found for admitting the bundled/credited programs as an independent FM1 Editor provider.
+
+Decision: **no adapter**. Do not infer patch-data rights from the Dexed software license.
+
 ### `patches.fm`
 
 Site:
@@ -78,6 +140,6 @@ Decision: **no adapter** unless the provider publishes an API/data feed and expl
 
 ## Current decision
 
-No additional provider qualifies at this time. FM1 Editor should retain the tracked `sysexFinal.zip` source and Yamaha Black Boxes overlay already described in [`patch-catalog.md`](./patch-catalog.md).
+No additional provider qualifies as of 2026-08-08. FM1 Editor should retain the tracked `sysexFinal.zip` source and Yamaha Black Boxes overlay already described in [`patch-catalog.md`](./patch-catalog.md).
 
-The plan item remains unresolved by design. A future candidate should be evaluated against the admission criteria above before implementation begins.
+The plan item remains unresolved by design. A future candidate should be evaluated against the admission criteria above before implementation begins. A new provider should not be added merely because a repository/site is public, downloadable or software-licensed; the patch data itself needs compatible redistribution/use terms and traceable provenance.
