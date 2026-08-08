@@ -111,6 +111,7 @@ export interface MsfaAudioWorkletDiagnostics {
   readonly overBudgetCallbacks: number
   readonly activeVoices: number
   readonly polyphony: number
+  readonly clock?: 'performance' | 'date'
 }
 
 export interface MsfaAudioWorkletController {
@@ -303,6 +304,7 @@ export function createMsfaAudioWorkletController(
       maxUtilization?: unknown
       overBudgetCallbacks?: unknown
       activeVoices?: unknown
+      clock?: unknown
     }
     if (data.type === 'ready') {
       const resolve = readyResolve
@@ -340,7 +342,8 @@ export function createMsfaAudioWorkletController(
       const activeVoices = numeric(data.activeVoices)
       const polyphony = numeric(data.polyphony)
       if (callbacks !== null && callbacks > 0 && meanRenderMs !== null && meanRenderMs >= 0 && maxRenderMs !== null && maxRenderMs >= 0 && budgetMs !== null && budgetMs > 0 && meanUtilization !== null && meanUtilization >= 0 && maxUtilization !== null && maxUtilization >= 0 && overBudgetCallbacks !== null && overBudgetCallbacks >= 0 && activeVoices !== null && activeVoices >= 0 && polyphony !== null && polyphony > 0) {
-        diagnostics = { callbacks, meanRenderMs, maxRenderMs, budgetMs, meanUtilization, maxUtilization, overBudgetCallbacks, activeVoices, polyphony }
+        const clock = data.clock === 'performance' || data.clock === 'date' ? data.clock : undefined
+        diagnostics = { callbacks, meanRenderMs, maxRenderMs, budgetMs, meanUtilization, maxUtilization, overBudgetCallbacks, activeVoices, polyphony, ...(clock === undefined ? {} : { clock }) }
       }
       return
     }

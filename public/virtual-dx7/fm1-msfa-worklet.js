@@ -419,8 +419,17 @@ class Fm1MsfaProcessor extends AudioWorkletProcessor {
     }
   }
 
+  diagnosticClock() {
+    if (typeof performance !== 'undefined' && typeof performance.now === 'function') return 'performance'
+    if (typeof Date !== 'undefined' && typeof Date.now === 'function') return 'date'
+    return null
+  }
+
   diagnosticNow() {
-    return typeof performance !== 'undefined' && typeof performance.now === 'function' ? performance.now() : null
+    const clock = this.diagnosticClock()
+    if (clock === 'performance') return performance.now()
+    if (clock === 'date') return Date.now()
+    return null
   }
 
   recordDiagnostics(startedAtMs, frameCount) {
@@ -437,7 +446,7 @@ class Fm1MsfaProcessor extends AudioWorkletProcessor {
     const callbacks = this.diagnosticCallbacks
     const meanRenderMs = this.diagnosticTotalMs / callbacks
     const maxRenderMs = this.diagnosticMaxMs
-    this.port.postMessage({ type: 'diagnostics', callbacks, meanRenderMs, maxRenderMs, budgetMs, meanUtilization: meanRenderMs / budgetMs, maxUtilization: maxRenderMs / budgetMs, overBudgetCallbacks: this.diagnosticOverBudget, activeVoices: this.voices.filter((voice) => voice.state !== 'idle').length, polyphony: MAX_POLYPHONY })
+    this.port.postMessage({ type: 'diagnostics', callbacks, meanRenderMs, maxRenderMs, budgetMs, meanUtilization: meanRenderMs / budgetMs, maxUtilization: maxRenderMs / budgetMs, overBudgetCallbacks: this.diagnosticOverBudget, activeVoices: this.voices.filter((voice) => voice.state !== 'idle').length, polyphony: MAX_POLYPHONY, clock: this.diagnosticClock() })
     this.diagnosticCallbacks = 0
     this.diagnosticTotalMs = 0
     this.diagnosticMaxMs = 0
