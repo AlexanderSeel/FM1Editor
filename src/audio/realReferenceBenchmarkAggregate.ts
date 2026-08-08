@@ -40,13 +40,17 @@ export interface RealReferenceBenchmarkAggregate {
   readonly listeningCounts: Readonly<Record<RealReferenceListeningAssessment, number>>
   readonly retrievalDistance: RealReferenceMetricStats
   readonly evolutionaryDistance: RealReferenceMetricStats
+  readonly learnedDistance: RealReferenceMetricStats | null
   readonly retrievalRuntimeMs: RealReferenceMetricStats
   readonly evolutionaryRuntimeMs: RealReferenceMetricStats
+  readonly learnedRuntimeMs: RealReferenceMetricStats | null
   readonly cmaMetricImprovedCount: number
   readonly cmaMetricImprovedRate: number
   readonly cmaListeningBetterCount: number
   readonly metricImprovedButListeningNotBetterCount: number
+  readonly learnedInitializationSuccessCount: number
   readonly learnedInitializationUnavailableCount: number
+  readonly learnedInitializationFailedCount: number
   readonly closureReadiness: {
     readonly mixedSetComplete: boolean
     readonly listeningAssessmentsComplete: boolean
@@ -61,8 +65,10 @@ export interface RealReferenceBenchmarkAggregate {
     readonly notes: string | null
     readonly retrievalDistance: number
     readonly evolutionaryDistance: number
+    readonly learnedDistance: number | null
     readonly retrievalRuntimeMs: number
     readonly evolutionaryRuntimeMs: number
+    readonly learnedRuntimeMs: number | null
     readonly retrievalVsEvolutionaryDelta: number
     readonly learnedStatus: string
   }[]
@@ -105,6 +111,10 @@ function metricStats(values: readonly number[], label: string): RealReferenceMet
   }
 }
 
+function metricStatsOrNull(values: readonly number[], label: string): RealReferenceMetricStats | null {
+  return values.length === 0 ? null : metricStats(values, label)
+}
+
 function resultFor(report: RealReferenceReconstructionBenchmarkReport, approachId: 'retrieval' | 'evolutionary' | 'learned-initialization') {
   const result = report.comparison.results.find((candidate) => candidate.approachId === approachId)
   if (!result) throw new Error(`${report.reference.filename} is missing the ${approachId} comparison row.`)
@@ -120,11 +130,15 @@ function assertReport(report: RealReferenceReconstructionBenchmarkReport): void 
   if (JSON.stringify(report).includes('"samples"')) throw new Error(`${report.reference.filename} unexpectedly embeds raw audio samples.`)
   const retrieval = resultFor(report, 'retrieval')
   const evolutionary = resultFor(report, 'evolutionary')
-  resultFor(report, 'learned-initialization')
+  const learned = resultFor(report, 'learned-initialization')
   finiteNonNegative(retrieval.bestDistance, `${report.reference.filename} retrieval distance`)
   finiteNonNegative(evolutionary.bestDistance, `${report.reference.filename} evolutionary distance`)
   finiteNonNegative(retrieval.runtimeMs, `${report.reference.filename} retrieval runtime`)
   finiteNonNegative(evolutionary.runtimeMs, `${report.reference.filename} evolutionary runtime`)
+  if (learned.failure === null) {
+    finiteNonNegative(learned.bestDistance, `${report.reference.filename} learned distance`)
+    finiteNonNegative(learned.runtimeMs, `${report.reference.filename} learned runtime`)
+  }
 }
 
 export function parseRealReferenceBenchmarkReceipt(value: unknown): RealReferenceReconstructionBenchmarkReport {
@@ -155,12 +169,16 @@ export function aggregateRealReferenceBenchmarkEvidence(
   const receipts: RealReferenceBenchmarkAggregate['receipts'][number][] = []
   const retrievalDistances: number[] = []
   const evolutionaryDistances: number[] = []
+  const learnedDistances: number[] = []
   const retrievalRuntimes: number[] = []
   const evolutionaryRuntimes: number[] = []
+  const learnedRuntimes: number[] = []
   let cmaMetricImprovedCount = 0
   let cmaListeningBetterCount = 0
   let metricImprovedButListeningNotBetterCount = 0
+  let learnedInitializationSuccessCount = 0
   let learnedInitializationUnavailableCount = 0
+  let learnedInitializationFailedCount = 0
 
   for (const input of inputs) {
     assertReport(input.report)
@@ -180,6 +198,20 @@ export function aggregateRealReferenceBenchmarkEvidence(
     const delta = retrievalDistance - evolutionaryDistance
     const metricImproved = delta > 0
 
+    let learnedDistance: number | null = null
+    let learnedRuntimeMs: number | null = null
+    if (learned.failure === null) {
+      learnedDistance = finiteNonNegative(learned.bestDistance, 'learned distance')
+      learnedRuntimeMs = finiteNonNegative(learned.runtimeMs, 'learned runtime')
+      learnedDistances.push(learnedDistance)
+      learnedRuntimes.push(learnedRuntimeMs)
+      learnedInitializationSuccessCount += 1
+    } else if (learned.failure === REAL_REFERENCE_LEARNED_BLOCK || input.report.learnedStatus === REAL_REFERENCE_LEARNED_BLOCK) {
+      learnedInitializationUnavailableCount += 1
+    } else {
+      learnedInitializationFailedCount += 1
+    }
+
     retrievalDistances.push(retrievalDistance)
     evolutionaryDistances.push(evolutionaryDistance)
     retrievalRuntimes.push(retrievalRuntimeMs)
@@ -189,9 +221,6 @@ export function aggregateRealReferenceBenchmarkEvidence(
     if (metricImproved) cmaMetricImprovedCount += 1
     if (input.listeningAssessment === 'cma-better') cmaListeningBetterCount += 1
     if (metricImproved && input.listeningAssessment !== 'cma-better') metricImprovedButListeningNotBetterCount += 1
-    if (learned.failure === REAL_REFERENCE_LEARNED_BLOCK || input.report.learnedStatus === REAL_REFERENCE_LEARNED_BLOCK) {
-      learnedInitializationUnavailableCount += 1
-    }
 
     receipts.push({
       referenceSha256: hash,
@@ -201,10 +230,12 @@ export function aggregateRealReferenceBenchmarkEvidence(
       notes: input.notes?.trim() || null,
       retrievalDistance,
       evolutionaryDistance,
+      learnedDistance,
       retrievalRuntimeMs,
       evolutionaryRuntimeMs,
+      learnedRuntimeMs,
       retrievalVsEvolutionaryDelta: delta,
-      learnedStatus: learned.failure ?? input.report.learnedStatus,
+      learnedStatus: learned.failure ?? learned.sourceInitialization ?? input.report.learnedStatus,
     })
   }
 
@@ -225,13 +256,17 @@ export function aggregateRealReferenceBenchmarkEvidence(
     listeningCounts,
     retrievalDistance: metricStats(retrievalDistances, 'retrieval distance'),
     evolutionaryDistance: metricStats(evolutionaryDistances, 'evolutionary distance'),
+    learnedDistance: metricStatsOrNull(learnedDistances, 'learned distance'),
     retrievalRuntimeMs: metricStats(retrievalRuntimes, 'retrieval runtime'),
     evolutionaryRuntimeMs: metricStats(evolutionaryRuntimes, 'evolutionary runtime'),
+    learnedRuntimeMs: metricStatsOrNull(learnedRuntimes, 'learned runtime'),
     cmaMetricImprovedCount,
     cmaMetricImprovedRate: cmaMetricImprovedCount / receipts.length,
     cmaListeningBetterCount,
     metricImprovedButListeningNotBetterCount,
+    learnedInitializationSuccessCount,
     learnedInitializationUnavailableCount,
+    learnedInitializationFailedCount,
     closureReadiness: {
       mixedSetComplete,
       listeningAssessmentsComplete,
@@ -239,6 +274,6 @@ export function aggregateRealReferenceBenchmarkEvidence(
       missing,
     },
     receipts,
-    note: 'Aggregate contains benchmark metadata, metrics, classifications and listening assessments only. It does not contain reference audio and does not establish exact patch identity or physical FM-1 equivalence.',
+    note: 'Aggregate contains benchmark metadata, metrics, classifications and listening assessments only. Learned statistics include successful learned rows only. It does not contain reference audio and does not establish exact patch identity or physical FM-1 equivalence.',
   }
 }
