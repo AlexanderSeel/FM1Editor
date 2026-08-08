@@ -18,7 +18,7 @@ function scaler(): SpiegelibSimpleFmScaler {
       license: 'CC-BY-4.0',
       creators: ['Jordie Shier', 'George Tzanetakis', 'Kirk McNally'],
     },
-    fitShape: [50000, 44, 13],
+    fitShape: [10, 44, 13],
     fitAxis: [0],
     featureShape: [44, 13],
     mean: Array.from({ length: 44 }, () => new Array<number>(13).fill(2)),
@@ -27,7 +27,7 @@ function scaler(): SpiegelibSimpleFmScaler {
 }
 
 describe('SpiegeLib scaler/input contract', () => {
-  it('standardizes the 44×13 time-major feature vector cell-for-cell', () => {
+  it('standardizes the 44×13 time-major feature vector cell-for-cell with archived batch metadata', () => {
     const raw = new Float32Array(44 * 13).fill(6)
     const standardized = standardizeSpiegelibSimpleFmMfcc(raw, scaler())
     expect(standardized).toHaveLength(572)
@@ -56,9 +56,11 @@ describe('SpiegeLib scaler/input contract', () => {
     expect(resampled[44_099]).toBeLessThan(1)
   })
 
-  it('fails closed on malformed scaler matrices and feature lengths', () => {
-    const bad = { ...scaler(), std: [[1]] }
-    expect(() => standardizeSpiegelibSimpleFmMfcc(new Float32Array(572), bad as SpiegelibSimpleFmScaler)).toThrow(/44×13/)
+  it('fails closed on malformed scaler matrices, shapes and feature lengths', () => {
+    const badStd = { ...scaler(), std: [[1]] }
+    expect(() => standardizeSpiegelibSimpleFmMfcc(new Float32Array(572), badStd as SpiegelibSimpleFmScaler)).toThrow(/44×13/)
+    const badShape = { ...scaler(), fitShape: [0, 44, 13] }
+    expect(() => standardizeSpiegelibSimpleFmMfcc(new Float32Array(572), badShape as unknown as SpiegelibSimpleFmScaler)).toThrow(/positive batch/)
     expect(() => standardizeSpiegelibSimpleFmMfcc(new Float32Array(571), scaler())).toThrow(/572/)
     expect(() => prepareSpiegelibSimpleFmOneSecond(new Float32Array(), 44_100)).toThrow(/non-empty/)
   })
