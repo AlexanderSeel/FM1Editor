@@ -1,0 +1,193 @@
+name: Integrate admitted SpiegeLib learned benchmark
+
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/integrate-spiegelib-learned-benchmark.yml']
+
+permissions:
+  contents: write
+
+jobs:
+  integrate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Require permanent admission evidence
+        id: admission
+        shell: bash
+        run: |
+          set +e
+          status=SUCCESS
+          reasons=()
+          grep -Fq 'Compatibility status: **SUCCESS**' docs/research/spiegelib-mfcc-compatibility.md || { status=FAILED; reasons+=("MFCC compatibility receipt is not SUCCESS"); }
+          test -f src/audio/spiegelibSimpleFmMfcc072.test.ts || { status=FAILED; reasons+=("permanent MFCC072 oracle test missing"); }
+          test -f src/audio/data/spiegelib-mfcc-librosa-0.7.2-reference.json || { status=FAILED; reasons+=("Librosa reference fixture missing"); }
+          grep -Fq 'Audit status: **SUCCESS**' docs/research/spiegelib-label-order.md || { status=FAILED; reasons+=("historical label-order audit not SUCCESS"); }
+          grep -Fq 'Software acceptance: **SUCCESS**' docs/validation/spiegelib-candidate.md || { status=FAILED; reasons+=("composed candidate gate not SUCCESS"); }
+          echo "status=$status" > integration-admission.txt
+          printf 'reason=%s\n' "${reasons[*]:-none}" >> integration-admission.txt
+          cat integration-admission.txt
+          echo "status=$status" >> "$GITHUB_OUTPUT"
+          exit 0
+      - name: Patch benchmark and user-facing scope
+        if: steps.admission.outputs.status == 'SUCCESS'
+        shell: python
+        run: |
+          from pathlib import Path
+          import re
+
+          path=Path('src/audio/realReferenceReconstructionBenchmark.ts')
+          text=path.read_text(encoding='utf-8')
+          if 'createSpiegelibSimpleFmCandidate072' not in text:
+              anchor="import type { PreparedReferenceAudio } from './referenceAudio'"
+              if anchor not in text: raise SystemExit('benchmark import anchor missing')
+              text=text.replace(anchor, "import { createSpiegelibSimpleFmCandidate072 } from './spiegelibSimpleFmCandidate072'\n"+anchor)
+          old="export const REAL_REFERENCE_LEARNED_BLOCK = 'No license-admitted learned initializer/checkpoint is available yet.' as const"
+          status="export const REAL_REFERENCE_LEARNED_STATUS = 'SpiegeLib simple-FM MLP · MIT model · CC BY 4.0 scaler · Librosa 0.7.2 · nine historical Dexed OP2 controls + fixed base' as const"
+          if old in text: text=text.replace(old,status)
+          elif 'export const REAL_REFERENCE_LEARNED_STATUS' not in text: raise SystemExit('learned status constant anchor missing')
+          text=text.replace('readonly learnedStatus: typeof REAL_REFERENCE_LEARNED_BLOCK','readonly learnedStatus: typeof REAL_REFERENCE_LEARNED_STATUS')
+          learned_pattern=re.compile(r"  const learned: ReconstructionApproach<null> = \{\n    id: 'learned-initialization',\n    label: 'Learned initialization',\n    async run\(\) \{\n      throw new Error\(REAL_REFERENCE_LEARNED_BLOCK\)\n    \},\n  \}")
+          learned_replacement="""  const learned: ReconstructionApproach<null> = {
+    id: 'learned-initialization',
+    label: 'SpiegeLib simple-FM MLP',
+    async run() {
+      const candidate = createSpiegelibSimpleFmCandidate072(
+        reference.samples,
+        reference.sampleRate,
+        'SPGL MLP',
+      )
+      return [{
+        voice: candidate.voice,
+        sourceInitialization: 'SpiegeLib simple-FM MLP · nine OP2 controls · fixed base · Librosa 0.7.2',
+      }]
+    },
+  }"""
+          text,count=learned_pattern.subn(learned_replacement,text)
+          if count != 1 and "label: 'SpiegeLib simple-FM MLP'" not in text: raise SystemExit(f'learned approach replacement count {count}')
+          text=text.replace('learnedStatus: REAL_REFERENCE_LEARNED_BLOCK','learnedStatus: REAL_REFERENCE_LEARNED_STATUS')
+          old_note="User-declared isolated reference; audio remains local and is not embedded in this report. Similarity metrics are comparative estimates, not proof of patch identity or exact FM-1 hardware equivalence."
+          new_note="User-declared isolated reference; audio remains local and is not embedded in this report. The learned row uses the admitted local SpiegeLib simple-FM MLP and predicts only nine historical Dexed OP2 controls on a pinned fixed base. Similarity metrics are comparative estimates, not proof of patch identity or exact FM-1 hardware equivalence."
+          text=text.replace(old_note,new_note)
+          if 'REAL_REFERENCE_LEARNED_BLOCK' in text: raise SystemExit('obsolete learned-block symbol remains in benchmark source')
+          path.write_text(text,encoding='utf-8')
+
+          test_path=Path('src/audio/realReferenceReconstructionBenchmark.test.ts')
+          test=test_path.read_text(encoding='utf-8')
+          test=test.replace('REAL_REFERENCE_LEARNED_BLOCK','REAL_REFERENCE_LEARNED_STATUS')
+          # Remove obsolete per-result learned failure expectations, regardless of toBe/toContain spelling.
+          lines=[]
+          for line in test.splitlines():
+              if 'expect(learned' in line and ('failure' in line or 'candidateCount' in line):
+                  continue
+              if 'expect(report.learnedStatus)' in line:
+                  continue
+              lines.append(line)
+          test='\n'.join(lines)+'\n'
+          marker="const learned = report.comparison.results.find((result) => result.approachId === 'learned-initialization')"
+          if marker in test:
+              test=test.replace(marker, marker+"\n    expect(learned?.failure).toBeNull()\n    expect(learned?.candidateCount).toBe(1)\n    expect(report.learnedStatus).toBe(REAL_REFERENCE_LEARNED_STATUS)")
+          elif "approachId === 'learned-initialization'" not in test:
+              raise SystemExit('learned test result anchor missing')
+          test_path.write_text(test,encoding='utf-8')
+
+          ui_path=Path('src/components/ReconstructionBenchmarkPanel.tsx')
+          ui=ui_path.read_text(encoding='utf-8')
+          replacements=[
+              ('Learned initialization remains unavailable until a separately license-admitted implementation/checkpoint exists.', 'Learned initialization runs locally with the admitted SpiegeLib simple-FM MLP: nine historical Dexed OP2 controls on a pinned fixed base, using Librosa 0.7.2-compatible MFCC preprocessing.'),
+              ('Learned initialization remains explicitly unavailable.', 'Learned initialization uses the admitted local SpiegeLib simple-FM MLP (nine OP2 controls + fixed base).'),
+          ]
+          for before,after in replacements: ui=ui.replace(before,after)
+          ui=re.sub(r'Learned initialization remains unavailable[^<\n]*', 'Learned initialization runs locally with the admitted SpiegeLib simple-FM MLP (nine OP2 controls + fixed base).', ui)
+          ui_path.write_text(ui,encoding='utf-8')
+
+          protocol_path=Path('docs/validation/real-reference-benchmark-protocol.md')
+          protocol=protocol_path.read_text(encoding='utf-8')
+          protocol=protocol.replace('learned initialization remains explicitly unavailable until a separately license-admitted implementation/checkpoint exists', 'learned initialization uses the admitted local SpiegeLib simple-FM MLP (nine historical Dexed OP2 controls on a pinned fixed base)')
+          protocol=protocol.replace('learned initialization remains unavailable', 'learned initialization uses the admitted local SpiegeLib simple-FM MLP with its documented nine-control/fixed-base limitation')
+          protocol_path.write_text(protocol,encoding='utf-8')
+
+      - name: Validate integrated three-way benchmark
+        if: steps.admission.outputs.status == 'SUCCESS'
+        id: validation
+        shell: bash
+        run: |
+          set +e
+          : > integration-codes.txt
+          run_stage() {
+            name="$1"
+            shift
+            "$@" > "integration-$name.log" 2>&1
+            code=$?
+            cat "integration-$name.log"
+            echo "$name=$code" >> integration-codes.txt
+          }
+          run_stage install npm install --no-audit --no-fund
+          run_stage audit npm run audit:learned-assets
+          run_stage typecheck npm run typecheck
+          run_stage lint npm run lint
+          run_stage mfcc npm test -- src/audio/spiegelibSimpleFmMfcc072.test.ts
+          run_stage candidate npm test -- src/audio/spiegelibSimpleFmCandidate072.test.ts
+          run_stage benchmark npm test -- src/audio/realReferenceReconstructionBenchmark.test.ts
+          run_stage aggregate npm test -- src/audio/realReferenceBenchmarkAggregate.test.ts
+          run_stage full-test npm run test
+          run_stage build npm run build
+          python - <<'PY'
+          from pathlib import Path
+          codes={}
+          for line in Path('integration-codes.txt').read_text().splitlines():
+              if '=' in line:
+                  n,v=line.split('=',1)
+                  try: codes[n]=int(v)
+                  except ValueError: codes[n]=999
+          stages=['install','audit','typecheck','lint','mfcc','candidate','benchmark','aggregate','full-test','build']
+          status='SUCCESS' if all(codes.get(s)==0 for s in stages) else 'FAILED'
+          Path('integration-validation-status.txt').write_text(status+'\n')
+          print(status)
+          PY
+          status=$(cat integration-validation-status.txt)
+          echo "status=$status" >> "$GITHUB_OUTPUT"
+          exit 0
+      - name: Commit admitted benchmark integration
+        if: steps.admission.outputs.status == 'SUCCESS' && steps.validation.outputs.status == 'SUCCESS'
+        shell: bash
+        run: |
+          rm -f integration-*.log integration-codes.txt integration-validation-status.txt integration-admission.txt
+          rm -f .github/workflows/integrate-spiegelib-learned-benchmark.yml
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add -A
+          git commit -m 'feat(audio): enable admitted SpiegeLib learned benchmark'
+          git pull --rebase origin main
+          git push origin HEAD:main
+      - name: Commit blocked integration diagnostic
+        if: steps.admission.outputs.status != 'SUCCESS' || steps.validation.outputs.status != 'SUCCESS'
+        shell: bash
+        run: |
+          status='ADMISSION_BLOCKED'
+          if test -f integration-validation-status.txt; then status=$(cat integration-validation-status.txt); fi
+          reason=$(grep '^reason=' integration-admission.txt 2>/dev/null | cut -d= -f2- || true)
+          git reset --hard HEAD
+          cat > docs/validation/spiegelib-benchmark-integration.md <<EOF
+          # SpiegeLib benchmark integration diagnostic
+
+          Integration status: **$status**
+
+          Admission reason: ${reason:-not available}
+
+          The learned benchmark row was not committed. Inspect the admission/validation receipts before retrying; no fallback model or relaxed numerical tolerance was substituted.
+          EOF
+          rm -f .github/workflows/integrate-spiegelib-learned-benchmark.yml
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add -A
+          git commit -m 'test(audio): record blocked SpiegeLib benchmark integration' || true
+          git pull --rebase origin main
+          git push origin HEAD:main
