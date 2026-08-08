@@ -1,0 +1,97 @@
+name: Reproduce pinned Magenta DDSP environment
+
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/reproduce-ddsp-environment.yml']
+
+permissions:
+  contents: write
+
+jobs:
+  reproduce:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.9'
+      - name: Clone exact Apache-2.0 DDSP pin
+        shell: bash
+        run: |
+          git clone --filter=blob:none https://github.com/magenta/ddsp.git /tmp/ddsp
+          git -C /tmp/ddsp checkout --detach cf5e62dfe5d5c80aa14761832233a2e68e840e53
+          test "$(git -C /tmp/ddsp rev-parse HEAD)" = "cf5e62dfe5d5c80aa14761832233a2e68e840e53"
+          grep -q 'Apache License' /tmp/ddsp/LICENSE
+      - name: Reproduce source/import environment without model artifacts
+        id: smoke
+        shell: bash
+        run: |
+          set +e
+          : >/tmp/ddsp-reproduction.log
+          python -m venv /tmp/ddsp-venv
+          source /tmp/ddsp-venv/bin/activate
+          python -m pip install --upgrade 'pip<25' 'setuptools<76' wheel 2>&1 | tee -a /tmp/ddsp-reproduction.log
+          bootstrap=${PIPESTATUS[0]}
+          python -m pip install -e /tmp/ddsp 2>&1 | tee -a /tmp/ddsp-reproduction.log
+          install=${PIPESTATUS[0]}
+          if [ "$install" -eq 0 ]; then
+            python - <<'PY' 2>&1 | tee -a /tmp/ddsp-reproduction.log
+          import json
+          import ddsp
+          from ddsp import core, synths, effects, losses, processors, spectral_ops
+          import numpy, tensorflow
+          print('DDSP_IMPORTS=' + json.dumps({
+              'ddsp': getattr(ddsp, '__version__', 'imported'),
+              'numpy': numpy.__version__,
+              'tensorflow': tensorflow.__version__,
+              'core': bool(core),
+              'synths': bool(synths),
+              'effects': bool(effects),
+              'losses': bool(losses),
+              'processors': bool(processors),
+              'spectral_ops': bool(spectral_ops),
+          }, sort_keys=True))
+          PY
+            imports=${PIPESTATUS[0]}
+            python -m pip freeze | sort > /tmp/ddsp-freeze.txt
+          else
+            imports=99
+            : >/tmp/ddsp-freeze.txt
+          fi
+          echo "bootstrap=$bootstrap" >> "$GITHUB_OUTPUT"
+          echo "install=$install" >> "$GITHUB_OUTPUT"
+          echo "imports=$imports" >> "$GITHUB_OUTPUT"
+          if [ "$bootstrap" -eq 0 ] && [ "$install" -eq 0 ] && [ "$imports" -eq 0 ]; then echo ok=true >> "$GITHUB_OUTPUT"; else echo ok=false >> "$GITHUB_OUTPUT"; fi
+          exit 0
+      - name: Persist isolated reproduction receipt
+        if: always()
+        env:
+          OK: ${{ steps.smoke.outputs.ok }}
+          BOOTSTRAP: ${{ steps.smoke.outputs.bootstrap }}
+          INSTALL: ${{ steps.smoke.outputs.install }}
+          IMPORTS: ${{ steps.smoke.outputs.imports }}
+        shell: python
+        run: |
+          import os,re
+          from pathlib import Path
+          log=Path('/tmp/ddsp-reproduction.log').read_text(encoding='utf-8',errors='replace') if Path('/tmp/ddsp-reproduction.log').exists() else 'reproduction log unavailable'
+          freeze=Path('/tmp/ddsp-freeze.txt').read_text(encoding='utf-8',errors='replace') if Path('/tmp/ddsp-freeze.txt').exists() else ''
+          match=re.search(r'DDSP_IMPORTS=(\{.*\})',log)
+          versions=match.group(1) if match else 'not resolved'
+          ok=os.environ.get('OK')=='true'
+          rows=['| Stage | Exit |','| --- | ---: |']+[f'| {name} | {os.environ.get(key,"?")} |' for name,key in [('toolchain bootstrap','BOOTSTRAP'),('editable install + pinned dependency ranges','INSTALL'),('base DSP imports','IMPORTS')]]
+          Path('docs/validation/ddsp-isolated-reproduction.md').write_text('\n'.join(['# Magenta DDSP isolated environment reproduction','', 'Pinned upstream: `magenta/ddsp@cf5e62dfe5d5c80aa14761832233a2e68e840e53`','', 'Code license reviewed: **Apache-2.0**','',f"Environment smoke: **{'SUCCESS' if ok else 'FAILED'}**",'',*rows,'',f'Resolved imports: `{versions}`.','', 'This reproduction exercises only the pinned source package and its differentiable core/synth/effect/loss imports. It downloads no pretrained timbre-transfer model, training dataset or model checkpoint. Any such artifact remains blocked until its own immutable hash and reuse license are recorded.','', 'No DDSP runtime is admitted into FM1 Editor by this research smoke.','', 'Environment snapshot:','```text',freeze[-12000:],'```','','Execution log:','```text',log[-16000:],'```','']),encoding='utf-8')
+          Path('.github/workflows/reproduce-ddsp-environment.yml').unlink(missing_ok=True)
+      - name: Commit research evidence
+        if: always()
+        shell: bash
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add -A
+          git commit -m 'docs(research): record DDSP environment reproduction' || true
+          git pull --rebase origin main
+          git push origin HEAD:main
