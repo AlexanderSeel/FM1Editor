@@ -1,5 +1,9 @@
 import { useMemo, useState } from 'react'
 import {
+  createRealReferenceAggregateEvidenceMarkdown,
+  serializeRealReferenceBenchmarkAggregate,
+} from '../audio/realReferenceAggregateEvidenceDocument'
+import {
   aggregateRealReferenceBenchmarkEvidence,
   parseRealReferenceBenchmarkReceipt,
   type RealReferenceBenchmarkAggregate,
@@ -53,16 +57,24 @@ function runtime(value: number): string {
   return Number.isFinite(value) ? `${value.toFixed(1)} ms` : '—'
 }
 
-function saveAggregate(aggregate: RealReferenceBenchmarkAggregate): void {
-  const blob = new Blob([`${JSON.stringify(aggregate, null, 2)}\n`], { type: 'application/json' })
+function saveText(filename: string, content: string, type: string): void {
+  const blob = new Blob([content], { type })
   const url = URL.createObjectURL(blob)
   const anchor = document.createElement('a')
   anchor.href = url
-  anchor.download = `fm1-real-reference-benchmark-aggregate-${aggregate.createdAt.replace(/[:.]/g, '-')}.json`
+  anchor.download = filename
   document.body.append(anchor)
   anchor.click()
   anchor.remove()
   URL.revokeObjectURL(url)
+}
+
+function aggregateStem(aggregate: RealReferenceBenchmarkAggregate): string {
+  return `fm1-real-reference-benchmark-aggregate-${aggregate.createdAt.replace(/[:.]/g, '-')}`
+}
+
+function saveAggregate(aggregate: RealReferenceBenchmarkAggregate): void {
+  saveText(`${aggregateStem(aggregate)}.json`, serializeRealReferenceBenchmarkAggregate(aggregate), 'application/json')
 }
 
 function learnedResult(report: RealReferenceReconstructionBenchmarkReport) {
@@ -137,6 +149,17 @@ export function ReconstructionBenchmarkSetPanel() {
     }
   }
 
+  const saveClosureEvidence = async () => {
+    if (!aggregate) return
+    setError(null)
+    try {
+      const evidence = await createRealReferenceAggregateEvidenceMarkdown(aggregate)
+      saveText(`${aggregateStem(aggregate)}-evidence.md`, evidence.markdown, 'text/markdown')
+    } catch (cause) {
+      setError(errorMessage(cause))
+    }
+  }
+
   return (
     <section className="mt-4 rounded-2xl border border-emerald-300/15 bg-emerald-300/[0.025] p-4" aria-label="Real-reference benchmark evidence set">
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -176,9 +199,19 @@ export function ReconstructionBenchmarkSetPanel() {
           </button>
         )}
         {aggregate && (
-          <button className="rounded-xl border border-white/10 px-4 py-2.5 text-sm font-bold text-slate-200" onClick={() => saveAggregate(aggregate)} type="button">
-            Export aggregate JSON
-          </button>
+          <>
+            <button className="rounded-xl border border-white/10 px-4 py-2.5 text-sm font-bold text-slate-200" onClick={() => saveAggregate(aggregate)} type="button">
+              Export aggregate JSON
+            </button>
+            <button
+              className="rounded-xl border border-emerald-200/30 px-4 py-2.5 text-sm font-bold text-emerald-100 disabled:cursor-not-allowed disabled:opacity-40"
+              disabled={!aggregate.closureReadiness.readyForAggregateEvidence}
+              onClick={() => void saveClosureEvidence()}
+              type="button"
+            >
+              Export closure Markdown + SHA-256
+            </button>
+          </>
         )}
       </div>
 
