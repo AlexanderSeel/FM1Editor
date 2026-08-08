@@ -88,6 +88,15 @@ async function clickButton(cdp, text, rootExpression = 'document') {
   })()`)
   if (!clicked) throw new Error(`Unable to click enabled button containing ${text}`)
 }
+async function ensureSectionOpen(cdp, title) {
+  const titleJson = JSON.stringify(title)
+  const found = await evaluate(cdp, `(() => {
+    const button = [...document.querySelectorAll('button.fm1-section-toggle')].find((candidate) => candidate.querySelector('.fm1-section-title')?.textContent?.trim() === ${titleJson});
+    if (!button) return false; if (button.getAttribute('aria-expanded') !== 'true') button.click(); return true;
+  })()`)
+  if (!found) throw new Error(`Unable to locate collapsible section ${title}`)
+  await waitForExpression(cdp, `(() => [...document.querySelectorAll('button.fm1-section-toggle')].some((candidate) => candidate.querySelector('.fm1-section-title')?.textContent?.trim() === ${titleJson} && candidate.getAttribute('aria-expanded') === 'true'))()`, 5_000)
+}
 async function setRange(cdp, ariaLabel, value) {
   const changed = await evaluate(cdp, `(() => {
     const input = document.querySelector('input[type=range][aria-label=${JSON.stringify(ariaLabel)}]'); if (!input) return false;
@@ -151,7 +160,7 @@ try {
   if (liveSendChecked) throw new Error('Effects Live send unexpectedly enabled')
 
   await clickButton(cdp, 'Voice')
-  await clickButton(cdp, 'Virtual FM-1 preview')
+  await ensureSectionOpen(cdp, 'Virtual FM-1 preview')
   await waitForExpression(cdp, `document.body.textContent.includes('Reference A/B · offline render') && document.body.textContent.includes('Virtual FM-1 render diagnostics')`, 15_000)
   await clickButton(cdp, 'Enable local audio')
   await waitForExpression(cdp, `document.body.textContent.includes('LOCAL AUDIO READY') && window.__fm1PreviewCompressors.length >= 1`, 20_000)
@@ -182,7 +191,7 @@ try {
   if (!(attenuatedPeak > 0 && attenuatedPeak < fxPeak * 0.7)) throw new Error(`Master gain did not attenuate output enough: fx=${fxPeak}, attenuated=${attenuatedPeak}`)
 
   // Prepare local reference A through the mounted Audio-to-FM input.
-  await clickButton(cdp, 'Audio → FM reference')
+  await ensureSectionOpen(cdp, 'Audio → FM reference')
   await evaluate(cdp, `(() => {
     const sampleRate=48000, frames=sampleRate, bytes=new ArrayBuffer(44+frames*2), view=new DataView(bytes);
     const text=(offset,value)=>{for(let i=0;i<value.length;i+=1)view.setUint8(offset+i,value.charCodeAt(i));}; text(0,'RIFF'); view.setUint32(4,36+frames*2,true); text(8,'WAVE'); text(12,'fmt '); view.setUint32(16,16,true); view.setUint16(20,1,true); view.setUint16(22,1,true); view.setUint32(24,sampleRate,true); view.setUint32(28,sampleRate*2,true); view.setUint16(32,2,true); view.setUint16(34,16,true); text(36,'data'); view.setUint32(40,frames*2,true);
