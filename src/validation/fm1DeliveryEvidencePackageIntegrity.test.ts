@@ -108,7 +108,7 @@ function files(options: { chromeWavSha?: string; edgeWavSha?: string; omitChrome
     { filename: 'edge-manifest.json', sha256: EDGE_MANIFEST_SHA, value: manifest('edge') },
     { filename: 'chrome-correlation.json', sha256: CHROME_CORRELATION_SHA, value: correlation('chrome-manifest.json', CHROME_MANIFEST_SHA, 'chrome-midi.json', CHROME_MIDI_SHA) },
     { filename: 'edge-correlation.json', sha256: EDGE_CORRELATION_SHA, value: correlation('edge-manifest.json', EDGE_MANIFEST_SHA, 'edge-midi.json', EDGE_MIDI_SHA) },
-    { filename: 'chrome-package.json', sha256: CHROME_PACKAGE_SHA, value: packageIndex('chrome-manifest.json', CHROME_MANIFEST_SHA, 'chrome-midi.json', CHROME_MIDI_SHA, options.chromeWavSha ?? CHROME_WAV_SHA, CHROME_NOTES_SHA, { omitWav: options.omitChromeWav }) },
+    { filename: 'chrome-package.json', sha256: CHROME_PACKAGE_SHA, value: packageIndex('chrome-manifest.json', CHROME_MANIFEST_SHA, 'chrome-midi.json', CHROME_MIDI_SHA, options.chromeWavSha ?? CHROME_WAV_SHA, CHROME_NOTES_SHA, options.omitChromeWav ? { omitWav: true } : {}) },
     { filename: 'edge-package.json', sha256: EDGE_PACKAGE_SHA, value: packageIndex('edge-manifest.json', EDGE_MANIFEST_SHA, 'edge-midi.json', options.edgePackageMidiSha ?? EDGE_MIDI_SHA, options.edgeWavSha ?? EDGE_WAV_SHA, EDGE_NOTES_SHA) },
   ]
 }
