@@ -43,17 +43,11 @@ jobs:
             if metric_anchor not in t: raise SystemExit('refined metrics anchor missing')
             t=t.replace(metric_anchor,diff_block,1)
           p.write_text(t,encoding='utf-8')
-
-          test=Path('src/components/NearestPresetPanel.test.tsx');s=test.read_text(encoding='utf-8')
-          marker="""    expect(markup).toContain('Refine top')\n"""
-          replacement=marker+"""    expect(markup).toContain('Export refined .syx')\n    expect(markup).toContain('Semantic changes from retrieved start')\n"""
-          if marker in s and 'Export refined .syx' not in s:s=s.replace(marker,replacement,1)
-          test.write_text(s,encoding='utf-8')
       - run: npm install --no-audit --no-fund
       - run: npm run audit:virtual-dx7
       - run: npm run typecheck
       - run: npm run lint
-      - run: npm test -- src/audio/dx7CandidateArtifacts.test.ts src/components/NearestPresetPanel.test.tsx src/audio/dx7CmaEsRefinement.test.ts
+      - run: npm test -- src/audio/dx7CandidateArtifacts.test.ts src/audio/dx7CmaEsRefinement.test.ts src/components/NearestPresetPanel.test.tsx
       - run: npm run test
       - run: npm run build
       - name: Persist receipt
@@ -68,7 +62,7 @@ jobs:
 
           Refined Audio → FM candidates display semantic parameter differences against their retrieved initialization while explicitly ignoring packed/unpacked provenance bytes. Each refined candidate can export a checksum-valid standard Yamaha DX7 single-voice \`.syx\` file without opening Web MIDI, selecting a hardware output or implicitly loading the editor.
 
-          The existing metric breakdown, source initialization, audition and explicit load actions remain separate. Virtual-engine audit, strict typecheck, lint, focused artifact/UI tests, full tests and production build passed.
+          The existing metric breakdown, source initialization, audition and explicit load actions remain separate. Virtual-engine audit, strict typecheck, lint, focused artifact/refinement/UI tests, full tests and production build passed.
           EOF
           rm .github/workflows/integrate-dx7-candidate-artifacts.yml
           git config user.name github-actions[bot]
