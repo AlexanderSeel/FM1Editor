@@ -5,6 +5,7 @@ import {
   type MidiMonitorDirection,
   type MidiMonitorEntry,
 } from '../midi/monitor'
+import { HardwareEvidenceRecorder } from './HardwareEvidenceRecorder'
 
 interface MidiMonitorProps {
   entries: readonly MidiMonitorEntry[]
@@ -78,6 +79,7 @@ export function MidiMonitor({ entries, onClear }: MidiMonitorProps) {
             </article>
           ))}
         </div>
+        <HardwareEvidenceRecorder entries={entries} />
       </div>
     </details>
   )
