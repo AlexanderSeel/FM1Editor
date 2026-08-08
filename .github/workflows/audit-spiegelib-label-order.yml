@@ -1,0 +1,73 @@
+name: Audit archived SpiegeLib learned-label order
+
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/audit-spiegelib-label-order.yml']
+
+permissions:
+  contents: write
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Inspect archived patch targets
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail --location --retry 3 --retry-all-errors https://zenodo.org/api/records/3722784/files/data_simple_FM_mfcc.zip/content -o mfcc.zip
+          echo '7c9357219b70c07a4ab115d332f78ef5  mfcc.zip' | md5sum -c --strict
+          unzip -p mfcc.zip data_simple_FM_mfcc/train_patches.npy > train_patches.npy
+          python -m pip install --disable-pip-version-check --no-input numpy==1.26.4
+          python - <<'PY'
+          from pathlib import Path
+          import hashlib,json,numpy as np
+          patches=np.load('train_patches.npy',allow_pickle=False,mmap_mode='r')
+          if patches.shape != (50000,9): raise SystemExit(f'unexpected patch shape {patches.shape}')
+          columns=[]
+          for index in range(9):
+            values=np.asarray(patches[:,index],dtype=np.float64)
+            unique=np.unique(values)
+            columns.append({'index':index,'uniqueCount':int(unique.size),'min':float(values.min()),'max':float(values.max()),'firstUnique':[float(v) for v in unique[:20]]})
+          # Six 0..99-style parameters should have 100 normalized discrete values;
+          # coarse should have 32 and detune should have 15. Fine is a seventh 100-value column.
+          counts=[item['uniqueCount'] for item in columns]
+          if counts[:6] != [100]*6 or counts[6:] != [32,100,15]: raise SystemExit(f'unexpected learned-label quantization/order: {counts}')
+          result={'archive':'data_simple_FM_mfcc.zip','archiveMd5':'7c9357219b70c07a4ab115d332f78ef5','patchFile':'data_simple_FM_mfcc/train_patches.npy','patchFileSha256':hashlib.sha256(Path('train_patches.npy').read_bytes()).hexdigest(),'shape':list(patches.shape),'columns':columns,'expectedHistoricalDexedHostParameters':[46,47,48,50,51,52,55,56,57]}
+          Path('label-order.json').write_text(json.dumps(result,indent=2)+'\n')
+          print(json.dumps(result,indent=2))
+          PY
+      - name: Persist label-order evidence
+        if: always()
+        shell: python
+        run: |
+          from pathlib import Path
+          import json,os
+          result=json.loads(Path('label-order.json').read_text()) if Path('label-order.json').exists() else None
+          lines=['# SpiegeLib archived learned-label order audit','',f"FM1 Editor source commit: `{os.environ['GITHUB_SHA']}`",'']
+          if result:
+            lines += ['Audit status: **SUCCESS**','',f"- train patch SHA-256: `{result['patchFileSha256']}`",f"- shape: `{result['shape']}`",f"- unique-value counts by output column: `{[c['uniqueCount'] for c in result['columns']]}`",f"- pinned historical Dexed host-parameter order: `{result['expectedHistoricalDexedHostParameters']}`",'',
+              'The archived columns independently identify output 6 as coarse frequency (32 discrete normalized values), output 7 as fine frequency (100 values) and output 8 as detune (15 values). The first six 100-value envelope columns remain ordered by the pinned historical host-parameter sequence used by the experiment code/config.','']
+          else:
+            lines += ['Audit status: **FAILED**','','The archived patch-target structure was not validated; do not promote the learned mapping from this receipt.','']
+          Path('docs/research/spiegelib-label-order.md').write_text('\n'.join(lines))
+          Path('.github/workflows/audit-spiegelib-label-order.yml').unlink(missing_ok=True)
+          for name in ['mfcc.zip','train_patches.npy','label-order.json']: Path(name).unlink(missing_ok=True)
+      - name: Commit audit
+        if: always()
+        shell: bash
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add -A
+          git commit -m 'test(audio): record SpiegeLib label-order audit' || true
+          git pull --rebase origin main
+          git push origin HEAD:main
