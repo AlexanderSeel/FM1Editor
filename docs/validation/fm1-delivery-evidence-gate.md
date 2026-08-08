@@ -1,6 +1,6 @@
 # FM-1 delivery evidence gate software acceptance
 
-Source commit: `dd52cfaeeb372c8d52aaaa51fe29521013e89367`
+Source commit: `c293ab37a8d5ea88364bca13964074f3927302b2`
 
 Software acceptance: **SUCCESS**
 
@@ -15,6 +15,6 @@ Software acceptance: **SUCCESS**
 | full-test | 0 |
 | build | 0 |
 
-The accepted state contains the FM-1 hardware manifest fields for note-off recovery and channel selection, the deterministic Chrome/Edge delivery evidence evaluator, the in-app multi-manifest importer/exporter, the physical protocol instructions, support-matrix boundary and PLAN linkage.
+The accepted state contains fail-closed FM-1 hardware-manifest parsing, explicit note-off recovery and MIDI-channel physical observations, deterministic Chrome/Edge evidence pairing, the in-app manifest importer/gate-receipt exporter, protocol instructions, support boundary and PLAN linkage.
 
-READY requires matching complete physical Chrome and Edge sessions for one HTTPS origin, FM-1 firmware, editor commit and Windows build, including USB-audio measurements, a captured standard 4,104-byte bank send, destination/persistence/recovery observations, note-off recovery and channel selection. The software tests use synthetic manifests only and do not satisfy or close the physical PLAN items.
+READY requires matching complete physical Chrome and Edge sessions for one HTTPS origin, FM-1 firmware, editor commit and Windows build, including USB-audio measurements, a captured standard 4,104-byte bank send, destination/persistence/recovery observations, note-off recovery and channel selection. Malformed or incomplete imported JSON fails closed. Synthetic software tests do not satisfy or close the physical PLAN items.
