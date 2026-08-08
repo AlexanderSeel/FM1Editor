@@ -4,10 +4,12 @@ import { createVirtualDx7RenderPlan } from './virtualDx7Engine'
 import { createVirtualDx7ReferenceRenderRequest } from './virtualDx7ReferenceFixture'
 import {
   createMsfaOfflineEngine,
+  importPublicMsfaModuleFactory,
   MSFA_OFFLINE_ENGINE_ID,
   MSFA_OFFLINE_ENGINE_LICENSE,
   MSFA_OFFLINE_ENGINE_VERSION,
   type MsfaEmscriptenModule,
+  type MsfaModuleFactoryOptions,
 } from './msfaOfflineEngine'
 
 interface FakeModuleState {
@@ -63,6 +65,29 @@ describe('packaged MSFA offline engine', () => {
     expect(MSFA_OFFLINE_ENGINE_ID).toBe(manifest.engineId)
     expect(MSFA_OFFLINE_ENGINE_VERSION).toBe(manifest.engineVersion)
     expect(MSFA_OFFLINE_ENGINE_LICENSE).toBe(manifest.licenseSpdx)
+  })
+
+  it('loads the public Emscripten module as an asset and resolves WASM beside the original public URL', async () => {
+    const { module } = createFakeModule()
+    const moduleFactory = vi.fn(async (_options?: MsfaModuleFactoryOptions) => module)
+    const fetchText = vi.fn(async () => 'export default factory')
+    const createObjectUrl = vi.fn(() => 'blob:fm1-msfa')
+    const revokeObjectUrl = vi.fn()
+    const importObjectUrl = vi.fn(async () => ({ default: moduleFactory }))
+
+    const factory = await importPublicMsfaModuleFactory('http://localhost:5173/virtual-dx7/fm1-msfa.mjs', {
+      fetchText,
+      createObjectUrl,
+      revokeObjectUrl,
+      importObjectUrl,
+    })
+    await factory()
+
+    expect(fetchText).toHaveBeenCalledWith('http://localhost:5173/virtual-dx7/fm1-msfa.mjs')
+    expect(importObjectUrl).toHaveBeenCalledWith('blob:fm1-msfa')
+    expect(revokeObjectUrl).toHaveBeenCalledWith('blob:fm1-msfa')
+    const options = moduleFactory.mock.calls[0]?.[0]
+    expect(options?.locateFile?.('fm1-msfa.wasm')).toBe('http://localhost:5173/virtual-dx7/fm1-msfa.wasm')
   })
 
   it('renders the semantic bridge through WASM and forwards the deterministic seed', async () => {
