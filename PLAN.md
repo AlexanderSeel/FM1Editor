@@ -57,7 +57,7 @@ Known limitations, current evidence and conservative recovery procedures are mai
 The staged technical decision and reviewed libraries/research are documented in [`docs/research/audio-to-fm-and-virtual-synth.md`](./docs/research/audio-to-fm-and-virtual-synth.md).
 
 - [ ] Run the implemented local comparison receipt on a documented set of real isolated WAV/MP3 references and preserve the exported hash/metrics/runtime evidence. Synthetic ground-truth retrieval/CMA comparison and the real-reference benchmark harness are implemented; learned initialization remains explicitly unavailable until a separately license-admitted implementation/checkpoint exists.
-- [ ] Add optional server/Python acceleration only behind explicit upload consent, documented retention/deletion, model/version metadata and a fully local fallback for normal editing and audition.
+- [ ] Implement and deploy an optional reconstruction accelerator only if committed real-reference benchmark receipts demonstrate a material runtime/quality need or a separately license-admitted learned initializer becomes available. The disabled-by-default client boundary, capability/policy validation, one-shot SHA-bound consent, bounded automatic-deletion receipt enforcement, returned DX7 validation and fully local fallback are implemented; any service must satisfy [`docs/validation/reconstruction-accelerator-contract.md`](./docs/validation/reconstruction-accelerator-contract.md).
 
 ## 10. Virtual DX7 / FM-1-inspired synthesizer
 
