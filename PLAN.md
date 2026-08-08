@@ -53,10 +53,10 @@ Execute section F of [`docs/validation/fm1-hardware-test-protocol.md`](./docs/va
 
 ## 8. Validation and delivery
 
-Known limitations, current evidence and conservative recovery procedures are maintained in [`docs/validation/support-matrix-and-recovery.md`](./docs/validation/support-matrix-and-recovery.md).
+Known limitations, current evidence and conservative recovery procedures are maintained in [`docs/validation/support-matrix-and-recovery.md`](./docs/validation/support-matrix-and-recovery.md). The in-app **FM-1 delivery evidence gate** deterministically evaluates sanitized Chrome and Edge physical manifests for one HTTPS origin/firmware/editor/Windows tuple; a software-only gate test is not physical evidence.
 
-- [ ] Test Chrome and Edge on Windows with a physical FM-1 over USB MIDI and USB audio, including merged bank import, destination selection, preset recall, recording, note-off recovery and channel selection; test BLE MIDI where browser/platform support permits.
-- [ ] Enable GitHub Pages deployment only after the physical Chrome/Edge FM-1 secure-context test records Web MIDI/SysEx and USB/Web Audio behavior on the intended HTTPS deployment. Repository-subpath build/PWA/static routing for `/FM1Editor/` is implemented and validated in [`docs/validation/pages-subpath-readiness.md`](./docs/validation/pages-subpath-readiness.md); do not publish before the hardware/browser prerequisite is satisfied.
+- [ ] Test Chrome and Edge on Windows with a physical FM-1 over USB MIDI and USB audio, including merged bank import, destination selection, preset recall, recording, note-off recovery and channel selection; test BLE MIDI where browser/platform support permits. Import the sanitized browser manifests into the delivery evidence gate and commit the READY receipt when the physical matrix is genuinely complete.
+- [ ] Enable GitHub Pages deployment only after a committed READY delivery evidence receipt records Web MIDI/SysEx and USB/Web Audio behavior on the intended HTTPS deployment. Repository-subpath build/PWA/static routing for `/FM1Editor/` is implemented and validated in [`docs/validation/pages-subpath-readiness.md`](./docs/validation/pages-subpath-readiness.md); the delivery gate implementation itself does not satisfy the physical prerequisite or enable deployment automatically.
 
 ## 9. Audio-to-FM sound reconstruction
 
