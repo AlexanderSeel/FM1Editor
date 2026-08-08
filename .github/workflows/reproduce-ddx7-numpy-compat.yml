@@ -1,0 +1,107 @@
+name: Reproduce pinned DDX7 with NumPy 1.x compatibility
+
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/reproduce-ddx7-numpy-compat.yml']
+
+permissions:
+  contents: write
+
+jobs:
+  reproduce:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.9'
+      - name: Clone exact DDX7 pin
+        shell: bash
+        run: |
+          git clone --filter=blob:none https://github.com/fcaspe/ddx7.git /tmp/ddx7
+          git -C /tmp/ddx7 checkout --detach 11d04fc16475ff81454f7436f318df9836971a0c
+          test "$(git -C /tmp/ddx7 rev-parse HEAD)" = "11d04fc16475ff81454f7436f318df9836971a0c"
+          grep -q 'Apache License' /tmp/ddx7/LICENSE
+      - name: Reproduce with one ABI-era constraint, no source patch
+        id: smoke
+        shell: bash
+        run: |
+          set +e
+          : >/tmp/ddx7-numpy-compat.log
+          python -m venv /tmp/ddx7-venv
+          source /tmp/ddx7-venv/bin/activate
+          python -m pip install --upgrade 'pip<25' 2>&1 | tee -a /tmp/ddx7-numpy-compat.log
+          bootstrap=${PIPESTATUS[0]}
+          python -m pip install 'numpy==1.23.5' 2>&1 | tee -a /tmp/ddx7-numpy-compat.log
+          numpy_code=${PIPESTATUS[0]}
+          python -m pip install -r /tmp/ddx7/requirements.txt 2>&1 | tee -a /tmp/ddx7-numpy-compat.log
+          requirements=${PIPESTATUS[0]}
+          # Requirements may upgrade NumPy; restore the explicit ABI-era constraint without touching upstream source.
+          python -m pip install --force-reinstall 'numpy==1.23.5' 'h5py==3.7.0' 2>&1 | tee -a /tmp/ddx7-numpy-compat.log
+          abi=${PIPESTATUS[0]}
+          python -m pip install -e /tmp/ddx7 2>&1 | tee -a /tmp/ddx7-numpy-compat.log
+          editable=${PIPESTATUS[0]}
+          python - <<'PY' 2>&1 | tee -a /tmp/ddx7-numpy-compat.log
+          import importlib, json
+          names=['numpy','h5py','torch','torchaudio','librosa','hydra','torchcrepe']
+          versions={}
+          for name in names:
+              module=importlib.import_module(name)
+              versions[name]=getattr(module,'__version__','imported')
+          print('DDX7_COMPAT_IMPORTS='+json.dumps(versions,sort_keys=True))
+          PY
+          imports=${PIPESTATUS[0]}
+          if [ "$imports" -eq 0 ]; then
+            cd /tmp/ddx7
+            python train.py --help 2>&1 | tee -a /tmp/ddx7-numpy-compat.log
+            help_code=${PIPESTATUS[0]}
+            python -m pip freeze | sort > /tmp/ddx7-numpy-compat-freeze.txt
+          else
+            help_code=99
+            : >/tmp/ddx7-numpy-compat-freeze.txt
+          fi
+          echo "bootstrap=$bootstrap" >> "$GITHUB_OUTPUT"
+          echo "numpy=$numpy_code" >> "$GITHUB_OUTPUT"
+          echo "requirements=$requirements" >> "$GITHUB_OUTPUT"
+          echo "abi=$abi" >> "$GITHUB_OUTPUT"
+          echo "editable=$editable" >> "$GITHUB_OUTPUT"
+          echo "imports=$imports" >> "$GITHUB_OUTPUT"
+          echo "help=$help_code" >> "$GITHUB_OUTPUT"
+          if [ "$bootstrap" -eq 0 ] && [ "$numpy_code" -eq 0 ] && [ "$requirements" -eq 0 ] && [ "$abi" -eq 0 ] && [ "$editable" -eq 0 ] && [ "$imports" -eq 0 ] && [ "$help_code" -eq 0 ]; then echo ok=true >> "$GITHUB_OUTPUT"; else echo ok=false >> "$GITHUB_OUTPUT"; fi
+          exit 0
+      - name: Persist compatibility reproduction receipt
+        if: always()
+        env:
+          OK: ${{ steps.smoke.outputs.ok }}
+          BOOTSTRAP: ${{ steps.smoke.outputs.bootstrap }}
+          NUMPY: ${{ steps.smoke.outputs.numpy }}
+          REQUIREMENTS: ${{ steps.smoke.outputs.requirements }}
+          ABI: ${{ steps.smoke.outputs.abi }}
+          EDITABLE: ${{ steps.smoke.outputs.editable }}
+          IMPORTS: ${{ steps.smoke.outputs.imports }}
+          HELP: ${{ steps.smoke.outputs.help }}
+        shell: python
+        run: |
+          import os,re
+          from pathlib import Path
+          log=Path('/tmp/ddx7-numpy-compat.log').read_text(encoding='utf-8',errors='replace') if Path('/tmp/ddx7-numpy-compat.log').exists() else 'log unavailable'
+          freeze=Path('/tmp/ddx7-numpy-compat-freeze.txt').read_text(encoding='utf-8',errors='replace') if Path('/tmp/ddx7-numpy-compat-freeze.txt').exists() else ''
+          match=re.search(r'DDX7_COMPAT_IMPORTS=(\{.*\})',log)
+          versions=match.group(1) if match else 'not resolved'
+          ok=os.environ.get('OK')=='true'
+          rows=['| Stage | Exit |','| --- | ---: |']+[f'| {name} | {os.environ.get(key,"?")} |' for name,key in [('pip bootstrap','BOOTSTRAP'),('NumPy 1.23.5 constraint','NUMPY'),('upstream requirements','REQUIREMENTS'),('NumPy/h5py ABI reinstall','ABI'),('editable install','EDITABLE'),('core imports','IMPORTS'),('train.py --help','HELP')]]
+          Path('docs/validation/ddx7-numpy-compat-reproduction.md').write_text('\n'.join(['# DDX7 NumPy-ABI compatibility reproduction','', 'Pinned upstream: `fcaspe/ddx7@11d04fc16475ff81454f7436f318df9836971a0c`','', 'Code license: **Apache-2.0**','',f"Compatibility smoke: **{'SUCCESS' if ok else 'FAILED'}**",'',*rows,'',f'Resolved core imports: `{versions}`.','', 'The only intentional compatibility constraint is `numpy==1.23.5` plus reinstalling the upstream-pinned `h5py==3.7.0`; DDX7 source is not modified. This tests whether the first reproduction failure was solely NumPy-2 ABI drift. It still downloads no URMP data, uses no checkpoint and admits no DDX7 runtime into FM1 Editor.','', 'Environment snapshot:','```text',freeze[-12000:],'```','','Execution log:','```text',log[-16000:],'```','']),encoding='utf-8')
+          Path('.github/workflows/reproduce-ddx7-numpy-compat.yml').unlink(missing_ok=True)
+      - name: Commit research evidence
+        if: always()
+        shell: bash
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add -A
+          git commit -m 'docs(research): record DDX7 NumPy compatibility reproduction' || true
+          git pull --rebase origin main
+          git push origin HEAD:main
