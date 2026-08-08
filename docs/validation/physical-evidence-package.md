@@ -16,9 +16,9 @@ Physical sessions can produce several artifacts that should remain correlated ev
 
 Select the sanitized files in **MIDI monitor → Physical evidence package** and choose `FM-1`, `Stock DX7` or `Mixed`. The browser hashes files locally with Web Crypto SHA-256. Nothing is uploaded.
 
-## Exported schema
+## Exported schemas
 
-The exported JSON uses schema:
+The package index uses schema:
 
 `fm1-editor.physical-evidence-package.v1`
 
@@ -31,7 +31,13 @@ For each artifact it records only:
 - a coarse artifact classification;
 - a recognized repository evidence schema name when the selected JSON is small enough to inspect locally.
 
-The export does **not** embed raw SysEx, audio, screenshots, MIDI events or parsed JSON payloads.
+The raw-MIDI structural correlation receipt uses schema:
+
+`fm1-editor.physical-evidence-consistency.v1`
+
+It records only the selected package target, structural issue codes/messages, summary mismatch field names, and the filename/SHA-256 pairs for target manifests and uniquely matched raw MIDI exports. It does **not** contain MIDI event IDs, timestamps beyond aggregate first/last comparison fields, raw message bytes, SysEx payloads, audio, screenshots or parsed hardware-manifest payloads.
+
+Both exports are evidence metadata. Neither proves physical device behavior.
 
 ## Classification
 
@@ -67,6 +73,8 @@ It also checks manifest-local invariants written by the recorder:
 
 If no raw export matches, the helper shows the closest candidate and the summary fields that differ. If more than one raw export matches the same manifest, linkage is considered ambiguous rather than silently choosing one. Unlinked raw MIDI exports are also reported.
 
+The **Export correlation receipt** action persists this result and binds each successful manifest/raw-capture link to the SHA-256 values calculated from the currently selected files. The receipt may also be exported for a failed or incomplete session so the inconsistency itself remains reviewable.
+
 This is **structural correlation only**. Matching summaries are evidence that the selected files came from the same captured message set; they do not prove what the hardware did, that the device accepted a message, that audio is correct, or that a tester-entered PASS is valid.
 
 ## Package warnings
@@ -91,8 +99,8 @@ A package may legitimately retain warnings or correlation errors when it covers 
 4. Add the relevant `.syx`, WAV, screenshots/timeline and matrices/notes to a sanitized folder.
 5. Run **Physical evidence package** over that exact sanitized file set and review both package-coverage warnings and the raw-MIDI correlation result.
 6. Resolve accidental mixed-session/ambiguous raw-capture errors before proposing closure. Do not alter legitimate failed observations merely to make the package look green.
-7. Export the package index. Retain the raw sanitized files with the index externally, or commit only the artifacts appropriate for the repository.
-8. When proposing a `PLAN.md` item for closure, cite the package index SHA together with the target manifest/protocol result. The package index and correlation result are not substitutes for those results.
+7. Export **both** the package index and the correlation receipt from the same selected file set. Retain the raw sanitized files with those receipts externally, or commit only the artifacts appropriate for the repository.
+8. When proposing a `PLAN.md` item for closure, cite the package index and correlation-receipt hashes together with the target manifest/protocol result. The package index and correlation result are not substitutes for those results.
 
 ## Security and evidence boundary
 
