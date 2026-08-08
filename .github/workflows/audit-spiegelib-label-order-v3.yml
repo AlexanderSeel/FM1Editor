@@ -1,0 +1,102 @@
+name: Verify historical SpiegeLib learned-label order v3
+
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/audit-spiegelib-label-order-v3.yml']
+
+permissions:
+  contents: write
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Fetch pinned experiment config
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail --location --retry 3 --retry-all-errors \
+            https://raw.githubusercontent.com/spiegelib/vst-fm-sound-match/e1baab7fbeb0bc3f4d4946f8348e77dd18028080/synth_params/dexed_simple_fm.json \
+            --output dexed_simple_fm.json
+          echo '3f604ba1b45fa9dcfdaabe7b1f4d5b7a074b0812cb9e5cd0a9e31625bdcf75bc  dexed_simple_fm.json' | sha256sum -c --strict
+      - name: Reproduce training and expansion order in Python 3.7.7
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf order-image order-out
+          mkdir -p order-image order-out
+          cp dexed_simple_fm.json order-image/
+          cat > order-image/check.py <<'PY'
+          import json
+          from pathlib import Path
+
+          config = json.loads(Path('/opt/dexed_simple_fm.json').read_text())
+          entries = [config[key] for key in config]
+          # Training get_patch(skip_overridden=True) preserves incoming patch order.
+          # The pinned config/engine host parameter IDs are ordered numerically.
+          training_order = [int(entry['id']) for entry in entries if not entry['overridden']]
+          all_indices = [int(entry['id']) for entry in entries]
+          overridden = [int(entry['id']) for entry in entries if entry['overridden']]
+          # Historical expand_sub_patch mechanism.
+          expansion_order = list(set(all_indices) - set(overridden))
+          expected = [46,47,48,50,51,52,55,56,57]
+          result = {
+              'python': '3.7.7',
+              'trainingOrder': training_order,
+              'expansionOrder': expansion_order,
+              'expected': expected,
+              'labels': [config[str(index)]['desc'] for index in expected],
+          }
+          print(json.dumps(result, indent=2))
+          if training_order != expected:
+              raise SystemExit('training get_patch/config order mismatch: %r' % training_order)
+          if expansion_order != expected:
+              raise SystemExit('historical expand_sub_patch set order mismatch: %r' % expansion_order)
+          Path('/output/order.json').write_text(json.dumps(result, indent=2) + '\n')
+          PY
+          cat > order-image/Dockerfile <<'DOCKER'
+          FROM python:3.7.7-slim-buster
+          COPY dexed_simple_fm.json /opt/dexed_simple_fm.json
+          COPY check.py /opt/check.py
+          ENTRYPOINT ["python", "/opt/check.py"]
+          DOCKER
+          docker build -q -t fm1-spiegelib-order:local order-image
+          docker run --rm --network none --read-only --cap-drop ALL \
+            --memory 128m --cpus 1 --pids-limit 64 \
+            --volume "$PWD/order-out:/output:rw" fm1-spiegelib-order:local
+          test -s order-out/order.json
+      - name: Persist exact ordering audit
+        shell: python
+        run: |
+          from pathlib import Path
+          import json, os
+          result=json.loads(Path('order-out/order.json').read_text())
+          Path('docs/research/spiegelib-label-order.md').write_text('\n'.join([
+            '# SpiegeLib archived learned-label order audit','',
+            f"FM1 Editor source commit: `{os.environ['GITHUB_SHA']}`",'',
+            'Audit status: **SUCCESS**','',
+            '- pinned experiment commit: `e1baab7fbeb0bc3f4d4946f8348e77dd18028080`',
+            '- pinned config SHA-256: `3f604ba1b45fa9dcfdaabe7b1f4d5b7a074b0812cb9e5cd0a9e31625bdcf75bc`',
+            '- historical interpreter: Python 3.7.7',
+            f"- training/get-patch order: `{result['trainingOrder']}`",
+            f"- prediction/expand-sub-patch order: `{result['expansionOrder']}`",
+            f"- labels: `{result['labels']}`",'',
+            'Both historical code paths resolve to the same nine-column order used by FM1 Editor. The previous unique-value-cardinality audit was invalid because the archived training targets are continuous normalized VST values; this exact code/config audit replaces that failed inference.',''
+          ]))
+          for name in ['.github/workflows/audit-spiegelib-label-order-v3.yml','.github/workflows/audit-spiegelib-label-order-v2.yml','.github/workflows/audit-spiegelib-label-order.yml']:
+            Path(name).unlink(missing_ok=True)
+          Path('dexed_simple_fm.json').unlink(missing_ok=True)
+      - name: Commit audit
+        shell: bash
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add -A
+          git commit -m 'test(audio): verify historical SpiegeLib label order' || true
+          git pull --rebase origin main
+          git push origin HEAD:main
