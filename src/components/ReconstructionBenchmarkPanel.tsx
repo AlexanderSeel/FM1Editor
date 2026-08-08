@@ -100,7 +100,7 @@ export function ReconstructionBenchmarkPanel({ reference }: ReconstructionBenchm
         <div>
           <p className="text-xs font-semibold uppercase tracking-[0.16em] text-violet-200">Comparison receipt · real isolated reference</p>
           <p className="mt-1 max-w-3xl text-xs leading-5 text-slate-400">
-            Run retrieval-only and seeded constrained CMA-ES against the same uploaded reference and export a reproducible JSON receipt. The report contains the file hash, selected-region metadata, metrics and runtimes only; raw audio is never embedded or uploaded. Learned initialization remains an explicit unavailable row until a license-admitted implementation and checkpoint exist.
+            Run retrieval-only, seeded constrained CMA-ES and the admitted local SpiegeLib simple-FM MLP against the same uploaded reference and export a reproducible JSON receipt. The learned model is loaded only when the benchmark runs, stays entirely local, and predicts nine historical Dexed OP2 controls over a fixed training base. The report contains file hash, selected-region metadata, metrics and runtimes only; raw audio is never embedded or uploaded.
           </p>
         </div>
         <span className="rounded-lg border border-white/10 px-2 py-1 text-[10px] uppercase tracking-[0.12em] text-slate-400">
@@ -201,18 +201,18 @@ export function ReconstructionBenchmarkPanel({ reference }: ReconstructionBenchm
                   <td className="px-3 py-2">{evolutionary?.sourceInitialization ?? evolutionary?.failure ?? '—'}</td>
                 </tr>
                 <tr>
-                  <td className="px-3 py-2 font-bold">Learned initialization</td>
+                  <td className="px-3 py-2 font-bold">SpiegeLib learned</td>
                   <td className="px-3 py-2">{learned?.candidateCount ?? 0}</td>
                   <td className="px-3 py-2 font-mono">{distance(learned?.bestDistance)}</td>
                   <td className="px-3 py-2">{runtime(learned?.runtimeMs)}</td>
-                  <td className="px-3 py-2 text-amber-200">{learned?.failure ?? report.learnedStatus}</td>
+                  <td className="px-3 py-2 text-violet-200">{learned?.sourceInitialization ?? learned?.failure ?? report.learnedStatus}</td>
                 </tr>
               </tbody>
             </table>
           </div>
 
           <p className="text-[11px] leading-5 text-slate-500">
-            Retrieval minus evolutionary distance: {distance(report.retrievalVsEvolutionaryDelta)}. Positive means constrained CMA-ES produced the lower fingerprint distance for this reference. This receipt is comparative evidence only and does not claim exact patch identity or physical FM-1 equivalence.
+            Retrieval minus evolutionary distance: {distance(report.retrievalVsEvolutionaryDelta)}. Positive means constrained CMA-ES produced the lower fingerprint distance for this reference. Learned distance is reported independently and is not CMA-refined. This receipt is comparative evidence only and does not claim exact patch identity or physical FM-1 equivalence.
           </p>
         </div>
       )}
