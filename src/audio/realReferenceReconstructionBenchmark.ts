@@ -32,7 +32,9 @@ export const REAL_REFERENCE_BENCHMARK_DEFAULT_MAX_VOICES = 256
 export const REAL_REFERENCE_BENCHMARK_DEFAULT_RANK_LIMIT = 8
 export const REAL_REFERENCE_BENCHMARK_DEFAULT_REFINEMENT_STARTS = 3
 export const REAL_REFERENCE_BENCHMARK_DEFAULT_SEED = 2026
+/** Retained so older receipts with the pre-admission blocked row remain parseable. */
 export const REAL_REFERENCE_LEARNED_BLOCK = 'No license-admitted learned initializer/checkpoint is available yet.' as const
+export const REAL_REFERENCE_LEARNED_STATUS = 'Local SpiegeLib simple-FM MLP · 9 OP2 controls + fixed training base' as const
 
 export type RealReferenceBenchmarkPhase = 'catalog' | 'index' | 'refinement' | 'comparison'
 
@@ -71,7 +73,7 @@ export interface RealReferenceReconstructionBenchmarkReport {
   readonly sharedPreparationMs: number
   readonly comparison: ReconstructionComparisonReport
   readonly retrievalVsEvolutionaryDelta: number | null
-  readonly learnedStatus: typeof REAL_REFERENCE_LEARNED_BLOCK
+  readonly learnedStatus: string
   readonly note: string
 }
 
@@ -264,9 +266,17 @@ export async function runRealReferenceReconstructionBenchmark(
   }
   const learned: ReconstructionApproach<null> = {
     id: 'learned-initialization',
-    label: 'Learned initialization',
-    async run() {
-      throw new Error(REAL_REFERENCE_LEARNED_BLOCK)
+    label: 'SpiegeLib learned initialization',
+    async run(_testCase, signal) {
+      throwIfAborted(signal)
+      const { createSpiegelibSimpleFmCandidate072 } = await import('./spiegelibSimpleFmCandidate072')
+      throwIfAborted(signal)
+      const candidate = createSpiegelibSimpleFmCandidate072(reference.samples, reference.sampleRate, 'SPGL MLP')
+      throwIfAborted(signal)
+      return [{
+        voice: candidate.voice,
+        sourceInitialization: `${candidate.source} · nine OP2 controls + fixed training base`,
+      }]
     },
   }
 
@@ -275,7 +285,7 @@ export async function runRealReferenceReconstructionBenchmark(
     descriptorConfig: COMPACT_PRESET_DESCRIPTOR_CONFIG,
     fingerprintCache,
   })
-  options.onProgress?.({ phase: 'comparison', completed: 0, total: 3, current: 'Comparing retrieval, CMA-ES and learned-initialization rows' })
+  options.onProgress?.({ phase: 'comparison', completed: 0, total: 3, current: 'Comparing retrieval, CMA-ES and local SpiegeLib learned initialization' })
   const comparison = await compareReconstructionApproaches(
     [{
       id: `real:${reference.contentSha256.slice(0, 16)}`,
@@ -334,7 +344,7 @@ export async function runRealReferenceReconstructionBenchmark(
     sharedPreparationMs,
     comparison,
     retrievalVsEvolutionaryDelta,
-    learnedStatus: REAL_REFERENCE_LEARNED_BLOCK,
-    note: 'User-declared isolated reference; audio remains local and is not embedded in this report. Similarity metrics are comparative estimates, not proof of patch identity or exact FM-1 hardware equivalence.',
+    learnedStatus: REAL_REFERENCE_LEARNED_STATUS,
+    note: 'User-declared isolated reference; audio remains local and is not embedded in this report. The learned row is a local SpiegeLib simple-FM MLP candidate that predicts nine historical Dexed OP2 controls over a fixed training base. Similarity metrics are comparative estimates, not proof of patch identity or exact FM-1 hardware equivalence.',
   }
 }
