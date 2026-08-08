@@ -1,0 +1,102 @@
+name: Reproduce pinned DDX7 environment
+
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/reproduce-ddx7-environment.yml']
+
+permissions:
+  contents: write
+
+jobs:
+  reproduce:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.9'
+      - name: Clone exact Apache-2.0 DDX7 pin
+        shell: bash
+        run: |
+          git clone --filter=blob:none https://github.com/fcaspe/ddx7.git /tmp/ddx7
+          git -C /tmp/ddx7 checkout --detach 11d04fc16475ff81454f7436f318df9836971a0c
+          test "$(git -C /tmp/ddx7 rev-parse HEAD)" = "11d04fc16475ff81454f7436f318df9836971a0c"
+          grep -q 'Apache License' /tmp/ddx7/LICENSE
+      - name: Reproduce dependency and import environment
+        id: smoke
+        shell: bash
+        run: |
+          set +e
+          : >/tmp/ddx7-reproduction.log
+          python -m venv /tmp/ddx7-venv
+          source /tmp/ddx7-venv/bin/activate
+          python -m pip install --upgrade 'pip<25' 2>&1 | tee -a /tmp/ddx7-reproduction.log
+          pip_code=${PIPESTATUS[0]}
+          if [ "$pip_code" -eq 0 ]; then
+            python -m pip install -r /tmp/ddx7/requirements.txt 2>&1 | tee -a /tmp/ddx7-reproduction.log
+            requirements_code=${PIPESTATUS[0]}
+          else requirements_code=99; fi
+          if [ "$requirements_code" -eq 0 ]; then
+            python -m pip install -e /tmp/ddx7 2>&1 | tee -a /tmp/ddx7-reproduction.log
+            editable_code=${PIPESTATUS[0]}
+          else editable_code=99; fi
+          if [ "$editable_code" -eq 0 ]; then
+            python - <<'PY' 2>&1 | tee -a /tmp/ddx7-reproduction.log
+          import importlib, json
+          modules=['torch','torchaudio','librosa','hydra','torchcrepe','h5py']
+          rows={}
+          for name in modules:
+              module=importlib.import_module(name)
+              rows[name]=getattr(module,'__version__','imported')
+          print('DDX7_IMPORTS='+json.dumps(rows,sort_keys=True))
+          PY
+            import_code=${PIPESTATUS[0]}
+          else import_code=99; fi
+          if [ "$editable_code" -eq 0 ]; then
+            cd /tmp/ddx7
+            python train.py --help 2>&1 | tee -a /tmp/ddx7-reproduction.log
+            help_code=${PIPESTATUS[0]}
+            python -m pip freeze | sort > /tmp/ddx7-freeze.txt
+          else help_code=99; : >/tmp/ddx7-freeze.txt; fi
+          echo "pip=$pip_code" >> "$GITHUB_OUTPUT"
+          echo "requirements=$requirements_code" >> "$GITHUB_OUTPUT"
+          echo "editable=$editable_code" >> "$GITHUB_OUTPUT"
+          echo "imports=$import_code" >> "$GITHUB_OUTPUT"
+          echo "help=$help_code" >> "$GITHUB_OUTPUT"
+          if [ "$pip_code" -eq 0 ] && [ "$requirements_code" -eq 0 ] && [ "$editable_code" -eq 0 ] && [ "$import_code" -eq 0 ] && [ "$help_code" -eq 0 ]; then echo 'ok=true' >> "$GITHUB_OUTPUT"; else echo 'ok=false' >> "$GITHUB_OUTPUT"; fi
+          exit 0
+      - name: Persist isolated reproduction receipt
+        if: always()
+        env:
+          OK: ${{ steps.smoke.outputs.ok }}
+          PIP: ${{ steps.smoke.outputs.pip }}
+          REQUIREMENTS: ${{ steps.smoke.outputs.requirements }}
+          EDITABLE: ${{ steps.smoke.outputs.editable }}
+          IMPORTS: ${{ steps.smoke.outputs.imports }}
+          HELP: ${{ steps.smoke.outputs.help }}
+        shell: python
+        run: |
+          import os,re
+          from pathlib import Path
+          log=Path('/tmp/ddx7-reproduction.log').read_text(encoding='utf-8',errors='replace') if Path('/tmp/ddx7-reproduction.log').exists() else 'reproduction log unavailable'
+          freeze=Path('/tmp/ddx7-freeze.txt').read_text(encoding='utf-8',errors='replace') if Path('/tmp/ddx7-freeze.txt').exists() else ''
+          ok=os.environ.get('OK')=='true'
+          versions='not resolved'
+          match=re.search(r'DDX7_IMPORTS=(\{.*\})',log)
+          if match: versions=match.group(1)
+          rows=['| Stage | Exit |','| --- | ---: |']+[f'| {n} | {os.environ.get(k,"?")} |' for n,k in [('pip bootstrap','PIP'),('requirements install','REQUIREMENTS'),('editable install','EDITABLE'),('core imports','IMPORTS'),('train.py --help','HELP')]]
+          Path('docs/validation/ddx7-isolated-reproduction.md').write_text('\n'.join(['# DDX7 isolated environment reproduction','',f"Pinned upstream: `fcaspe/ddx7@11d04fc16475ff81454f7436f318df9836971a0c`",'','Code license reviewed: **Apache-2.0**','',f"Environment smoke: **{'SUCCESS' if ok else 'FAILED'}**",'',*rows,'',f'Resolved core imports: `{versions}`.','', 'This is an isolated Python 3.9 dependency/import/Hydra-entrypoint smoke only. It does not download URMP, train a model, consume a checkpoint or admit DDX7 code/data into FM1 Editor. URMP recordings, torchcrepe/model artifacts and any future checkpoints remain separate provenance/license boundaries.','', 'Resolved environment snapshot:','```text',freeze[-12000:],'```','','Execution log:','```text',log[-16000:],'```','']),encoding='utf-8')
+          Path('.github/workflows/reproduce-ddx7-environment.yml').unlink(missing_ok=True)
+      - name: Commit research receipt
+        if: always()
+        shell: bash
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add -A
+          git commit -m 'docs(research): record DDX7 environment reproduction' || true
+          git pull --rebase origin main
+          git push origin HEAD:main
