@@ -4,6 +4,7 @@ import {
   parseRealReferenceBenchmarkReceipt,
   type RealReferenceBenchmarkAggregate,
   type RealReferenceEvidenceCategory,
+  type RealReferenceLearnedListeningAssessment,
   type RealReferenceListeningAssessment,
 } from '../audio/realReferenceBenchmarkAggregate'
 import type { RealReferenceReconstructionBenchmarkReport } from '../audio/realReferenceReconstructionBenchmark'
@@ -14,6 +15,7 @@ interface LoadedReceipt {
   report: RealReferenceReconstructionBenchmarkReport
   category: RealReferenceEvidenceCategory | ''
   listeningAssessment: RealReferenceListeningAssessment
+  learnedListeningAssessment: RealReferenceLearnedListeningAssessment
   notes: string
 }
 
@@ -27,8 +29,16 @@ const listeningOptions: readonly { value: RealReferenceListeningAssessment; labe
   { value: 'not-assessed', label: 'Not listened yet' },
   { value: 'cma-better', label: 'CMA candidate sounds better' },
   { value: 'retrieval-better', label: 'Retrieved candidate sounds better' },
-  { value: 'similar', label: 'Perceptually similar' },
-  { value: 'both-poor', label: 'Both are poor matches' },
+  { value: 'similar', label: 'Retrieval and CMA are perceptually similar' },
+  { value: 'both-poor', label: 'Retrieval and CMA are both poor matches' },
+]
+
+const learnedListeningOptions: readonly { value: Exclude<RealReferenceLearnedListeningAssessment, 'unavailable'>; label: string }[] = [
+  { value: 'not-assessed', label: 'Not listened yet' },
+  { value: 'learned-better', label: 'Learned candidate sounds best' },
+  { value: 'learned-similar', label: 'Learned is perceptually similar to the best local alternative' },
+  { value: 'learned-worse', label: 'Learned is clearly worse than the best local alternative' },
+  { value: 'learned-poor', label: 'Learned is a poor / out-of-scope match' },
 ]
 
 function errorMessage(cause: unknown): string {
@@ -55,6 +65,10 @@ function saveAggregate(aggregate: RealReferenceBenchmarkAggregate): void {
   URL.revokeObjectURL(url)
 }
 
+function learnedResult(report: RealReferenceReconstructionBenchmarkReport) {
+  return report.comparison.results.find((result) => result.approachId === 'learned-initialization')
+}
+
 export function ReconstructionBenchmarkSetPanel() {
   const [receipts, setReceipts] = useState<readonly LoadedReceipt[]>([])
   const [error, setError] = useState<string | null>(null)
@@ -71,12 +85,14 @@ export function ReconstructionBenchmarkSetPanel() {
       for (const file of Array.from(files)) {
         const parsed = JSON.parse(await file.text()) as unknown
         const report = parseRealReferenceBenchmarkReceipt(parsed)
+        const learned = learnedResult(report)
         next.push({
           id: `${report.reference.contentSha256}:${file.name}`,
           sourceFilename: file.name,
           report,
           category: '',
           listeningAssessment: 'not-assessed',
+          learnedListeningAssessment: learned?.failure === null ? 'not-assessed' : 'unavailable',
           notes: '',
         })
       }
@@ -93,7 +109,7 @@ export function ReconstructionBenchmarkSetPanel() {
     }
   }
 
-  const updateReceipt = (id: string, patch: Partial<Pick<LoadedReceipt, 'category' | 'listeningAssessment' | 'notes'>>) => {
+  const updateReceipt = (id: string, patch: Partial<Pick<LoadedReceipt, 'category' | 'listeningAssessment' | 'learnedListeningAssessment' | 'notes'>>) => {
     setAggregate(null)
     setReceipts((current) => current.map((item) => item.id === id ? { ...item, ...patch } : item))
   }
@@ -111,6 +127,7 @@ export function ReconstructionBenchmarkSetPanel() {
         report: item.report,
         category: item.category as RealReferenceEvidenceCategory,
         listeningAssessment: item.listeningAssessment,
+        learnedListeningAssessment: item.learnedListeningAssessment,
         ...(item.notes.trim() ? { notes: item.notes.trim() } : {}),
       })))
       setAggregate(result)
@@ -126,7 +143,7 @@ export function ReconstructionBenchmarkSetPanel() {
         <div>
           <p className="text-xs font-semibold uppercase tracking-[0.16em] text-emerald-200">Evidence set · aggregate real-reference receipts</p>
           <p className="mt-1 max-w-3xl text-xs leading-5 text-slate-400">
-            Import exported real-reference benchmark JSON receipts, classify each source and record the listening outcome. The aggregate rejects duplicate source hashes and reports distance/runtime ranges, CMA metric improvements and cases where a better metric did not sound better. The minimum evidence gate is two FM-friendly electronic, two pitched acoustic and two difficult/noisy references with listening assessments completed.
+            Import exported real-reference benchmark JSON receipts, classify each source and record separate retrieval/CMA and learned listening outcomes. Legacy pre-admission receipts remain importable for history, but only receipts containing a successful admitted learned row can satisfy the current three-way closure gate. The minimum set is two FM-friendly electronic, two pitched acoustic and two difficult/noisy references with both listening assessments completed.
           </p>
         </div>
         <span className="rounded-lg border border-white/10 px-2 py-1 text-[10px] uppercase tracking-[0.12em] text-slate-400">
@@ -169,74 +186,95 @@ export function ReconstructionBenchmarkSetPanel() {
 
       {receipts.length > 0 && (
         <div className="mt-4 grid gap-3">
-          {receipts.map((item) => (
-            <article className="rounded-xl border border-white/10 bg-black/20 p-3" key={item.id}>
-              <div className="flex flex-wrap items-start justify-between gap-3">
-                <div className="min-w-0">
-                  <p className="font-bold text-white">{item.report.reference.filename}</p>
-                  <p className="mt-1 text-[10px] text-slate-500">Receipt {item.sourceFilename}</p>
-                  <p className="mt-1 break-all font-mono text-[9px] text-slate-600">{item.report.reference.contentSha256}</p>
+          {receipts.map((item) => {
+            const learned = learnedResult(item.report)
+            const learnedAvailable = learned?.failure === null
+            return (
+              <article className="rounded-xl border border-white/10 bg-black/20 p-3" key={item.id}>
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="font-bold text-white">{item.report.reference.filename}</p>
+                    <p className="mt-1 text-[10px] text-slate-500">Receipt {item.sourceFilename}</p>
+                    <p className="mt-1 break-all font-mono text-[9px] text-slate-600">{item.report.reference.contentSha256}</p>
+                    <p className={`mt-2 text-[10px] ${learnedAvailable ? 'text-violet-200' : 'text-amber-200'}`}>
+                      {learnedAvailable ? `Learned row ready · distance ${statistic(learned.bestDistance ?? Number.NaN)} · ${runtime(learned.runtimeMs)}` : `Legacy/failed learned row · ${learned?.failure ?? item.report.learnedStatus}`}
+                    </p>
+                  </div>
+                  <button className="text-xs font-bold text-rose-200" onClick={() => removeReceipt(item.id)} type="button">Remove</button>
                 </div>
-                <button className="text-xs font-bold text-rose-200" onClick={() => removeReceipt(item.id)} type="button">Remove</button>
-              </div>
 
-              <div className="mt-3 grid gap-3 lg:grid-cols-2">
-                <label className="grid gap-1 text-[10px] uppercase tracking-[0.12em] text-slate-500">
-                  Evidence class
-                  <select
+                <div className="mt-3 grid gap-3 xl:grid-cols-3">
+                  <label className="grid gap-1 text-[10px] uppercase tracking-[0.12em] text-slate-500">
+                    Evidence class
+                    <select
+                      className="rounded-lg border border-white/10 bg-slate-950 px-3 py-2 text-sm normal-case tracking-normal text-slate-100"
+                      onChange={(event) => updateReceipt(item.id, { category: event.target.value as RealReferenceEvidenceCategory | '' })}
+                      value={item.category}
+                    >
+                      <option value="">Choose class…</option>
+                      {categoryOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+                    </select>
+                  </label>
+                  <label className="grid gap-1 text-[10px] uppercase tracking-[0.12em] text-slate-500">
+                    Retrieval / CMA listening
+                    <select
+                      className="rounded-lg border border-white/10 bg-slate-950 px-3 py-2 text-sm normal-case tracking-normal text-slate-100"
+                      onChange={(event) => updateReceipt(item.id, { listeningAssessment: event.target.value as RealReferenceListeningAssessment })}
+                      value={item.listeningAssessment}
+                    >
+                      {listeningOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+                    </select>
+                  </label>
+                  <label className="grid gap-1 text-[10px] uppercase tracking-[0.12em] text-slate-500">
+                    Learned listening
+                    <select
+                      className="rounded-lg border border-white/10 bg-slate-950 px-3 py-2 text-sm normal-case tracking-normal text-slate-100 disabled:opacity-55"
+                      disabled={!learnedAvailable}
+                      onChange={(event) => updateReceipt(item.id, { learnedListeningAssessment: event.target.value as RealReferenceLearnedListeningAssessment })}
+                      value={item.learnedListeningAssessment}
+                    >
+                      {!learnedAvailable && <option value="unavailable">Unavailable in this receipt · rerun benchmark</option>}
+                      {learnedAvailable && learnedListeningOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+                    </select>
+                  </label>
+                </div>
+                <label className="mt-3 grid gap-1 text-[10px] uppercase tracking-[0.12em] text-slate-500">
+                  Listening notes · optional
+                  <input
                     className="rounded-lg border border-white/10 bg-slate-950 px-3 py-2 text-sm normal-case tracking-normal text-slate-100"
-                    onChange={(event) => updateReceipt(item.id, { category: event.target.value as RealReferenceEvidenceCategory | '' })}
-                    value={item.category}
-                  >
-                    <option value="">Choose class…</option>
-                    {categoryOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
-                  </select>
+                    onChange={(event) => updateReceipt(item.id, { notes: event.target.value })}
+                    placeholder="e.g. learned attack is closer but fixed-base decay is wrong"
+                    type="text"
+                    value={item.notes}
+                  />
                 </label>
-                <label className="grid gap-1 text-[10px] uppercase tracking-[0.12em] text-slate-500">
-                  Listening assessment
-                  <select
-                    className="rounded-lg border border-white/10 bg-slate-950 px-3 py-2 text-sm normal-case tracking-normal text-slate-100"
-                    onChange={(event) => updateReceipt(item.id, { listeningAssessment: event.target.value as RealReferenceListeningAssessment })}
-                    value={item.listeningAssessment}
-                  >
-                    {listeningOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
-                  </select>
-                </label>
-              </div>
-              <label className="mt-3 grid gap-1 text-[10px] uppercase tracking-[0.12em] text-slate-500">
-                Listening notes · optional
-                <input
-                  className="rounded-lg border border-white/10 bg-slate-950 px-3 py-2 text-sm normal-case tracking-normal text-slate-100"
-                  onChange={(event) => updateReceipt(item.id, { notes: event.target.value })}
-                  placeholder="e.g. brighter attack but wrong decay"
-                  type="text"
-                  value={item.notes}
-                />
-              </label>
-            </article>
-          ))}
+              </article>
+            )
+          })}
         </div>
       )}
 
       {aggregate && (
         <div className="mt-5 grid gap-3" data-real-reference-aggregate="complete">
           <div className={`rounded-xl border p-3 ${aggregate.closureReadiness.readyForAggregateEvidence ? 'border-emerald-300/25 bg-emerald-300/[0.035]' : 'border-amber-200/20 bg-amber-200/[0.025]'}`}>
-            <p className="text-sm font-black text-white">{aggregate.closureReadiness.readyForAggregateEvidence ? 'Minimum mixed evidence set complete' : 'Evidence set still incomplete'}</p>
+            <p className="text-sm font-black text-white">{aggregate.closureReadiness.readyForAggregateEvidence ? 'Current three-way mixed evidence set complete' : 'Evidence set still incomplete'}</p>
             <p className="mt-1 text-[11px] leading-5 text-slate-400">
-              Electronic {aggregate.categoryCounts['fm-friendly-electronic']}/2 · Acoustic {aggregate.categoryCounts['pitched-acoustic']}/2 · Difficult {aggregate.categoryCounts['difficult-transient-noisy']}/2 · Unassessed listening {aggregate.listeningCounts['not-assessed']}
+              Electronic {aggregate.categoryCounts['fm-friendly-electronic']}/2 · Acoustic {aggregate.categoryCounts['pitched-acoustic']}/2 · Difficult {aggregate.categoryCounts['difficult-transient-noisy']}/2 · Retrieval/CMA unassessed {aggregate.listeningCounts['not-assessed']} · Learned unassessed {aggregate.learnedListeningCounts['not-assessed']} · Current learned rows {aggregate.learnedInitializationSuccessCount}/{aggregate.receiptCount}
             </p>
             {aggregate.closureReadiness.missing.length > 0 && <p className="mt-2 text-[11px] text-amber-200">Missing: {aggregate.closureReadiness.missing.join(' · ')}</p>}
           </div>
 
-          <div className="grid gap-2 text-xs sm:grid-cols-2 xl:grid-cols-4">
+          <div className="grid gap-2 text-xs sm:grid-cols-2 xl:grid-cols-3">
             <div className="rounded-xl border border-white/10 bg-black/20 p-3"><p className="text-[10px] uppercase text-slate-500">Retrieval distance</p><p className="mt-1 text-slate-200">median {statistic(aggregate.retrievalDistance.median)}</p><p className="text-[10px] text-slate-500">{statistic(aggregate.retrievalDistance.minimum)}–{statistic(aggregate.retrievalDistance.maximum)}</p></div>
             <div className="rounded-xl border border-white/10 bg-black/20 p-3"><p className="text-[10px] uppercase text-slate-500">CMA distance</p><p className="mt-1 text-slate-200">median {statistic(aggregate.evolutionaryDistance.median)}</p><p className="text-[10px] text-slate-500">{statistic(aggregate.evolutionaryDistance.minimum)}–{statistic(aggregate.evolutionaryDistance.maximum)}</p></div>
+            <div className="rounded-xl border border-white/10 bg-black/20 p-3"><p className="text-[10px] uppercase text-slate-500">Learned distance</p><p className="mt-1 text-slate-200">median {aggregate.learnedDistance ? statistic(aggregate.learnedDistance.median) : '—'}</p><p className="text-[10px] text-slate-500">{aggregate.learnedDistance ? `${statistic(aggregate.learnedDistance.minimum)}–${statistic(aggregate.learnedDistance.maximum)}` : 'no successful learned rows'}</p></div>
             <div className="rounded-xl border border-white/10 bg-black/20 p-3"><p className="text-[10px] uppercase text-slate-500">Retrieval runtime</p><p className="mt-1 text-slate-200">median {runtime(aggregate.retrievalRuntimeMs.median)}</p><p className="text-[10px] text-slate-500">{runtime(aggregate.retrievalRuntimeMs.minimum)}–{runtime(aggregate.retrievalRuntimeMs.maximum)}</p></div>
             <div className="rounded-xl border border-white/10 bg-black/20 p-3"><p className="text-[10px] uppercase text-slate-500">CMA runtime</p><p className="mt-1 text-slate-200">median {runtime(aggregate.evolutionaryRuntimeMs.median)}</p><p className="text-[10px] text-slate-500">{runtime(aggregate.evolutionaryRuntimeMs.minimum)}–{runtime(aggregate.evolutionaryRuntimeMs.maximum)}</p></div>
+            <div className="rounded-xl border border-white/10 bg-black/20 p-3"><p className="text-[10px] uppercase text-slate-500">Learned runtime</p><p className="mt-1 text-slate-200">median {aggregate.learnedRuntimeMs ? runtime(aggregate.learnedRuntimeMs.median) : '—'}</p><p className="text-[10px] text-slate-500">{aggregate.learnedRuntimeMs ? `${runtime(aggregate.learnedRuntimeMs.minimum)}–${runtime(aggregate.learnedRuntimeMs.maximum)}` : 'no successful learned rows'}</p></div>
           </div>
 
           <p className="text-[11px] leading-5 text-slate-500">
-            CMA improved the numerical metric for {aggregate.cmaMetricImprovedCount}/{aggregate.receiptCount} references ({Math.round(aggregate.cmaMetricImprovedRate * 100)}%). Listening preferred CMA for {aggregate.cmaListeningBetterCount}/{aggregate.receiptCount}. Metric improved without a corresponding “CMA sounds better” assessment in {aggregate.metricImprovedButListeningNotBetterCount} case{aggregate.metricImprovedButListeningNotBetterCount === 1 ? '' : 's'}. Learned initialization remains unavailable in {aggregate.learnedInitializationUnavailableCount}/{aggregate.receiptCount} receipts.
+            CMA improved the numerical metric for {aggregate.cmaMetricImprovedCount}/{aggregate.receiptCount} references ({Math.round(aggregate.cmaMetricImprovedRate * 100)}%). Listening preferred CMA for {aggregate.cmaListeningBetterCount}/{aggregate.receiptCount}; metric improved without a matching “CMA sounds better” verdict in {aggregate.metricImprovedButListeningNotBetterCount} case{aggregate.metricImprovedButListeningNotBetterCount === 1 ? '' : 's'}. Learned rows succeeded for {aggregate.learnedInitializationSuccessCount}/{aggregate.receiptCount}; listening marked learned best in {aggregate.learnedListeningCounts['learned-better']}, similar in {aggregate.learnedListeningCounts['learned-similar']}, worse in {aggregate.learnedListeningCounts['learned-worse']} and poor/out-of-scope in {aggregate.learnedListeningCounts['learned-poor']}.
           </p>
         </div>
       )}
