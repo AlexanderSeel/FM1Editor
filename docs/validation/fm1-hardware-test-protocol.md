@@ -2,6 +2,17 @@
 
 This protocol records the evidence required to close the hardware-dependent items in `PLAN.md`. A software-only or mocked result must not be marked as a physical pass.
 
+## In-app evidence helper
+
+Open **MIDI monitor → Hardware evidence session** during a physical session. The helper records the test identity, browser/secure-context metadata, audio measurements and explicit PASS/FAIL observations while summarizing the current MIDI monitor capture. It recognizes outgoing standard Yamaha 4,104-byte bank messages and 163-byte single-voice messages by framing/length, but those detections are metadata only and never turn a physical check into a pass.
+
+Export both artifacts when MIDI evidence is relevant:
+
+1. **Export JSON** from the MIDI monitor for the raw captured bytes.
+2. **Export evidence manifest** from the hardware evidence session for sanitized identity, measurements, result states and MIDI summary counts.
+
+The manifest intentionally does not duplicate raw SysEx bytes or audio samples. Review tester names, device labels and free-text notes before committing sanitized evidence.
+
 ## Test identity
 
 Record before every session:
@@ -118,6 +129,7 @@ Live parameter writes remain disabled until the semantic map and framing are bot
 Store each completed session under a dated folder outside the application repository until privacy-sensitive device paths and user names are removed. The sanitized evidence package should contain:
 
 - this protocol with results filled in;
+- exported hardware evidence manifest;
 - MIDI monitor JSON export;
 - original and merged `.syx` files with SHA-256 values;
 - saved WAV samples;
