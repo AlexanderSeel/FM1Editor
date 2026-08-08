@@ -2,8 +2,8 @@ class SoundFileRuntimeError(RuntimeError):
     pass
 class SoundFile:
     def __init__(self, *args, **kwargs):
-        raise SoundFileRuntimeError('soundfile IO is intentionally unavailable in this MFCC-only oracle')
+        raise SoundFileRuntimeError('native audio IO intentionally unavailable')
 def read(*args, **kwargs):
-    raise SoundFileRuntimeError('soundfile IO is intentionally unavailable in this MFCC-only oracle')
+    raise SoundFileRuntimeError('native audio IO intentionally unavailable')
 def write(*args, **kwargs):
-    raise SoundFileRuntimeError('soundfile IO is intentionally unavailable in this MFCC-only oracle')
+    raise SoundFileRuntimeError('native audio IO intentionally unavailable')

@@ -9,5 +9,5 @@ signal=signal.astype(np.float32)
 mfcc=librosa.feature.mfcc(y=signal,sr=sr,n_mfcc=13,n_fft=2048,hop_length=1024)
 if mfcc.shape!=(13,44): raise SystemExit('unexpected shape %r'%(mfcc.shape,))
 flat=mfcc.T.astype(np.float32).reshape(-1)
-payload={'schema':'fm1-editor.spiegelib-mfcc-librosa-0.7.2-reference.v1','environment':{'python':'3.7.7','numpy':np.__version__,'scipy':scipy.__version__,'librosa':librosa.__version__,'numbaJit':'disabled-for-oracle','soundfileIO':'stubbed-unused'},'signal':{'sampleRate':sr,'sampleCount':int(signal.size),'formula':'deterministic multi-sine/envelope/edge-impulse fixture'},'featureShape':[44,13],'flatFloat32Sha256':hashlib.sha256(flat.tobytes(order='C')).hexdigest(),'values':[float(v) for v in flat]}
+payload={'schema':'fm1-editor.spiegelib-mfcc-librosa-0.7.2-reference.v1','environment':{'python':'3.7.7','numpy':np.__version__,'scipy':scipy.__version__,'librosa':librosa.__version__,'numbaJit':'disabled-for-oracle','soundfileIO':'stubbed-unused','resampling':'stubbed-unused'},'signal':{'sampleRate':sr,'sampleCount':int(signal.size),'formula':'deterministic multi-sine/envelope/edge-impulse fixture'},'featureShape':[44,13],'flatFloat32Sha256':hashlib.sha256(flat.tobytes(order='C')).hexdigest(),'values':[float(v) for v in flat]}
 print(json.dumps(payload,separators=(',',':')))
