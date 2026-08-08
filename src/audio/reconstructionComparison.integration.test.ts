@@ -120,7 +120,16 @@ describe('packaged-engine reconstruction comparison', () => {
     const report = await compareReconstructionApproaches([testCase], [retrieval, evolutionary, learned], {
       async evaluateCandidate(_case, candidate, signal) {
         const evaluated = await objective.evaluate(candidate.voice, signal)
-        return { distance: evaluated.distance, metrics: evaluated.metrics }
+        const metrics: Readonly<Record<string, number>> = {
+          envelope: evaluated.metrics.envelope,
+          mel: evaluated.metrics.mel,
+          mfcc: evaluated.metrics.mfcc,
+          centroid: evaluated.metrics.centroid,
+          rolloff: evaluated.metrics.rolloff,
+          flatness: evaluated.metrics.flatness,
+          total: evaluated.metrics.total,
+        }
+        return { distance: evaluated.distance, metrics }
       },
     })
 

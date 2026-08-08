@@ -1,6 +1,6 @@
 {
   "schema": "fm1-editor.reconstruction-comparison.v1",
-  "createdAt": "2026-08-08T06:57:06.756Z",
+  "createdAt": "2026-08-08T06:59:24.270Z",
   "results": [
     {
       "caseId": "repo-synthetic-fm1-ref-v1",
@@ -8,7 +8,7 @@
       "caseKind": "synthetic-ground-truth",
       "approachId": "retrieval",
       "approachLabel": "Retrieval only",
-      "runtimeMs": 0.6675430000000233,
+      "runtimeMs": 0.4560960000000023,
       "candidateCount": 3,
       "bestDistance": 0.04095621432849238,
       "bestCandidateIndex": 0,
@@ -30,7 +30,7 @@
       "caseKind": "synthetic-ground-truth",
       "approachId": "evolutionary",
       "approachLabel": "Seeded constrained CMA-ES",
-      "runtimeMs": 1081.270994,
+      "runtimeMs": 761.0214910000001,
       "candidateCount": 2,
       "bestDistance": 0.007513576893987815,
       "bestCandidateIndex": 0,
@@ -52,7 +52,7 @@
       "caseKind": "synthetic-ground-truth",
       "approachId": "learned-initialization",
       "approachLabel": "Learned initialization",
-      "runtimeMs": 0.09470000000010259,
+      "runtimeMs": 0.10777200000006815,
       "candidateCount": 0,
       "bestDistance": null,
       "bestCandidateIndex": null,
