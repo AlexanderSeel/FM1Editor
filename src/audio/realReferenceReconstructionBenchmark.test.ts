@@ -16,7 +16,7 @@ import {
 
 function withOutputLevel(level: number, feedback: number, name: string): Dx7Voice {
   const base = createInitializedVoice()
-  const operators = base.operators.map((operator) => ({ ...operator, outputLevel: level })) as Dx7Voice['operators']
+  const operators = base.operators.map((operator) => ({ ...operator, outputLevel: level })) as unknown as Dx7Voice['operators']
   return { ...base, name, feedback, operators }
 }
 
