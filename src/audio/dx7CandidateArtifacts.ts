@@ -40,7 +40,10 @@ function compareFour(
   after: readonly [number, number, number, number],
 ): void {
   for (let index = 0; index < 4; index += 1) {
-    pushDifference(output, `${path}.${index}`, `${label} ${index + 1}`, before[index], after[index])
+    const beforeValue = before[index]
+    const afterValue = after[index]
+    if (beforeValue === undefined || afterValue === undefined) throw new Error('DX7 four-value tuple is incomplete.')
+    pushDifference(output, `${path}.${index}`, `${label} ${index + 1}`, beforeValue, afterValue)
   }
 }
 
