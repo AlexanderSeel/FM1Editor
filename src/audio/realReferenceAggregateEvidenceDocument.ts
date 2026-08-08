@@ -60,6 +60,7 @@ export function buildRealReferenceAggregateEvidenceMarkdown(
     `- Pitched acoustic: **${aggregate.categoryCounts['pitched-acoustic']}**`,
     `- Difficult transient/noisy/nonlinear: **${aggregate.categoryCounts['difficult-transient-noisy']}**`,
     `- Current successful learned rows: **${aggregate.learnedInitializationSuccessCount}/${aggregate.receiptCount}**`,
+    `- Reproducible exact-winner audition receipts: **${aggregate.auditionEvidenceReceiptCount}/${aggregate.receiptCount}**`,
     `- Retrieval/CMA listening assessments complete: **${aggregate.closureReadiness.listeningAssessmentsComplete ? 'yes' : 'no'}**`,
     `- Learned listening assessments complete: **${aggregate.closureReadiness.learnedListeningAssessmentsComplete ? 'yes' : 'no'}**`,
     `- Current three-way set complete: **${aggregate.closureReadiness.currentThreeWayComplete ? 'yes' : 'no'}**`,
@@ -82,12 +83,12 @@ export function buildRealReferenceAggregateEvidenceMarkdown(
     '',
     '## Retained receipts',
     '',
-    '| Reference | SHA-256 | Class | Retrieval | CMA | Learned | Retrieval/CMA listening | Learned listening | Notes |',
-    '| --- | --- | --- | ---: | ---: | ---: | --- | --- | --- |',
+    '| Reference | SHA-256 | Class | Retrieval | CMA | Learned | Exact winners | Retrieval/CMA listening | Learned listening | Notes |',
+    '| --- | --- | --- | ---: | ---: | ---: | --- | --- | --- | --- |',
   ]
 
   for (const receipt of aggregate.receipts) {
-    lines.push(`| ${safeCell(receipt.filename)} | \`${receipt.referenceSha256}\` | ${receipt.category} | ${receipt.retrievalDistance.toFixed(5)} | ${receipt.evolutionaryDistance.toFixed(5)} | ${receipt.learnedDistance === null ? '—' : receipt.learnedDistance.toFixed(5)} | ${receipt.listeningAssessment} | ${receipt.learnedListeningAssessment} | ${safeCell(receipt.notes ?? '')} |`)
+    lines.push(`| ${safeCell(receipt.filename)} | \`${receipt.referenceSha256}\` | ${receipt.category} | ${receipt.retrievalDistance.toFixed(5)} | ${receipt.evolutionaryDistance.toFixed(5)} | ${receipt.learnedDistance === null ? '—' : receipt.learnedDistance.toFixed(5)} | ${receipt.auditionEvidenceComplete ? 'yes' : 'no'} | ${receipt.listeningAssessment} | ${receipt.learnedListeningAssessment} | ${safeCell(receipt.notes ?? '')} |`)
   }
 
   lines.push(
@@ -96,7 +97,7 @@ export function buildRealReferenceAggregateEvidenceMarkdown(
     '',
     'This evidence compares local reconstruction approaches for user-declared isolated reference sounds. It does not prove original patch identity, exact reconstruction, learned-model superiority, or physical FM-1 equivalence. The admitted SpiegeLib initializer predicts nine historical Dexed OP2 controls over a fixed training base; poor and out-of-scope results are retained as evidence.',
     '',
-    'The aggregate JSON and this document contain hashes, classifications, metrics, runtimes, listening assessments and notes only. Raw reference audio is not embedded.',
+    'The aggregate JSON and this document contain hashes, classifications, metrics, runtimes, exact-winner provenance flags, listening assessments and notes only. The semantic winner voices remain in the per-reference receipts for reproducible audition and are not copied into the aggregate. Raw reference audio is not embedded.',
     '',
   )
   return lines.join('\n')

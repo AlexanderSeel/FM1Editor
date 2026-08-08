@@ -90,6 +90,8 @@ describe('real-reference aggregate evidence document', () => {
     expect(output.markdown).toContain('| SpiegeLib learned initialization |')
     expect(output.markdown).toContain('reference-1.wav')
     expect(output.markdown).toContain('learned-better')
+    expect(output.markdown).toContain('Reproducible exact-winner audition receipts: **6/6**')
+    expect(output.markdown).toContain('| yes |')
     expect(output.markdown).not.toContain('"samples"')
     expect(output.markdown).toContain('closer attack \\| stable pitch')
   })
