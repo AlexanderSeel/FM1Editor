@@ -22,7 +22,7 @@ import {
   writeStoredDeviceTarget,
   type DeviceTarget,
 } from './domain/deviceTarget'
-import { createInitializedFxState } from './domain/fx'
+import { createInitializedFxState, type Fm1FxState } from './domain/fx'
 import { createInitializedSequence } from './domain/sequence'
 import { createInitializedVoice, type Dx7Voice } from './domain/voice'
 import { useLocalVoiceAudition } from './hooks/useLocalVoiceAudition'
@@ -174,6 +174,17 @@ export default function App() {
     if (!confirmDiscardVoiceChanges('Loading another voice')) return
     setBank([])
     loadVoiceDocument(nextVoice)
+    setWorkspace('voice')
+  }
+
+  const loadReconstructionCandidate = (nextVoice: Dx7Voice, nextFxState?: Fm1FxState) => {
+    const replacingDirtyEffects = nextFxState !== undefined && effectsHistory.dirty
+    if ((voiceHistory.dirty || replacingDirtyEffects) && !window.confirm(
+      `The current ${voiceHistory.dirty && replacingDirtyEffects ? 'voice and effects have' : voiceHistory.dirty ? 'voice has' : 'effects have'} unsaved changes. Loading this reconstruction candidate will replace them. Continue?`,
+    )) return
+    setBank([])
+    loadVoiceDocument(nextVoice)
+    if (nextFxState) effectsHistory.reset(nextFxState)
     setWorkspace('voice')
   }
 
@@ -333,8 +344,10 @@ export default function App() {
                     title="Audio → FM reference"
                   >
                     <AudioToFmReferencePanel
+                      fxState={effects}
                       onAuditionVoice={auditionVoice}
                       onLoadVoice={loadCatalogVoice}
+                      onLoadVoiceWithFx={loadReconstructionCandidate}
                       onStopAudition={stopAudition}
                     />
                   </CollapsibleSection>

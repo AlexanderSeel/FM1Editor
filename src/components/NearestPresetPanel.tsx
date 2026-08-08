@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { Dx7Voice } from '../domain/voice'
+import type { Fm1FxState } from '../domain/fx'
 import { createDx7VoiceSemanticDiff, createDx7VoiceSyxArtifact } from '../audio/dx7CandidateArtifacts'
+import { createDx7CandidateFxAttachment, type Dx7CandidateFxAttachment } from '../audio/dx7CandidateFxState'
 import {
   createAudioDescriptorProfile,
 } from '../audio/audioDescriptors'
@@ -43,9 +45,11 @@ type SearchPhase = 'idle' | 'catalog' | 'indexing' | 'refining' | 'ready' | 'can
 
 interface NearestPresetPanelProps {
   reference: PreparedReferenceAudio | null
+  fxState?: Fm1FxState
   onAuditionVoice: (voice: Dx7Voice | Promise<Dx7Voice>) => Promise<void>
   onStopAudition: () => Promise<void>
   onLoadVoice: (voice: Dx7Voice) => void
+  onLoadVoiceWithFx?: (voice: Dx7Voice, fxState: Fm1FxState) => void
 }
 
 interface SearchProgress {
@@ -140,9 +144,11 @@ function downloadVoiceSyx(voice: Dx7Voice): void {
 
 export function NearestPresetPanel({
   reference,
+  fxState,
   onAuditionVoice,
   onStopAudition,
   onLoadVoice,
+  onLoadVoiceWithFx,
 }: NearestPresetPanelProps) {
   const [scope, setScope] = useState<SearchScope>('quick')
   const [phase, setPhase] = useState<SearchPhase>('idle')
@@ -153,6 +159,7 @@ export function NearestPresetPanel({
   const [referenceFingerprint, setReferenceFingerprint] = useState<AudioDescriptorFingerprint | null>(null)
   const [refinementResults, setRefinementResults] = useState<readonly Dx7RetrievedRefinementResult[]>([])
   const [refinementProgress, setRefinementProgress] = useState<RefinementProgress | null>(null)
+  const [candidateFxById, setCandidateFxById] = useState<Readonly<Record<string, Dx7CandidateFxAttachment>>>({})
   const [status, setStatus] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [referencePlaying, setReferencePlaying] = useState(false)
@@ -180,6 +187,7 @@ export function NearestPresetPanel({
     setReferenceFingerprint(null)
     setRefinementResults([])
     setRefinementProgress(null)
+    setCandidateFxById({})
     setCandidateCount(0)
     setCacheHits(0)
     setProgress({ completed: 0, total: 0, current: '' })
@@ -552,6 +560,8 @@ export function NearestPresetPanel({
                   <button className="rounded-lg border border-violet-300/30 px-3 py-2 text-xs font-bold text-violet-100" onClick={() => downloadVoiceSyx(item.bestVoice)} type="button">
                     Export refined .syx
                   </button>
+                  <button className="rounded-lg border border-cyan-300/30 px-3 py-2 text-xs font-bold text-cyan-100 disabled:opacity-40" disabled={!fxState} onClick={() => { if (fxState) setCandidateFxById((current) => ({ ...current, [item.sourceCandidate.id]: createDx7CandidateFxAttachment(fxState) })) }} type="button">{candidateFxById[item.sourceCandidate.id] ? 'Refresh attached FX' : 'Attach current FX'}</button>
+                  {candidateFxById[item.sourceCandidate.id] && onLoadVoiceWithFx && <button className="rounded-lg bg-cyan-200 px-3 py-2 text-xs font-black text-slate-950" onClick={() => { const attachment=candidateFxById[item.sourceCandidate.id]; if (attachment) onLoadVoiceWithFx(item.bestVoice, attachment.state) }} type="button">Load refined + FX</button>}
                   <button className="rounded-lg bg-emerald-300 px-3 py-2 text-xs font-black text-slate-950" onClick={() => onLoadVoice(item.bestVoice)} type="button">
                     Load refined
                   </button>
@@ -565,6 +575,7 @@ export function NearestPresetPanel({
                 <span>ROLL {metric(item.bestMetrics.rolloff)}</span>
                 <span>FLAT {metric(item.bestMetrics.flatness)}</span>
               </div>
+              {candidateFxById[item.sourceCandidate.id] && <p className="mt-3 text-[10px] text-cyan-200" data-candidate-fx-attached="true">Attached FM-1-inspired FX snapshot · channel {candidateFxById[item.sourceCandidate.id]?.state.midiChannel} · {candidateFxById[item.sourceCandidate.id]?.nonZeroControls} non-zero controls · local metadata only</p>}
               <div className="mt-3 rounded-lg border border-white/8 bg-black/15 p-2">
                 <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500">Semantic changes from retrieved start</p>
                 <div className="mt-2 flex flex-wrap gap-1.5">
