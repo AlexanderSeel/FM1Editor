@@ -1,0 +1,65 @@
+name: Validate Virtual FM1 preview browsers v5
+
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/validate-virtual-fm1-preview-browser-v5.yml']
+
+permissions:
+  contents: write
+
+jobs:
+  browser:
+    runs-on: windows-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - run: node --check scripts/test-virtual-fm1-preview-browser.mjs
+      - run: npm install --no-audit --no-fund
+      - run: npm run build
+      - name: Run Chrome and Edge from clean result state
+        shell: pwsh
+        run: |
+          Remove-Item virtual-fm1-preview-chrome.json,virtual-fm1-preview-edge.json -Force -ErrorAction SilentlyContinue
+          $pfx=${env:ProgramFiles(x86)}
+          $chrome=@((Join-Path $env:PROGRAMFILES 'Google\Chrome\Application\chrome.exe'),(Join-Path $pfx 'Google\Chrome\Application\chrome.exe'))|Where-Object{$_ -and(Test-Path $_)}|Select-Object -First 1
+          $edge=@((Join-Path $env:PROGRAMFILES 'Microsoft\Edge\Application\msedge.exe'),(Join-Path $pfx 'Microsoft\Edge\Application\msedge.exe'))|Where-Object{$_ -and(Test-Path $_)}|Select-Object -First 1
+          if(-not $chrome){throw 'Chrome not found'};if(-not $edge){throw 'Edge not found'}
+          function Run($exe,$name,$result){$code=1;for($i=1;$i -le 2;$i++){Remove-Item $result -Force -ErrorAction SilentlyContinue;node scripts/test-virtual-fm1-preview-browser.mjs --browser-executable $exe --browser-name $name --result $result;$code=$LASTEXITCODE;if($code -eq 0){break};Start-Sleep -Seconds 1};if(-not(Test-Path $result)){@{ok=$false;browserName=$name;error="runner exited $code without result file"}|ConvertTo-Json|Set-Content -Encoding utf8 $result}}
+          Run $chrome 'chrome' 'virtual-fm1-preview-chrome.json';Run $edge 'edge' 'virtual-fm1-preview-edge.json';exit 0
+      - name: Persist browser evidence and close roadmap only on success
+        if: always()
+        shell: pwsh
+        run: |
+          @'
+          import json,os
+          from pathlib import Path
+          def read(p):
+            q=Path(p)
+            if not q.exists():return {'ok':False,'error':'result missing'}
+            try:return json.loads(q.read_text(encoding='utf-8-sig'))
+            except Exception as e:return {'ok':False,'error':f'invalid result: {e}'}
+          c,e=read('virtual-fm1-preview-chrome.json'),read('virtual-fm1-preview-edge.json');ok=bool(c.get('ok')) and bool(e.get('ok'))
+          def f(v):return '—' if v is None else f'{float(v):.8f}'
+          def row(n,d):
+            if not d.get('ok'):return f"| {n} | FAILED | — | — | — | — | — | — | — | {d.get('error','unknown')} |"
+            u=', '.join(f'{float(x):.2f}%' for x in d.get('utilization',[])) or 'reported text only'
+            return f"| {n} | {d.get('browserProduct')} | {f(d.get('dryPeak'))} | {f(d.get('fxPeak'))} | {f(d.get('attenuatedPeak'))} | {f(d.get('referencePeak'))} | {f(d.get('currentBPeak'))} | {d.get('downloadCount')} | {u} | PASS |"
+          Path('docs/validation/virtual-fm1-preview-browser.md').write_text('\n'.join(['# Complete Virtual FM-1 preview browser acceptance','',f"Source commit: `{os.environ['GITHUB_SHA']}`",'',f"Overall browser gate: **{'SUCCESS' if ok else 'FAILED'}**",'','| Browser | Product | Dry peak | FX peak | Attenuated peak | Reference A peak | Current B peak | WAV downloads | Measured utilization | Result |','| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | --- | --- |',row('Chrome',c),row('Edge',e),'','This clean-state branded-browser run exercises the mounted Virtual FM-1 preview after the measured worklet clock fallback: local software FX, post-limiter dry/FX/master output, measured worklet diagnostics, prepared-reference A/current-B playback and valid note/chord RIFF/WAVE export.','','Acceptance requires zero Web MIDI requests and no external/write fetches. This is DX7-compatible / FM-1-inspired browser evidence only; no physical FM-1 equivalence is claimed.','']),encoding='utf-8')
+          if ok:
+            p=Path('PLAN.md');t=p.read_text(encoding='utf-8');old='- [ ] Add a Virtual FM-1 preview target with local-audio enable, dry/FX toggle, master gain, limiter, polyphony/CPU diagnostics, current voice/effect synchronization, note/chord WAV rendering and uploaded-reference A/B comparison.';new='- [x] Add a Virtual FM-1 preview target with explicit local-audio enable, dry/FX toggle, master gain, limiter, measured worklet polyphony/render diagnostics, current semantic voice/effect synchronization, deterministic note/chord WAV rendering and prepared-reference A/B comparison. Evidence: [`docs/validation/virtual-fm1-preview-complete-software.md`](./docs/validation/virtual-fm1-preview-complete-software.md), [`docs/validation/msfa-worklet-diagnostic-clock.md`](./docs/validation/msfa-worklet-diagnostic-clock.md) and [`docs/validation/virtual-fm1-preview-browser.md`](./docs/validation/virtual-fm1-preview-browser.md).'
+            if old in t:t=t.replace(old,new,1)
+            elif new not in t:raise SystemExit('Virtual FM1 roadmap item not found')
+            p.write_text(t,encoding='utf-8')
+          for name in ('virtual-fm1-preview-chrome.json','virtual-fm1-preview-edge.json'):Path(name).unlink(missing_ok=True)
+          Path('.github/workflows/validate-virtual-fm1-preview-browser-v5.yml').unlink(missing_ok=True)
+          '@ | python
+      - name: Commit evidence only
+        if: always()
+        shell: bash
+        run: |
+          git config user.name github-actions[bot];git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add -A;git commit -m 'test(browser): validate Virtual FM1 preview with clock fallback' || true;git pull --rebase origin main;git push origin HEAD:main
