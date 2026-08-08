@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { DX7_HARDWARE_EVIDENCE_SCHEMA } from './dx7HardwareEvidence'
 import { FM1_DELIVERY_EVIDENCE_INTEGRITY_SCHEMA } from './fm1DeliveryEvidenceIntegrity'
+import { FM1_DELIVERY_EVIDENCE_PACKAGE_INTEGRITY_SCHEMA } from './fm1DeliveryEvidencePackageIntegrity'
 import { HARDWARE_EVIDENCE_SCHEMA } from './hardwareEvidence'
 import {
   classifyPhysicalEvidenceArtifact,
@@ -27,6 +28,10 @@ describe('physical evidence package', () => {
     expect(classifyPhysicalEvidenceArtifact('delivery-v2.json', 'application/json', { schema: FM1_DELIVERY_EVIDENCE_INTEGRITY_SCHEMA })).toEqual({
       kind: 'fm1-delivery-gate',
       jsonSchema: FM1_DELIVERY_EVIDENCE_INTEGRITY_SCHEMA,
+    })
+    expect(classifyPhysicalEvidenceArtifact('delivery-v3.json', 'application/json', { schema: FM1_DELIVERY_EVIDENCE_PACKAGE_INTEGRITY_SCHEMA })).toEqual({
+      kind: 'fm1-delivery-gate',
+      jsonSchema: FM1_DELIVERY_EVIDENCE_PACKAGE_INTEGRITY_SCHEMA,
     })
     expect(classifyPhysicalEvidenceArtifact('capture.json', 'application/json', { version: 1, exportedAt: '2026-08-08T00:00:00Z', entries: [] }).kind).toBe('midi-monitor')
     expect(classifyPhysicalEvidenceArtifact('bank.syx', 'application/octet-stream').kind).toBe('sysex')
