@@ -1,0 +1,63 @@
+name: Validate expanded renderer browser limits v2
+
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/validate-expanded-renderer-browser-v2.yml']
+
+permissions:
+  contents: write
+
+jobs:
+  browser:
+    runs-on: windows-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - run: node --check scripts/test-virtual-fm1-preview-browser.mjs
+      - run: npm install --no-audit --no-fund
+      - run: npm run build
+      - name: Run Chrome and Edge performance acceptance
+        shell: pwsh
+        run: |
+          Remove-Item virtual-fm1-preview-chrome.json,virtual-fm1-preview-edge.json -Force -ErrorAction SilentlyContinue
+          $pfx=${env:ProgramFiles(x86)}
+          $chrome=@((Join-Path $env:PROGRAMFILES 'Google\Chrome\Application\chrome.exe'),(Join-Path $pfx 'Google\Chrome\Application\chrome.exe'))|Where-Object{$_ -and(Test-Path $_)}|Select-Object -First 1
+          $edge=@((Join-Path $env:PROGRAMFILES 'Microsoft\Edge\Application\msedge.exe'),(Join-Path $pfx 'Microsoft\Edge\Application\msedge.exe'))|Where-Object{$_ -and(Test-Path $_)}|Select-Object -First 1
+          if(-not $chrome){throw 'Chrome not found'};if(-not $edge){throw 'Edge not found'}
+          function Run($exe,$name,$result){$code=1;for($i=1;$i -le 2;$i++){Remove-Item $result -Force -ErrorAction SilentlyContinue;node scripts/test-virtual-fm1-preview-browser.mjs --browser-executable $exe --browser-name $name --result $result;$code=$LASTEXITCODE;if($code -eq 0){break};Start-Sleep -Seconds 1};if(-not(Test-Path $result)){@{ok=$false;browserName=$name;error="runner exited $code without result file"}|ConvertTo-Json|Set-Content -Encoding utf8 $result}}
+          Run $chrome 'chrome' 'virtual-fm1-preview-chrome.json';Run $edge 'edge' 'virtual-fm1-preview-edge.json';exit 0
+      - name: Persist evidence and close renderer roadmap only on success
+        if: always()
+        shell: pwsh
+        run: |
+          @'
+          import json,os
+          from pathlib import Path
+          def read(p):
+            q=Path(p)
+            if not q.exists():return {'ok':False,'error':'result missing'}
+            try:return json.loads(q.read_text(encoding='utf-8-sig'))
+            except Exception as exc:return {'ok':False,'error':f'invalid result: {exc}'}
+          c,e=read('virtual-fm1-preview-chrome.json'),read('virtual-fm1-preview-edge.json');ok=bool(c.get('ok')) and bool(e.get('ok'))
+          def row(name,d):
+            if not d.get('ok'):return f"| {name} | FAILED | — | — | — | {d.get('error','unknown')} |"
+            p=d.get('performance') or {};return f"| {name} | {d.get('browserProduct')} | {float(p.get('meanUtilization',-1))*100:.2f}% | {float(p.get('maxUtilization',-1))*100:.2f}% | {p.get('overBudgetCallbacks')}/{p.get('callbacks')} | PASS |"
+          Path('docs/validation/virtual-fm1-expanded-regression-browser.md').write_text('\n'.join(['# Expanded Virtual FM-1 renderer browser performance gate','',f"Source commit: `{os.environ['GITHUB_SHA']}`",'',f"Overall browser performance gate: **{'SUCCESS' if ok else 'FAILED'}**",'','| Browser | Product | Mean utilization | Max utilization | Over budget | Result |','| --- | --- | ---: | ---: | ---: | --- |',row('Chrome',c),row('Edge',e),'','Enforced repository limits: mean utilization <= 5%, max utilization <= 60%, and zero callbacks over the 128-frame audio-quantum budget. The same acceptance run also requires dry/FX/master behavior, prepared-reference A/B, valid WAV output, no uncaught browser errors/rejections, zero Web MIDI requests and no external/write fetches.','','These are browser-software limits derived from measured Chrome/Edge observations with margin; no physical FM-1 performance equivalence is claimed.','']),encoding='utf-8')
+          if ok:
+            p=Path('PLAN.md');t=p.read_text(encoding='utf-8');old='- [ ] Add deterministic render regression tests, effect-isolation tests, integrated AudioWorklet underrun/error checks and Chrome/Edge performance limits as the renderer expands beyond the accepted dry performance-control core.';new='- [x] Add deterministic render regression tests, per-effect isolation, integrated AudioWorklet error/deadline checks and enforced Chrome/Edge performance limits (mean <= 5%, max <= 60%, zero over-budget callbacks) for the expanded renderer. Evidence: [`docs/validation/virtual-fm1-expanded-regression-software.md`](./docs/validation/virtual-fm1-expanded-regression-software.md) and [`docs/validation/virtual-fm1-expanded-regression-browser.md`](./docs/validation/virtual-fm1-expanded-regression-browser.md).'
+            if old in t:t=t.replace(old,new,1)
+            elif new not in t:raise SystemExit('expanded renderer roadmap item not found')
+            p.write_text(t,encoding='utf-8')
+          for name in ('virtual-fm1-preview-chrome.json','virtual-fm1-preview-edge.json'):Path(name).unlink(missing_ok=True)
+          Path('.github/workflows/validate-expanded-renderer-browser-v2.yml').unlink(missing_ok=True)
+          '@ | python
+      - name: Commit browser evidence only
+        if: always()
+        shell: bash
+        run: |
+          git config user.name github-actions[bot];git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add -A;git commit -m 'test(browser): enforce expanded renderer performance limits' || true;git pull --rebase origin main;git push origin HEAD:main
