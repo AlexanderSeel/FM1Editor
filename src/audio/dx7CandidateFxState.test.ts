@@ -18,7 +18,7 @@ describe('createDx7CandidateFxAttachment', () => {
 
   it('does not add any hardware or transport metadata', () => {
     const attachment = createDx7CandidateFxAttachment(createInitializedFxState())
-    expect(attachment.nonZeroControls).toBe(1) // default filter.type is 0; LFO-style enums are zero, FX MIDI channel is not a control.
+    expect(attachment.nonZeroControls).toBe(0)
     expect(Object.keys(attachment)).toEqual(['state', 'nonZeroControls'])
   })
 })
