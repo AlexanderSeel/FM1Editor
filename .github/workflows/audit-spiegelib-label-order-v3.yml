@@ -28,21 +28,17 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          rm -rf order-image order-out
-          mkdir -p order-image order-out
+          rm -rf order-image
+          mkdir -p order-image
           cp dexed_simple_fm.json order-image/
           cat > order-image/check.py <<'PY'
           import json
           from pathlib import Path
-
           config = json.loads(Path('/opt/dexed_simple_fm.json').read_text())
           entries = [config[key] for key in config]
-          # Training get_patch(skip_overridden=True) preserves incoming patch order.
-          # The pinned config/engine host parameter IDs are ordered numerically.
           training_order = [int(entry['id']) for entry in entries if not entry['overridden']]
           all_indices = [int(entry['id']) for entry in entries]
           overridden = [int(entry['id']) for entry in entries if entry['overridden']]
-          # Historical expand_sub_patch mechanism.
           expansion_order = list(set(all_indices) - set(overridden))
           expected = [46,47,48,50,51,52,55,56,57]
           result = {
@@ -52,12 +48,11 @@ jobs:
               'expected': expected,
               'labels': [config[str(index)]['desc'] for index in expected],
           }
-          print(json.dumps(result, indent=2))
           if training_order != expected:
               raise SystemExit('training get_patch/config order mismatch: %r' % training_order)
           if expansion_order != expected:
               raise SystemExit('historical expand_sub_patch set order mismatch: %r' % expansion_order)
-          Path('/output/order.json').write_text(json.dumps(result, indent=2) + '\n')
+          print(json.dumps(result, separators=(',', ':')))
           PY
           cat > order-image/Dockerfile <<'DOCKER'
           FROM python:3.7.7-slim-buster
@@ -68,14 +63,14 @@ jobs:
           docker build -q -t fm1-spiegelib-order:local order-image
           docker run --rm --network none --read-only --cap-drop ALL \
             --memory 128m --cpus 1 --pids-limit 64 \
-            --volume "$PWD/order-out:/output:rw" fm1-spiegelib-order:local
-          test -s order-out/order.json
+            fm1-spiegelib-order:local > order.json
+          python -m json.tool order.json >/dev/null
       - name: Persist exact ordering audit
         shell: python
         run: |
           from pathlib import Path
           import json, os
-          result=json.loads(Path('order-out/order.json').read_text())
+          result=json.loads(Path('order.json').read_text())
           Path('docs/research/spiegelib-label-order.md').write_text('\n'.join([
             '# SpiegeLib archived learned-label order audit','',
             f"FM1 Editor source commit: `{os.environ['GITHUB_SHA']}`",'',
@@ -90,7 +85,8 @@ jobs:
           ]))
           for name in ['.github/workflows/audit-spiegelib-label-order-v3.yml','.github/workflows/audit-spiegelib-label-order-v2.yml','.github/workflows/audit-spiegelib-label-order.yml']:
             Path(name).unlink(missing_ok=True)
-          Path('dexed_simple_fm.json').unlink(missing_ok=True)
+          for name in ['dexed_simple_fm.json','order.json']:
+            Path(name).unlink(missing_ok=True)
       - name: Commit audit
         shell: bash
         run: |
