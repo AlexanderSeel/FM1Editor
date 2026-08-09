@@ -94,7 +94,7 @@ export function PhysicalEvidencePackagePanel() {
       </summary>
       <div className="mt-3 grid gap-3">
         <p className="text-[11px] leading-5 text-slate-400">
-          Hash a sanitized physical-test file set locally and export a reproducible package index. File bytes are never uploaded or embedded in the manifest; only filename, size, MIME type, SHA-256, classification and schema hints are retained. Small .syx files are inspected in browser memory only so an FM-1 merged-bank capture can be bound to the exact transmitted payload.
+          Hash a sanitized physical-test file set locally and export a reproducible package index. File bytes are never uploaded or embedded in the manifest; only filename, size, MIME type, SHA-256, classification and schema hints are retained. Small .syx files are inspected in browser memory only so an FM-1 merged-bank capture can be bound to the exact transmitted payload; stock-DX7 recovery evidence additionally resolves the manifest recovery-bank SHA to one retained .syx artifact.
         </p>
 
         <div className="grid gap-2 sm:grid-cols-[150px_1fr]">
@@ -159,6 +159,7 @@ export function PhysicalEvidencePackagePanel() {
                   <p className="text-[9px] leading-4 text-slate-400" key={`${link.target}-${link.manifestName}`}>
                     <span className="font-semibold text-slate-300">{link.manifestName}</span> → {link.matchedMidiMonitorName ?? 'no unique raw capture'}
                     {link.matchedBankSysexName ? ` → bank ${link.matchedBankSysexName}` : ''}
+                    {link.matchedRecoveryBankSysexName ? ` → recovery ${link.matchedRecoveryBankSysexName}` : ''}
                     {link.summaryMismatchFields.length > 0 ? ` · differs: ${link.summaryMismatchFields.join(', ')}` : ''}
                   </p>
                 ))}
@@ -173,7 +174,7 @@ export function PhysicalEvidencePackagePanel() {
                 ))}
               </ul>
             )}
-            <p className="mt-2 text-[9px] leading-4 text-slate-500">Structural consistency only: matching raw MIDI summary metadata and exact bank bytes can catch mixed-up files, but it cannot validate tester observations, device-screen behavior, audio content or a PLAN item.</p>
+            <p className="mt-2 text-[9px] leading-4 text-slate-500">Structural consistency only: matching raw MIDI summary metadata, exact FM-1 bank bytes and stock-DX7 recovery artifact identity can catch mixed-up files, but cannot validate tester observations, device-screen behavior, audio content or a PLAN item.</p>
           </div>
         )}
 
@@ -212,7 +213,7 @@ export function PhysicalEvidencePackagePanel() {
             Clear package
           </button>
         </div>
-        <p className="text-[10px] leading-4 text-slate-500">Export both the package index and correlation receipt for closure evidence. For FM-1 sessions containing an outgoing standard Yamaha bank, the receipt must bind that captured payload to one exact .syx artifact. Warnings describe package coverage only. A complete-looking or structurally consistent file set is not proof that any physical check passed; the target-specific evidence manifests and protocols remain authoritative.</p>
+        <p className="text-[10px] leading-4 text-slate-500">Export both the package index and correlation receipt for closure evidence. FM-1 bank sessions must bind the captured payload to one exact .syx artifact; stock-DX7 evidence must retain exactly one .syx whose SHA-256 equals the manifest recoveryBankSha256. These are evidence-integrity checks only, not proof of device acceptance or recovery success.</p>
       </div>
     </details>
   )
