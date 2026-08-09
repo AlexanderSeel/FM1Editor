@@ -22,6 +22,7 @@ const EDGE_PACKAGE_SHA = '2'.repeat(64)
 const CHROME_WAV_SHA = '3'.repeat(64)
 const EDGE_WAV_SHA = '4'.repeat(64)
 const BANK_SHA = '5'.repeat(64)
+const OTHER_BANK_SHA = '8'.repeat(64)
 const CHROME_NOTES_SHA = '6'.repeat(64)
 const EDGE_NOTES_SHA = '7'.repeat(64)
 
@@ -78,20 +79,42 @@ function manifest(browser: 'chrome' | 'edge'): HardwareEvidenceManifest {
   }
 }
 
-function correlation(manifestName: string, manifestSha256: string, midiName: string, midiSha256: string) {
+function correlation(
+  manifestName: string,
+  manifestSha256: string,
+  midiName: string,
+  midiSha256: string,
+  options: { omitBankBinding?: boolean; bankSha?: string } = {},
+) {
   return {
     schema: PHYSICAL_EVIDENCE_CONSISTENCY_SCHEMA,
     packageTarget: 'fm1', hardwareManifestCount: 1, midiMonitorCount: 1,
-    links: [{ manifestName, manifestSha256, target: 'fm1', matchedMidiMonitorName: midiName, matchedMidiMonitorSha256: midiSha256, summaryMismatchFields: [] }],
+    links: [{
+      manifestName,
+      manifestSha256,
+      target: 'fm1',
+      matchedMidiMonitorName: midiName,
+      matchedMidiMonitorSha256: midiSha256,
+      summaryMismatchFields: [],
+      ...(options.omitBankBinding ? {} : { matchedBankSysexName: 'merged-bank.syx', matchedBankSysexSha256: options.bankSha ?? BANK_SHA }),
+    }],
     errorCount: 0, warningCount: 0, structurallyConsistent: true, issues: [], note: 'fixture',
   }
 }
 
-function packageIndex(manifestName: string, manifestSha: string, midiName: string, midiSha: string, wavSha: string, notesSha: string, options: { omitWav?: boolean } = {}) {
+function packageIndex(
+  manifestName: string,
+  manifestSha: string,
+  midiName: string,
+  midiSha: string,
+  wavSha: string,
+  notesSha: string,
+  options: { omitWav?: boolean; bankSha?: string } = {},
+) {
   const artifacts = [
     { name: manifestName, sizeBytes: 100, mimeType: 'application/json', sha256: manifestSha, kind: 'fm1-hardware-manifest', jsonSchema: HARDWARE_EVIDENCE_SCHEMA },
     { name: midiName, sizeBytes: 100, mimeType: 'application/json', sha256: midiSha, kind: 'midi-monitor', jsonSchema: null },
-    { name: 'merged-bank.syx', sizeBytes: 4104, mimeType: 'application/octet-stream', sha256: BANK_SHA, kind: 'sysex', jsonSchema: null },
+    { name: 'merged-bank.syx', sizeBytes: 4104, mimeType: 'application/octet-stream', sha256: options.bankSha ?? BANK_SHA, kind: 'sysex', jsonSchema: null },
     { name: 'timeline.txt', sizeBytes: 80, mimeType: 'text/plain', sha256: notesSha, kind: 'notes', jsonSchema: null },
   ]
   if (!options.omitWav) artifacts.push({ name: 'usb-audio.wav', sizeBytes: 2048, mimeType: 'audio/wav', sha256: wavSha, kind: 'audio-wav', jsonSchema: null })
@@ -102,19 +125,26 @@ function packageIndex(manifestName: string, manifestSha: string, midiName: strin
   }
 }
 
-function files(options: { chromeWavSha?: string; edgeWavSha?: string; omitChromeWav?: boolean; edgePackageMidiSha?: string } = {}): Fm1DeliveryEvidenceFile[] {
+function files(options: {
+  chromeWavSha?: string
+  edgeWavSha?: string
+  omitChromeWav?: boolean
+  edgePackageMidiSha?: string
+  omitChromeBankBinding?: boolean
+  edgePackageBankSha?: string
+} = {}): Fm1DeliveryEvidenceFile[] {
   return [
     { filename: 'chrome-manifest.json', sha256: CHROME_MANIFEST_SHA, value: manifest('chrome') },
     { filename: 'edge-manifest.json', sha256: EDGE_MANIFEST_SHA, value: manifest('edge') },
-    { filename: 'chrome-correlation.json', sha256: CHROME_CORRELATION_SHA, value: correlation('chrome-manifest.json', CHROME_MANIFEST_SHA, 'chrome-midi.json', CHROME_MIDI_SHA) },
+    { filename: 'chrome-correlation.json', sha256: CHROME_CORRELATION_SHA, value: correlation('chrome-manifest.json', CHROME_MANIFEST_SHA, 'chrome-midi.json', CHROME_MIDI_SHA, options.omitChromeBankBinding ? { omitBankBinding: true } : {}) },
     { filename: 'edge-correlation.json', sha256: EDGE_CORRELATION_SHA, value: correlation('edge-manifest.json', EDGE_MANIFEST_SHA, 'edge-midi.json', EDGE_MIDI_SHA) },
     { filename: 'chrome-package.json', sha256: CHROME_PACKAGE_SHA, value: packageIndex('chrome-manifest.json', CHROME_MANIFEST_SHA, 'chrome-midi.json', CHROME_MIDI_SHA, options.chromeWavSha ?? CHROME_WAV_SHA, CHROME_NOTES_SHA, options.omitChromeWav ? { omitWav: true } : {}) },
-    { filename: 'edge-package.json', sha256: EDGE_PACKAGE_SHA, value: packageIndex('edge-manifest.json', EDGE_MANIFEST_SHA, 'edge-midi.json', options.edgePackageMidiSha ?? EDGE_MIDI_SHA, options.edgeWavSha ?? EDGE_WAV_SHA, EDGE_NOTES_SHA) },
+    { filename: 'edge-package.json', sha256: EDGE_PACKAGE_SHA, value: packageIndex('edge-manifest.json', EDGE_MANIFEST_SHA, 'edge-midi.json', options.edgePackageMidiSha ?? EDGE_MIDI_SHA, options.edgeWavSha ?? EDGE_WAV_SHA, EDGE_NOTES_SHA, options.edgePackageBankSha ? { bankSha: options.edgePackageBankSha } : {}) },
   ]
 }
 
 describe('FM-1 packaged delivery evidence integrity', () => {
-  it('requires v2 readiness plus unique session packages containing manifest, raw MIDI, WAV, SysEx and observations', () => {
+  it('requires v2 readiness plus unique session packages containing the exact captured bank sysex, WAV and observations', () => {
     const gate = evaluateFm1DeliveryEvidencePackageIntegrity(files(), {
       expectedOrigin: ORIGIN,
       evaluatedAt: () => new Date('2026-08-08T10:00:00.000Z'),
@@ -124,7 +154,21 @@ describe('FM-1 packaged delivery evidence integrity', () => {
     expect(gate.blockers).toEqual([])
     expect(gate.selected?.chrome).toMatchObject({ packageSha256: CHROME_PACKAGE_SHA, rawMidiSha256: CHROME_MIDI_SHA })
     expect(gate.selected?.chrome.audioWavArtifacts[0]?.sha256).toBe(CHROME_WAV_SHA)
-    expect(gate.selected?.edge.sysexArtifacts[0]?.sha256).toBe(BANK_SHA)
+    expect(gate.selected?.edge.bankSysexArtifact).toEqual({ name: 'merged-bank.syx', sha256: BANK_SHA })
+  })
+
+  it('keeps v2 compatibility but blocks v3 for a legacy correlation receipt without exact bank binding', () => {
+    const gate = evaluateFm1DeliveryEvidencePackageIntegrity(files({ omitChromeBankBinding: true }), { expectedOrigin: ORIGIN })
+    expect(gate.integrityGate.ready).toBe(true)
+    expect(gate.ready).toBe(false)
+    expect(gate.blockers.some((blocker) => blocker.includes('chrome-correlation.json') && blocker.includes('lacks an exact byte-bound'))).toBe(true)
+  })
+
+  it('rejects a package whose sysex hash differs from the byte-bound captured bank artifact', () => {
+    const gate = evaluateFm1DeliveryEvidencePackageIntegrity(files({ edgePackageBankSha: OTHER_BANK_SHA }), { expectedOrigin: ORIGIN })
+    expect(gate.integrityGate.ready).toBe(true)
+    expect(gate.ready).toBe(false)
+    expect(gate.blockers.some((blocker) => blocker.includes('edge-package.json') && blocker.includes(BANK_SHA))).toBe(true)
   })
 
   it('keeps readiness blocked when the matching session package has no WAV artifact', () => {
@@ -135,7 +179,7 @@ describe('FM-1 packaged delivery evidence integrity', () => {
   })
 
   it('does not accept a package that contains the selected manifest but a different raw MIDI capture', () => {
-    const gate = evaluateFm1DeliveryEvidencePackageIntegrity(files({ edgePackageMidiSha: '8'.repeat(64) }), { expectedOrigin: ORIGIN })
+    const gate = evaluateFm1DeliveryEvidencePackageIntegrity(files({ edgePackageMidiSha: '9'.repeat(64) }), { expectedOrigin: ORIGIN })
     expect(gate.integrityGate.ready).toBe(true)
     expect(gate.ready).toBe(false)
     expect(gate.blockers.some((blocker) => blocker.includes('edge-manifest.json') && blocker.includes('not backed'))).toBe(true)

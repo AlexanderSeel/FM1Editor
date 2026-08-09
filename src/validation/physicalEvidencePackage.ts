@@ -25,6 +25,8 @@ export interface PhysicalEvidenceArtifactInput {
   readonly mimeType: string
   readonly sha256: string
   readonly jsonValue?: unknown
+  /** Browser-memory-only bytes used to correlate a .syx artifact with captured raw MIDI. Never serialized into the package index. */
+  readonly sysexBytes?: readonly number[]
 }
 
 export interface PhysicalEvidenceArtifact {
