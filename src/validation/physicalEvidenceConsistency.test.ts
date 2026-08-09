@@ -14,6 +14,7 @@ import {
 const A = 'a'.repeat(64)
 const B = 'b'.repeat(64)
 const C = 'c'.repeat(64)
+const D = 'd'.repeat(64)
 
 function entry(
   id: string,
@@ -31,6 +32,23 @@ function monitor(entries: readonly MidiMonitorEntry[]) {
 
 function artifact(name: string, sha256: string, jsonValue: unknown) {
   return { name, sizeBytes: 123, mimeType: 'application/json', sha256, jsonValue }
+}
+
+function sysexArtifact(name: string, sha256: string, bytes: readonly number[]) {
+  return { name, sizeBytes: bytes.length, mimeType: 'application/octet-stream', sha256, sysexBytes: bytes }
+}
+
+function yamahaBank(fill = 0): readonly number[] {
+  const bytes = new Array<number>(4104).fill(fill & 0x7f)
+  bytes[0] = 0xf0
+  bytes[1] = 0x43
+  bytes[2] = 0x00
+  bytes[3] = 0x09
+  bytes[4] = 0x20
+  bytes[5] = 0x00
+  bytes[4102] = 0x00
+  bytes[4103] = 0xf7
+  return bytes
 }
 
 function fm1Manifest(entries: readonly MidiMonitorEntry[]): HardwareEvidenceManifest {
@@ -102,18 +120,75 @@ describe('physical evidence consistency', () => {
     }])
   })
 
-  it('serializes a compact hash-bound receipt without embedding raw MIDI bytes', () => {
-    const entries = [entry('raw-secret-id', 1000, 'out', 'FM-1 MIDI', [0xf0, 0x43, 0x12, 0x34, 0xf7])]
+  it('binds an outgoing FM-1 Yamaha bank capture to one byte-identical sysex artifact', () => {
+    const bank = yamahaBank(7)
+    const entries = [
+      entry('bank-1', 1000, 'out', 'FM-1 MIDI', bank),
+      entry('bank-2', 1001, 'out', 'FM-1 MIDI', bank),
+    ]
     const report = validatePhysicalEvidenceConsistency([
       artifact('fm1.json', A, fm1Manifest(entries)),
       artifact('capture.json', B, monitor(entries)),
+      sysexArtifact('merged-bank.syx', C, bank),
+    ], 'fm1')
+
+    expect(report.structurallyConsistent).toBe(true)
+    expect(report.links[0]).toMatchObject({
+      matchedMidiMonitorName: 'capture.json',
+      matchedMidiMonitorSha256: B,
+      matchedBankSysexName: 'merged-bank.syx',
+      matchedBankSysexSha256: C,
+    })
+  })
+
+  it('blocks bank evidence when the retained sysex artifact is not the captured payload', () => {
+    const capturedBank = yamahaBank(3)
+    const otherBank = yamahaBank(4)
+    const entries = [entry('bank', 1000, 'out', 'FM-1 MIDI', capturedBank)]
+    const report = validatePhysicalEvidenceConsistency([
+      artifact('fm1.json', A, fm1Manifest(entries)),
+      artifact('capture.json', B, monitor(entries)),
+      sysexArtifact('wrong-bank.syx', C, otherBank),
+    ], 'fm1')
+
+    expect(report.structurallyConsistent).toBe(false)
+    expect(report.issues.some((issue) => issue.code === 'fm1-bank-sysex-artifact-missing')).toBe(true)
+    expect(report.links[0]).toMatchObject({ matchedBankSysexName: null, matchedBankSysexSha256: null })
+  })
+
+  it('blocks bank evidence when one capture contains distinct Yamaha bank payloads', () => {
+    const firstBank = yamahaBank(1)
+    const secondBank = yamahaBank(2)
+    const entries = [
+      entry('bank-1', 1000, 'out', 'FM-1 MIDI', firstBank),
+      entry('bank-2', 1001, 'out', 'FM-1 MIDI', secondBank),
+    ]
+    const report = validatePhysicalEvidenceConsistency([
+      artifact('fm1.json', A, fm1Manifest(entries)),
+      artifact('capture.json', B, monitor(entries)),
+      sysexArtifact('first.syx', C, firstBank),
+      sysexArtifact('second.syx', D, secondBank),
+    ], 'fm1')
+
+    expect(report.structurallyConsistent).toBe(false)
+    expect(report.issues.some((issue) => issue.code === 'fm1-bank-payload-ambiguous')).toBe(true)
+  })
+
+  it('serializes a compact hash-bound receipt without embedding raw MIDI or sysex bytes', () => {
+    const bank = yamahaBank(5)
+    const entries = [entry('raw-secret-id', 1000, 'out', 'FM-1 MIDI', bank)]
+    const report = validatePhysicalEvidenceConsistency([
+      artifact('fm1.json', A, fm1Manifest(entries)),
+      artifact('capture.json', B, monitor(entries)),
+      sysexArtifact('merged-bank.syx', C, bank),
     ], 'fm1')
     const serialized = serializePhysicalEvidenceConsistencyReport(report)
 
     expect(serialized).toContain(`"manifestSha256": "${A}"`)
     expect(serialized).toContain(`"matchedMidiMonitorSha256": "${B}"`)
+    expect(serialized).toContain(`"matchedBankSysexSha256": "${C}"`)
     expect(serialized).not.toContain('raw-secret-id')
-    expect(serialized).not.toContain('18, 52')
+    expect(serialized).not.toContain(bank.slice(0, 12).join(','))
     expect(serialized.endsWith('\n')).toBe(true)
   })
 
