@@ -14,7 +14,7 @@ Physical sessions can produce several artifacts that should remain correlated ev
 - parameter/function matrices and failure/recovery notes;
 - the compact FM-1 Chrome/Edge delivery-gate receipt when applicable.
 
-Select the sanitized files in **MIDI monitor → Physical evidence package** and choose `FM-1`, `Stock DX7` or `Mixed`. The browser hashes files locally with Web Crypto SHA-256. Nothing is uploaded.
+Select the sanitized files in **MIDI monitor → Physical evidence package** and choose `FM-1`, `Stock DX7` or `Mixed`. The browser hashes files locally with Web Crypto SHA-256. Nothing is uploaded. Small `.syx` files are also read locally into browser memory so an FM-1 outgoing 4,104-byte Yamaha bank message can be compared byte-for-byte with the retained transmitted-bank artifact. Those temporary bytes are not serialized into either exported receipt.
 
 ## Exported schemas
 
@@ -35,7 +35,7 @@ The raw-MIDI structural correlation receipt uses schema:
 
 `fm1-editor.physical-evidence-consistency.v1`
 
-It records only the selected package target, structural issue codes/messages, summary mismatch field names, and the filename/SHA-256 pairs for target manifests and uniquely matched raw MIDI exports. It does **not** contain MIDI event IDs, timestamps beyond aggregate first/last comparison fields, raw message bytes, SysEx payloads, audio, screenshots or parsed hardware-manifest payloads.
+It records only the selected package target, structural issue codes/messages, summary mismatch field names, the filename/SHA-256 pairs for target manifests and uniquely matched raw MIDI exports, and—when an FM-1 session contains outgoing Yamaha bank traffic—the filename/SHA-256 of the one retained `.syx` artifact whose bytes exactly match that captured bank payload. It does **not** contain MIDI event IDs, raw message bytes, SysEx payload bytes, audio, screenshots or parsed hardware-manifest payloads.
 
 Both exports are evidence metadata. Neither proves physical device behavior.
 
@@ -73,11 +73,18 @@ It also checks manifest-local invariants written by the recorder:
 - DX7 recovery-bank SHA-256 must remain valid;
 - editor commit identity and FM-1 firmware / DX7 model identity are flagged when they are missing or not sufficiently pinned.
 
+For an FM-1 manifest whose MIDI summary records one or more recognized outgoing Yamaha 32-voice banks, the correlation review additionally requires an unambiguous bank payload:
+
+- repeated sends of the **same** 4,104-byte bank are allowed;
+- two or more **different** 4,104-byte bank payloads in the same retained capture are blocked for delivery closure because the downstream physical observation would not identify which payload it refers to;
+- the unique captured bank payload must match exactly one selected `.syx` artifact byte-for-byte;
+- zero matching `.syx` artifacts or duplicate matching artifacts are reported as structural errors.
+
 If no raw export matches, the helper shows the closest candidate and the summary fields that differ. If more than one raw export matches the same manifest, linkage is considered ambiguous rather than silently choosing one. Unlinked raw MIDI exports are also reported.
 
-The **Export correlation receipt** action persists this result and binds each successful manifest/raw-capture link to the SHA-256 values calculated from the currently selected files. The receipt may also be exported for a failed or incomplete session so the inconsistency itself remains reviewable.
+The **Export correlation receipt** action persists this result and binds each successful manifest/raw-capture link to the SHA-256 values calculated from the currently selected files. For FM-1 bank sessions it also persists the exact matching bank `.syx` filename/SHA-256. The receipt may also be exported for a failed or incomplete session so the inconsistency itself remains reviewable.
 
-This is **structural correlation only**. Matching summaries are evidence that the selected files came from the same captured message set; they do not prove what the hardware did, that the device accepted a message, that audio is correct, or that a tester-entered PASS is valid.
+This is **structural correlation only**. Matching summaries and bank bytes are evidence that the selected files correspond to the same captured data; they do not prove what the hardware did, that the device accepted a message, that audio is correct, or that a tester-entered PASS is valid.
 
 ## FM-1 delivery gate v2/v3 linkage
 
@@ -90,7 +97,18 @@ The v2 gate hashes those imported JSON files again and accepts final READY only 
 - the selected Edge manifest SHA-256 appears in exactly one structurally consistent FM-1 correlation link with a raw-MIDI SHA-256;
 - Chrome and Edge use distinct manifest hashes and distinct raw-MIDI capture hashes.
 
-The v2 receipt records the manifest/raw-MIDI source/hash bindings but not imported bodies or MIDI payloads. The final v3 gate additionally requires one `fm1-editor.physical-evidence-package.v1` index per selected browser session containing the exact manifest SHA-256 and raw-MIDI SHA-256 already selected by v2, at least one WAV, at least one SysEx artifact and screenshot-or-notes evidence. Chrome and Edge package-index hashes and WAV hashes must be distinct; the same controlled merged-bank SysEx input may be present in both packages. v3 stores artifact identities/coverage metadata only and does not embed WAV, SysEx or MIDI payloads. These layers close evidence ambiguity only; physical observations remain tester evidence governed by the hardware protocol.
+The v2 receipt records the manifest/raw-MIDI source/hash bindings but not imported bodies or MIDI payloads. It intentionally remains compatible with older correlation receipts.
+
+The final v3 gate is stricter. For each selected browser session it requires:
+
+- one `fm1-editor.physical-evidence-package.v1` index containing the exact manifest SHA-256 and raw-MIDI SHA-256 already selected by v2;
+- the same structurally consistent correlation receipt selected by v2 to contain an exact byte-bound bank `.syx` filename/SHA-256;
+- the package index to contain that exact `.syx` filename/SHA-256 pair;
+- at least one WAV and screenshot-or-notes evidence.
+
+Chrome and Edge package-index hashes and WAV hashes must be distinct. The same controlled merged-bank `.syx` may legitimately be shared across both sessions when the same exact bank was deliberately transmitted. Legacy correlation receipts without the exact bank-artifact binding remain parseable and may still satisfy v2, but they cannot make v3 READY.
+
+v3 stores artifact identities/coverage metadata only and does not embed WAV, SysEx or MIDI payloads. These layers close evidence ambiguity only; physical observations remain tester evidence governed by the hardware protocol.
 
 ## Package warnings
 
@@ -111,13 +129,13 @@ A package may legitimately retain warnings or correlation errors when it covers 
 1. Keep unsanitized physical captures outside the repository while testing.
 2. Review filenames, tester/device identifiers, screenshots and notes for privacy-sensitive content.
 3. Export the target-specific hardware manifest **without clearing the MIDI monitor**, then export the raw MIDI JSON from that same captured session.
-4. Add the relevant `.syx`, WAV, screenshots/timeline and matrices/notes to a sanitized folder.
-5. Run **Physical evidence package** over that exact sanitized file set and review both package-coverage warnings and the raw-MIDI correlation result.
-6. Resolve accidental mixed-session/ambiguous raw-capture errors before proposing closure. Do not alter legitimate failed observations merely to make the package look green.
+4. Add the exact transmitted `.syx`, WAV, screenshots/timeline and matrices/notes to a sanitized folder. For FM-1 merged-bank delivery, the `.syx` must be the exact file whose bytes were sent in the captured session.
+5. Run **Physical evidence package** over that exact sanitized file set and review package-coverage warnings, the raw-MIDI correlation result and the FM-1 bank→`.syx` binding when bank output is present.
+6. Resolve accidental mixed-session, multiple-bank-payload or ambiguous raw-capture/artifact errors before proposing closure. Do not alter legitimate failed observations merely to make the package look green.
 7. Export **both** the package index and the correlation receipt from the same selected file set. Retain the raw sanitized files with those receipts externally, or commit only the artifacts appropriate for the repository.
 8. For FM-1 Chrome/Edge delivery, repeat this for both browser sessions and then export the final **v3 delivery gate receipt** from both manifests, both correlation receipts and both package indexes.
 9. When proposing a `PLAN.md` item for closure, cite the package index and correlation-receipt hashes together with the target manifest/protocol result; for delivery/Pages also cite the v3 gate receipt. These integrity artifacts are not substitutes for the physical observations.
 
 ## Security and evidence boundary
 
-Hashing and JSON inspection happen locally in the browser. The helper does not upload selected files, does not decode unknown SysEx semantics and does not claim that an FM-1/DX7 accepted any message. Physical support status changes only from repeatable observations collected under the corresponding hardware protocol.
+Hashing, JSON inspection and temporary `.syx` byte comparison happen locally in the browser. The helper does not upload selected files, does not serialize raw `.syx` bytes into the metadata receipts, does not decode unknown FM-1 SysEx semantics and does not claim that an FM-1/DX7 accepted any message. Physical support status changes only from repeatable observations collected under the corresponding hardware protocol.
