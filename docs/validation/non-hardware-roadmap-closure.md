@@ -10,17 +10,20 @@ This receipt records a roadmap/acceptance boundary, not a physical or listening 
 
 The original 2026-08-09 cleanup established that the then-current repository had no remaining actionable implementation work that could be completed without new external evidence. At that point the last application-code acceptance was the validated 2+2+2 evidence-runner commit `2ed077268368fc0b64ee8416a03db74dc3581a4f`; the cleanup itself changed only roadmap/research/validation documentation.
 
-Later on 2026-08-09, a fresh review of M-VAVE's official download center exposed a newer current PC-firmware baseline, **FM-1 V15 dated 2026-07-30**. That new external public information created one legitimate repository-side follow-up: prevent otherwise-complete Chrome/Edge delivery evidence on a stale firmware from silently becoming current-release READY.
+A later public-source review created one legitimate repository-side follow-up: the delivery gate must not infer a physical FM-1 firmware identity from mutable download-page metadata. A first follow-up incorrectly selected a static V15 baseline. A fresh review of the live official M-VAVE source on the same date showed that interpretation was not supportable: the page exposes Windows/Mac firmware package V14 dated 2026-07-06 and a separate PC Firmware V09 entry dated 2026-06-24, without documenting how either label maps to the firmware identity displayed by the device.
 
-That follow-up is now implemented and accepted. See:
+That correctness gap is now resolved and accepted. See:
 
 - `docs/research/fm1-firmware-baseline.md`;
 - `docs/research/fm1-midi-protocol.md`;
-- `docs/validation/fm1-firmware-baseline-delivery-gate.md`.
+- `docs/validation/fm1-firmware-source-snapshot-delivery-gate.md`;
+- the superseded historical receipt `docs/validation/fm1-firmware-baseline-delivery-gate.md`.
 
-Normal GitHub PR CI **#1184** (run `31296462671`) validated the current implementation with successful dependency installation, virtual-DX7/reconstruction/learned-source audits, typecheck, lint/accessibility, full tests and production build. The protocol-document synchronization PR was merged as `4be483f8c2afd7cbc348e4edc23c16ec02e2a2a7`; the permanent acceptance receipt was then committed on `main`.
+Final PR #3 acceptance used the exact head `5fa4995b59eb7b6113f608846972aa3b1cf60e6c` and merged as `db4f3b9fe352b5ecbd966a3fbd71ee578abcf911`.
 
-The repository-side boundary is therefore re-established after the V15 admission hardening: no hardware PASS is inferred, and no remaining `PLAN.md` checkbox can be completed from repository code or public firmware-version metadata alone.
+Normal GitHub CI **#1195** (run `31297845775`) completed successfully for dependency installation, virtual-DX7/reconstruction/learned-source audits, typecheck, lint/accessibility, full tests and production build. Windows browser-layout CI **#267** (run `31297845785`) also completed successfully for the Chrome/Edge desktop, compact-desktop, tablet and mobile matrix. That browser run additionally verified a real DX7 mobile wrapping fix discovered while hardening the test selectors around multiple mounted piano instances.
+
+The repository-side boundary is therefore re-established: no hardware PASS is inferred, and no remaining `PLAN.md` checkbox can be completed from repository code or public firmware-version metadata alone.
 
 ## Closed non-external roadmap items
 
@@ -38,9 +41,13 @@ A remote service is not an active implementation/deployment task. Re-open it onl
 
 ### Current-release FM-1 firmware admission
 
-The production delivery evidence gate now supplies the reviewed V15 firmware baseline when deciding current-release READY. Evidence recorded on another firmware remains usable compatibility evidence when evaluated without a current-release requirement, but it cannot silently satisfy the production current-release gate.
+The repository retains the official download-page entries as a source snapshot only. It does **not** infer the physical device firmware from the V14 Windows/Mac package label or the separate V09 PC Firmware label.
 
-The baseline guard is an evidence-integrity mechanism only. V15 has not been physically validated by this repository, and the prior 2026-08-05 silent edit-buffer observation did not record firmware, so it cannot be attributed to V14, V15 or treated as cross-version behavior.
+For current-release delivery, the tester must re-check the official source, record the exact firmware identity displayed by the FM-1 and explicitly enter that expected device firmware into the production delivery gate. The gate then requires both Chrome and Edge manifests to match that identity in addition to the existing editor/Windows/origin, raw-MIDI, package, WAV, SysEx and observation requirements.
+
+Historical sessions can still be evaluated as compatibility evidence without an expected release firmware. They cannot silently satisfy the production current-release gate.
+
+This guard is an evidence-integrity mechanism only. Neither V09 nor V14 has been physically validated by this repository, and the prior 2026-08-05 silent edit-buffer observation did not record firmware, so it cannot be attributed to either current download track or treated as cross-version behavior.
 
 ## Remaining boundary
 
