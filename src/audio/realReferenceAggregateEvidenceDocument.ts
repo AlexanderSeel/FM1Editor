@@ -64,6 +64,8 @@ export function buildRealReferenceAggregateEvidenceMarkdown(
     `- Retrieval/CMA listening assessments complete: **${aggregate.closureReadiness.listeningAssessmentsComplete ? 'yes' : 'no'}**`,
     `- Learned listening assessments complete: **${aggregate.closureReadiness.learnedListeningAssessmentsComplete ? 'yes' : 'no'}**`,
     `- Current three-way set complete: **${aggregate.closureReadiness.currentThreeWayComplete ? 'yes' : 'no'}**`,
+    `- Exact per-reference receipt SHA-256 bindings: **${aggregate.receiptIntegrityCount}/${aggregate.receiptCount}**`,
+    `- Receipt integrity complete: **${aggregate.closureReadiness.receiptIntegrityComplete ? 'yes' : 'no'}**`,
     '',
     '## Distance and runtime summary',
     '',
@@ -83,12 +85,12 @@ export function buildRealReferenceAggregateEvidenceMarkdown(
     '',
     '## Retained receipts',
     '',
-    '| Reference | SHA-256 | Class | Retrieval | CMA | Learned | Exact winners | Retrieval/CMA listening | Learned listening | Notes |',
-    '| --- | --- | --- | ---: | ---: | ---: | --- | --- | --- | --- |',
+    '| Reference | Reference SHA-256 | Receipt SHA-256 | Class | Retrieval | CMA | Learned | Exact winners | Retrieval/CMA listening | Learned listening | Notes |',
+    '| --- | --- | --- | --- | ---: | ---: | ---: | --- | --- | --- | --- |',
   ]
 
   for (const receipt of aggregate.receipts) {
-    lines.push(`| ${safeCell(receipt.filename)} | \`${receipt.referenceSha256}\` | ${receipt.category} | ${receipt.retrievalDistance.toFixed(5)} | ${receipt.evolutionaryDistance.toFixed(5)} | ${receipt.learnedDistance === null ? '—' : receipt.learnedDistance.toFixed(5)} | ${receipt.auditionEvidenceComplete ? 'yes' : 'no'} | ${receipt.listeningAssessment} | ${receipt.learnedListeningAssessment} | ${safeCell(receipt.notes ?? '')} |`)
+    lines.push(`| ${safeCell(receipt.filename)} | \`${receipt.referenceSha256}\` | ${receipt.receiptSha256 === null ? '—' : `\`${receipt.receiptSha256}\``} | ${receipt.category} | ${receipt.retrievalDistance.toFixed(5)} | ${receipt.evolutionaryDistance.toFixed(5)} | ${receipt.learnedDistance === null ? '—' : receipt.learnedDistance.toFixed(5)} | ${receipt.auditionEvidenceComplete ? 'yes' : 'no'} | ${receipt.listeningAssessment} | ${receipt.learnedListeningAssessment} | ${safeCell(receipt.notes ?? '')} |`)
   }
 
   lines.push(

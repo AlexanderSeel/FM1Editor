@@ -112,6 +112,6 @@ The Markdown exporter fails closed while `readyForAggregateEvidence` is false, s
 
 ## Closing the PLAN item
 
-Commit the unmodified exported aggregate JSON and its generated closure Markdown together. The Markdown is the short aggregate validation document; its embedded hash binds it to the JSON evidence.
+Commit the six exact per-reference benchmark receipt JSON files, the unmodified exported aggregate JSON and its generated closure Markdown together. The aggregate rows contain the receipt SHA-256 values, so the exact winner-bearing receipts used for listening remain cryptographically auditable without committing source audio. The Markdown is the short aggregate validation document; its embedded hash binds it to the JSON evidence.
 
 The roadmap item can be closed when the current three-way mixed real-reference set has been run, both structured listening assessments are complete, the aggregate reports closure ready, and the generated JSON/Markdown hash evidence is committed. Exact reconstruction and learned-model superiority are not acceptance criteria.

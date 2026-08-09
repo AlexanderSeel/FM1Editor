@@ -4,6 +4,7 @@ import { createDx7VoiceSyxArtifact } from '../audio/dx7CandidateArtifacts'
 import {
   createRealReferenceAggregateEvidenceMarkdown,
   serializeRealReferenceBenchmarkAggregate,
+  sha256Utf8,
 } from '../audio/realReferenceAggregateEvidenceDocument'
 import {
   aggregateRealReferenceBenchmarkEvidence,
@@ -19,6 +20,7 @@ interface LoadedReceipt {
   id: string
   sourceFilename: string
   report: RealReferenceReconstructionBenchmarkReport
+  receiptSha256: string
   category: RealReferenceEvidenceCategory | ''
   listeningAssessment: RealReferenceListeningAssessment
   learnedListeningAssessment: RealReferenceLearnedListeningAssessment
@@ -115,13 +117,16 @@ export function ReconstructionBenchmarkSetPanel({ onAuditionVoice, onStopAuditio
     try {
       const next: LoadedReceipt[] = []
       for (const file of Array.from(files)) {
-        const parsed = JSON.parse(await file.text()) as unknown
+        const receiptText = await file.text()
+        const parsed = JSON.parse(receiptText) as unknown
         const report = parseRealReferenceBenchmarkReceipt(parsed)
         const learned = learnedResult(report)
+        const receiptSha256 = await sha256Utf8(receiptText)
         next.push({
           id: `${report.reference.contentSha256}:${file.name}`,
           sourceFilename: file.name,
           report,
+          receiptSha256,
           category: '',
           listeningAssessment: 'not-assessed',
           learnedListeningAssessment: learned?.failure === null ? 'not-assessed' : 'unavailable',
@@ -171,6 +176,7 @@ export function ReconstructionBenchmarkSetPanel({ onAuditionVoice, onStopAuditio
         category: item.category as RealReferenceEvidenceCategory,
         listeningAssessment: item.listeningAssessment,
         learnedListeningAssessment: item.learnedListeningAssessment,
+        receiptSha256: item.receiptSha256,
         ...(item.notes.trim() ? { notes: item.notes.trim() } : {}),
       })))
       setAggregate(result)
@@ -197,7 +203,7 @@ export function ReconstructionBenchmarkSetPanel({ onAuditionVoice, onStopAuditio
         <div>
           <p className="text-xs font-semibold uppercase tracking-[0.16em] text-emerald-200">Evidence set · aggregate real-reference receipts</p>
           <p className="mt-1 max-w-3xl text-xs leading-5 text-slate-400">
-            Import exported real-reference benchmark JSON receipts, classify each source and record separate retrieval/CMA and learned listening outcomes. Legacy pre-admission receipts remain importable for history, but only receipts containing a successful admitted learned row can satisfy the current three-way closure gate. The minimum set is two FM-friendly electronic, two pitched acoustic and two difficult/noisy references with both listening assessments completed. Current closure also requires each receipt to preserve the exact three semantic benchmark winners used for those listening judgments.
+            Import exported real-reference benchmark JSON receipts, classify each source and record separate retrieval/CMA and learned listening outcomes. Legacy pre-admission receipts remain importable for history, but only receipts containing a successful admitted learned row can satisfy the current three-way closure gate. The minimum set is two FM-friendly electronic, two pitched acoustic and two difficult/noisy references with both listening assessments completed. Current closure also requires each receipt to preserve the exact three semantic benchmark winners used for those listening judgments and binds the exact imported receipt file bytes into the aggregate by SHA-256.
           </p>
         </div>
         <span className="rounded-lg border border-white/10 px-2 py-1 text-[10px] uppercase tracking-[0.12em] text-slate-400">
@@ -261,6 +267,7 @@ export function ReconstructionBenchmarkSetPanel({ onAuditionVoice, onStopAuditio
                   <div className="min-w-0">
                     <p className="font-bold text-white">{item.report.reference.filename}</p>
                     <p className="mt-1 text-[10px] text-slate-500">Receipt {item.sourceFilename}</p>
+                    <p className="mt-1 break-all font-mono text-[9px] text-emerald-300/70">Receipt SHA-256 {item.receiptSha256}</p>
                     <p className="mt-1 break-all font-mono text-[9px] text-slate-600">{item.report.reference.contentSha256}</p>
                     <p className={`mt-2 text-[10px] ${learnedAvailable ? 'text-violet-200' : 'text-amber-200'}`}>
                       {learnedAvailable ? `Learned row ready · distance ${statistic(learned.bestDistance ?? Number.NaN)} · ${runtime(learned.runtimeMs)}` : `Legacy/failed learned row · ${learned?.failure ?? item.report.learnedStatus}`}

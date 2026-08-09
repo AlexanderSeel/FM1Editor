@@ -32,6 +32,8 @@ export interface RealReferenceEvidenceInput {
   readonly category: RealReferenceEvidenceCategory
   readonly listeningAssessment: RealReferenceListeningAssessment
   readonly learnedListeningAssessment: RealReferenceLearnedListeningAssessment
+  /** SHA-256 of the exact imported/exported per-reference receipt bytes. Legacy callers may omit it, but final closure then remains blocked. */
+  readonly receiptSha256?: string
   readonly notes?: string
 }
 
@@ -63,17 +65,20 @@ export interface RealReferenceBenchmarkAggregate {
   readonly learnedInitializationUnavailableCount: number
   readonly learnedInitializationFailedCount: number
   readonly auditionEvidenceReceiptCount: number
+  readonly receiptIntegrityCount: number
   readonly closureReadiness: {
     readonly mixedSetComplete: boolean
     readonly listeningAssessmentsComplete: boolean
     readonly learnedListeningAssessmentsComplete: boolean
     readonly currentThreeWayComplete: boolean
     readonly auditionEvidenceComplete: boolean
+    readonly receiptIntegrityComplete: boolean
     readonly readyForAggregateEvidence: boolean
     readonly missing: readonly string[]
   }
   readonly receipts: readonly {
     readonly referenceSha256: string
+    readonly receiptSha256: string | null
     readonly filename: string
     readonly category: RealReferenceEvidenceCategory
     readonly listeningAssessment: RealReferenceListeningAssessment
@@ -243,6 +248,7 @@ export function aggregateRealReferenceBenchmarkEvidence(
   let learnedInitializationUnavailableCount = 0
   let learnedInitializationFailedCount = 0
   let auditionEvidenceReceiptCount = 0
+  let receiptIntegrityCount = 0
 
   for (const input of inputs) {
     assertReport(input.report)
@@ -252,6 +258,12 @@ export function aggregateRealReferenceBenchmarkEvidence(
     const hash = input.report.reference.contentSha256.toLowerCase()
     if (seenHashes.has(hash)) throw new Error(`Duplicate real-reference SHA-256: ${hash}.`)
     seenHashes.add(hash)
+
+    const receiptSha256 = input.receiptSha256?.toLowerCase() ?? null
+    if (receiptSha256 !== null && !/^[0-9a-f]{64}$/.test(receiptSha256)) {
+      throw new Error(`${input.report.reference.filename} receipt SHA-256 must contain exactly 64 hexadecimal characters.`)
+    }
+    if (receiptSha256 !== null) receiptIntegrityCount += 1
 
     const retrieval = resultFor(input.report, 'retrieval')
     const evolutionary = resultFor(input.report, 'evolutionary')
@@ -296,6 +308,7 @@ export function aggregateRealReferenceBenchmarkEvidence(
 
     receipts.push({
       referenceSha256: hash,
+      receiptSha256,
       filename: input.report.reference.filename,
       category: input.category,
       listeningAssessment: input.listeningAssessment,
@@ -328,6 +341,9 @@ export function aggregateRealReferenceBenchmarkEvidence(
   const auditionEvidenceComplete = auditionEvidenceReceiptCount === receipts.length
   if (!auditionEvidenceComplete) missing.push(`${receipts.length - auditionEvidenceReceiptCount} receipt${receipts.length - auditionEvidenceReceiptCount === 1 ? '' : 's'} must be rerun with exact benchmark winner audition evidence`)
 
+  const receiptIntegrityComplete = receiptIntegrityCount === receipts.length
+  if (!receiptIntegrityComplete) missing.push(`${receipts.length - receiptIntegrityCount} receipt${receipts.length - receiptIntegrityCount === 1 ? '' : 's'} must be retained/imported with an exact receipt SHA-256 binding`)
+
   return {
     schema: REAL_REFERENCE_BENCHMARK_AGGREGATE_SCHEMA,
     createdAt: createdAt.toISOString(),
@@ -349,16 +365,18 @@ export function aggregateRealReferenceBenchmarkEvidence(
     learnedInitializationUnavailableCount,
     learnedInitializationFailedCount,
     auditionEvidenceReceiptCount,
+    receiptIntegrityCount,
     closureReadiness: {
       mixedSetComplete,
       listeningAssessmentsComplete,
       learnedListeningAssessmentsComplete,
       currentThreeWayComplete,
       auditionEvidenceComplete,
-      readyForAggregateEvidence: mixedSetComplete && listeningAssessmentsComplete && learnedListeningAssessmentsComplete && currentThreeWayComplete && auditionEvidenceComplete,
+      receiptIntegrityComplete,
+      readyForAggregateEvidence: mixedSetComplete && listeningAssessmentsComplete && learnedListeningAssessmentsComplete && currentThreeWayComplete && auditionEvidenceComplete && receiptIntegrityComplete,
       missing,
     },
     receipts,
-    note: 'Aggregate contains benchmark metadata, metrics, classifications and structured listening assessments only. Current closure additionally requires each receipt to carry the exact three semantic benchmark winner voices so listening evidence is reproducible; those voices are not copied into the aggregate. Legacy receipts remain parseable but cannot satisfy closure readiness. The aggregate does not contain reference audio and does not establish exact patch identity or physical FM-1 equivalence.',
+    note: 'Aggregate contains benchmark metadata, metrics, classifications and structured listening assessments only. Current closure additionally requires each receipt to carry the exact three semantic benchmark winner voices and the aggregate to bind the exact retained receipt bytes by SHA-256; winner voices are not copied into the aggregate. Legacy receipts remain parseable but cannot satisfy closure readiness. The aggregate does not contain reference audio and does not establish exact patch identity or physical FM-1 equivalence.',
   }
 }

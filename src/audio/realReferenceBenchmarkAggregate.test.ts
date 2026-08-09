@@ -138,6 +138,7 @@ function item(
     category,
     listeningAssessment,
     learnedListeningAssessment: 'unavailable' as const,
+    receiptSha256: hashCharacter.repeat(64),
   }
 }
 
@@ -155,6 +156,7 @@ function currentItem(
     category,
     listeningAssessment,
     learnedListeningAssessment,
+    receiptSha256: hashCharacter.repeat(64),
   }
 }
 
@@ -182,6 +184,7 @@ describe('real-reference benchmark evidence aggregation', () => {
       learnedListeningAssessmentsComplete: true,
       currentThreeWayComplete: false,
       auditionEvidenceComplete: false,
+      receiptIntegrityComplete: true,
       readyForAggregateEvidence: false,
     })
     expect(aggregate.closureReadiness.missing.join(' ')).toMatch(/rerun with the admitted learned row/)
@@ -213,6 +216,7 @@ describe('real-reference benchmark evidence aggregation', () => {
       learnedListeningAssessmentsComplete: true,
       currentThreeWayComplete: true,
       auditionEvidenceComplete: true,
+      receiptIntegrityComplete: true,
       readyForAggregateEvidence: true,
       missing: [],
     })
@@ -222,6 +226,17 @@ describe('real-reference benchmark evidence aggregation', () => {
     expect(aggregate.learnedListeningCounts['learned-poor']).toBe(1)
     expect(aggregate.learnedDistance).toMatchObject({ count: 6, minimum: 0.31, maximum: 1.4 })
     expect(aggregate.learnedRuntimeMs).toMatchObject({ count: 6, minimum: 4, maximum: 4 })
+  })
+
+  it('keeps current exact-winner receipts without retained receipt SHA binding parseable but not closure-ready', () => {
+    const current = currentItem('8', 'fm-friendly-electronic', 'similar', 'learned-similar', 0.5, 0.4, 0.45)
+    const { receiptSha256: _receiptSha256, ...withoutReceiptHash } = current
+    const aggregate = aggregateRealReferenceBenchmarkEvidence([withoutReceiptHash])
+    expect(aggregate.closureReadiness.auditionEvidenceComplete).toBe(true)
+    expect(aggregate.closureReadiness.receiptIntegrityComplete).toBe(false)
+    expect(aggregate.receiptIntegrityCount).toBe(0)
+    expect(aggregate.closureReadiness.readyForAggregateEvidence).toBe(false)
+    expect(aggregate.closureReadiness.missing.join(' ')).toMatch(/receipt SHA-256 binding/)
   })
 
   it('keeps successful learned receipts without exact winner voices parseable but not closure-ready', () => {
