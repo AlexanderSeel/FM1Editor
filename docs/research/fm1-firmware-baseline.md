@@ -1,4 +1,4 @@
-# FM-1 official firmware baseline
+# FM-1 official firmware source snapshot
 
 Last reviewed: 2026-08-09
 
@@ -8,33 +8,37 @@ M-VAVE download center:
 
 - https://www.m-vave.com/download
 
-At review time the live official page exposes two FM-1 firmware groupings:
+At review time the live official page exposes **two differently labelled FM-1 firmware groupings**:
 
-- **Firmware → FM-1 (Windows/Mac): V14 · 2026-07-06**;
-- **PC Firmware → FM-1: V15 · 2026-07-30**.
+- **Firmware → FM-1 (Windows): V14 · 2026-07-06**;
+- **Firmware → FM-1 (Mac): V14 · 2026-07-06**;
+- **PC Firmware → FM-1: V09 · 2026-06-24**.
 
-Both groupings expose the official FM-1 MIDI CONTROL document; the PC Firmware V15 row also exposes the FM-1 release-note link.
+The page also exposes FM-1 MIDI CONTROL links alongside those firmware listings.
 
-The repository treats **V15 (2026-07-30)** as the current reviewed PC-firmware baseline for physical validation. The separate V14 Windows/Mac package is retained as an official distribution-track observation, not interpreted as evidence that V14 and V15 have identical behavior.
+The public page does not explain how the Windows/Mac V14 package label and the separate PC Firmware V09 label map to the firmware identity displayed by the physical FM-1. The repository therefore does **not** choose either value as an inferred device-version baseline.
+
+A previous repository review recorded a V15 / 2026-07-30 PC-firmware baseline. The live official source checked again on 2026-08-09 does not support that claim, so V15 must not be used as the production delivery requirement unless a future official source explicitly publishes it again and that review is recorded.
 
 ## Validation policy
 
 Before a new FM-1 physical session:
 
-1. Re-check the official download center and record the newest FM-1 PC-firmware version/date visible at session start.
-2. Record the exact firmware actually shown by the device in the hardware evidence manifest.
-3. For current-release delivery evidence, test the newest official PC-firmware baseline unless the evidence package explicitly explains why another version is under test.
-4. Evidence collected on an older firmware remains useful compatibility evidence but must not silently become the current delivery baseline.
-5. Chrome and Edge delivery sessions must still use the same exact firmware version, editor commit, Windows build and intended HTTPS origin as required by delivery gate v3.
-6. A newly published firmware version does not itself validate MIDI semantics. Previously blocked live-parameter, bank-readback, completion/ACK and sequencer-transfer features remain blocked until the relevant protocol is documented or physically verified.
-7. Do not repeat the two rejected isolated-voice experiments merely because firmware changed. They remain disabled unless a documented/verified semantic protocol justifies a new controlled test.
+1. Re-check the official download center and record the FM-1 entries visible at session start.
+2. Record the exact firmware identity actually shown by the device in the hardware evidence manifest.
+3. Enter that exact expected device firmware into the production delivery evidence gate before assessing current-release READY.
+4. Do not derive the device firmware identity from either official download label unless M-VAVE explicitly documents that relationship.
+5. Chrome and Edge delivery sessions must use the same exact device firmware, editor commit, Windows build and intended HTTPS origin as required by delivery gate v3.
+6. Evidence collected on another firmware remains useful compatibility evidence but must not silently become the current delivery baseline.
+7. A newly published firmware package does not itself validate MIDI semantics. Previously blocked live-parameter, bank-readback, completion/ACK and sequencer-transfer features remain blocked until the relevant protocol is documented or physically verified.
+8. Do not repeat the two rejected isolated-voice experiments merely because a firmware package changed. They remain disabled unless a documented/verified semantic protocol justifies a new controlled test.
 
 ## Current evidence consequence
 
-The 2026-08-05 physical observation that both isolated-voice approaches left the active sound silent did not record firmware. It therefore remains sufficient only to keep those approaches disabled; it cannot establish a V14, V15 or cross-version compatibility conclusion.
+The 2026-08-05 physical observation that both isolated-voice approaches left the active sound silent did not record firmware. It therefore remains sufficient only to keep those approaches disabled; it cannot establish V09, V14 or cross-version compatibility.
 
-The next physical FM-1 evidence package should use the current official baseline at test time (V15 as of this review) or explicitly label another firmware as compatibility coverage.
+The next physical FM-1 evidence package must record the exact device firmware under test. The delivery gate should compare that explicit identity across Chrome and Edge instead of relying on a static firmware constant derived from the download page.
 
 ## Boundary
 
-This document is a public-source firmware baseline, not physical evidence. It does not claim that V15 has been installed or tested, does not infer undocumented protocol behavior from the release number, and does not close any hardware-dependent `PLAN.md` item.
+This document is a public-source snapshot, not physical evidence. It does not claim that V09 or V14 is the version displayed by the hardware, does not infer undocumented protocol behavior from release labels, and does not close any hardware-dependent `PLAN.md` item.
