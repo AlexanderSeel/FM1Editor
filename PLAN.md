@@ -2,7 +2,7 @@
 
 This file contains unresolved or blocked work only. Completed implementation and validation history lives in the linked research/validation documents and Git history. A task is removed only when the repository contains the required implementation plus appropriate validation evidence.
 
-**Current boundary:** repository-side work that can be completed without new external evidence is complete. All remaining items require either physical FM-1/Yamaha DX7 observations or, in section 8, genuine real isolated recordings plus human listening judgments. Conditional future ideas such as additional patch providers and a remote reconstruction accelerator are governed by their admission documents and are not active roadmap tasks unless their documented trigger becomes true.
+**Current boundary:** repository-side work that can be completed without new external evidence is complete; the boundary review is recorded in [`docs/validation/non-hardware-roadmap-closure.md`](./docs/validation/non-hardware-roadmap-closure.md). All remaining items require either physical FM-1/Yamaha DX7 observations or, in section 8, genuine real isolated recordings plus human listening judgments. Conditional future ideas such as additional patch providers and a remote reconstruction accelerator are governed by their admission documents and are not active roadmap tasks unless their documented trigger becomes true.
 
 ## 1. FM-1 protocol verification
 
