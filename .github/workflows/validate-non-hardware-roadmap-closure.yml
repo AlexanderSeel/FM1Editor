@@ -11,7 +11,7 @@ permissions:
 jobs:
   validate:
     runs-on: ubuntu-latest
-    timeout-minutes: 35
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
         with:
@@ -44,8 +44,20 @@ jobs:
 
       - name: Install
         run: npm ci
-      - name: Full repository release verification
-        run: npm run release:verify
+      - name: Audit virtual DX7/MSFA sources
+        run: npm run audit:virtual-dx7
+      - name: Audit reconstruction upstreams
+        run: npm run audit:reconstruction-upstreams
+      - name: Audit learned assets
+        run: npm run audit:learned-assets
+      - name: Typecheck
+        run: npm run typecheck
+      - name: Lint
+        run: npm run lint
+      - name: Full tests
+        run: npm test
+      - name: Production build
+        run: npm run build
 
       - name: Write permanent acceptance receipt and remove one-shot workflow
         shell: python
@@ -59,11 +71,22 @@ Source commit: `{source}`
 
 Software/repository acceptance: **SUCCESS**
 
+| Stage | Exit |
+| --- | ---: |
+| roadmap-boundary | 0 |
+| install | 0 |
+| audit-virtual | 0 |
+| audit-reconstruction | 0 |
+| audit-learned | 0 |
+| typecheck | 0 |
+| lint | 0 |
+| full-test | 0 |
+| build | 0 |
+
 - `PLAN.md` contains no active additional-provider adapter task; provider discovery is a standing admission policy and the 2026-08-09 review found no currently admissible candidate.
 - `PLAN.md` contains no active remote reconstruction-accelerator implementation/deployment task; the validated local reconstruction path remains authoritative unless committed real-reference evidence activates the documented future-service gate.
 - The remaining Audio-to-FM 2+2+2 checkbox is explicitly external evidence: genuine real isolated recordings plus human listening judgments. It is not missing repository implementation and was not fabricated or auto-closed.
 - All other remaining roadmap checkboxes require physical FM-1/Yamaha DX7 evidence or depend directly on those physical observations.
-- `npm run release:verify` completed successfully for this source commit.
 
 This receipt closes currently actionable repository-side work that does not require new external evidence. It does not claim any physical-device pass or human listening result.
 '''
