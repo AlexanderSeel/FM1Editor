@@ -41,8 +41,10 @@ export interface Fm1DeliveryEvidenceGate {
 
 export interface EvaluateFm1DeliveryEvidenceOptions {
   readonly expectedOrigin: string
-  /** Optional reviewed current-release firmware identity. When set, compatibility sessions on other firmware remain importable but cannot make the delivery gate READY. */
+  /** Explicit device firmware identity for release qualification. When set, sessions on other firmware remain importable compatibility evidence but cannot make the gate READY. */
   readonly expectedFirmwareVersion?: string
+  /** Fail closed when no explicit device firmware identity is supplied. Use this for current-release delivery; leave false for historical compatibility analysis. */
+  readonly requireExpectedFirmwareVersion?: boolean
   readonly evaluatedAt?: () => Date
 }
 
@@ -167,7 +169,7 @@ function evaluateManifest(
 
   if (!firmware) blockers.push('FM-1 firmware version is missing.')
   if (firmware && expectedFirmwareVersion && normalizedManifestFirmware !== expectedFirmwareVersion) {
-    blockers.push(`FM-1 firmware ${firmware} does not match the required current-release baseline ${expectedFirmwareVersion}.`)
+    blockers.push(`FM-1 firmware ${firmware} does not match the required release-session firmware ${expectedFirmwareVersion}.`)
   }
   if (!/^[0-9a-f]{40}$/i.test(editorCommit)) blockers.push('Editor commit must be a full 40-character Git SHA.')
   if (!windowsVersion) blockers.push('Windows edition/build is missing.')
@@ -237,6 +239,9 @@ export function evaluateFm1DeliveryEvidence(
 
   const blockers: string[] = []
   if (!expectedOrigin.startsWith('https://')) blockers.push('Expected deployment origin must be HTTPS.')
+  if (options.requireExpectedFirmwareVersion && !expectedFirmwareVersion) {
+    blockers.push('Expected FM-1 device firmware is required for current-release delivery.')
+  }
   if (chrome.length === 0) blockers.push('No complete Chrome FM-1 physical delivery session is present.')
   if (edge.length === 0) blockers.push('No complete Edge FM-1 physical delivery session is present.')
   if (chrome.length > 0 && edge.length > 0 && !selected) blockers.push('Chrome and Edge passing sessions do not share the same FM-1 firmware, editor commit and Windows build.')
@@ -254,7 +259,7 @@ export function evaluateFm1DeliveryEvidence(
     blockers,
     manifests: evaluated.map(({ evaluation }) => evaluation),
     note: expectedFirmwareVersion
-      ? `A ready gate means the required Chrome/Edge FM-1 physical delivery evidence is complete for the recorded origin/${expectedFirmwareVersion}/editor/Windows tuple. Sessions on other firmware remain importable compatibility evidence but cannot make this current-release gate READY. It does not validate device readback, live-parameter semantics, sequencer transfer, BLE MIDI availability or virtual-synth equivalence.`
-      : 'A ready gate means the required Chrome/Edge FM-1 physical delivery evidence is complete for the recorded origin/firmware/editor/Windows tuple. It does not validate device readback, live-parameter semantics, sequencer transfer, BLE MIDI availability or virtual-synth equivalence.',
+      ? `A ready gate means the required Chrome/Edge FM-1 physical delivery evidence is complete for the recorded origin/${expectedFirmwareVersion}/editor/Windows tuple. Sessions on other firmware remain importable compatibility evidence but cannot make this release-session gate READY. It does not validate device readback, live-parameter semantics, sequencer transfer, BLE MIDI availability or virtual-synth equivalence.`
+      : 'A ready gate means the required Chrome/Edge FM-1 physical delivery evidence is complete for the recorded origin/firmware/editor/Windows tuple. Current-release callers may additionally require an explicit expected device firmware. It does not validate device readback, live-parameter semantics, sequencer transfer, BLE MIDI availability or virtual-synth equivalence.',
   }
 }
