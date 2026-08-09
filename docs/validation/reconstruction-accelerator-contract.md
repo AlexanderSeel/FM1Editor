@@ -4,6 +4,14 @@ FM1 Editor is fully usable without a server. The optional reconstruction acceler
 
 This contract exists to prevent an optional compute worker from becoming an implicit upload path or an opaque model dependency.
 
+## Current roadmap decision
+
+There is **no active server-accelerator implementation/deployment task**. Local retrieval, constrained CMA-ES, the admitted browser-local SpiegeLib initializer and the validated 2+2+2 evidence runner are the supported reconstruction path.
+
+A remote service is intentionally deferred unless committed real-reference evidence later demonstrates a material runtime or reconstruction-quality limitation that cannot be addressed acceptably by the local paths. Until such evidence exists, implementing or deploying a server would add privacy, hosting, operational and maintenance surface without an accepted product need.
+
+This decision closes the accelerator as a standing `PLAN.md` item. It does **not** remove the capability or forbid a future service: the contract below is the admission gate if evidence activates that work later.
+
 ## Client invariants
 
 - No default remote endpoint is shipped.
@@ -113,12 +121,13 @@ Every successful response must provide `retentionReceipt`.
 
 The receipt is a service assertion and should be complemented by server-side operational controls and logs when a real service is deployed.
 
-## Python/server implementation gate
+## Future service activation gate
 
-Do not deploy an accelerator merely because the contract exists. First use the local real-reference benchmark receipts to determine whether browser runtime or a license-admitted learned initializer justifies the added privacy, hosting and maintenance surface.
+Do not deploy an accelerator merely because the contract exists. Re-open server implementation only after a committed closure-ready real-reference benchmark demonstrates a material need and records the local limitation being addressed.
 
 Before a service is production-enabled, record:
 
+- the benchmark evidence and explicit reason local execution is insufficient;
 - source repository and immutable revision;
 - dependency lock or image digest;
 - model/checkpoint hash and reuse license;
@@ -129,3 +138,5 @@ Before a service is production-enabled, record:
 - authentication/rate-limit policy if the endpoint is internet-exposed;
 - CORS allowlist for the intended FM1 Editor deployment origin;
 - a test proving that editing/audition/retrieval still work with the service absent or unreachable.
+
+If the real-reference benchmark does not establish that need, the correct outcome is to keep the service undeployed and the existing local path authoritative.
