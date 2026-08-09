@@ -114,21 +114,21 @@ export function Dx7FunctionControls({
   if (!gateProvided) return null
 
   return (
-    <details className="rounded-xl border border-violet-300/15 bg-black/15 p-3">
-      <summary className="cursor-pointer list-none">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <p className="text-xs font-bold uppercase tracking-[0.14em] text-violet-300">DX7 function parameters · 64–77</p>
-            <p className="mt-1 text-xs text-slate-500">Primary-source Yamaha parameter changes with semantic range checks and per-send confirmation.</p>
+    <details className="min-w-0 rounded-xl border border-violet-300/15 bg-black/15 p-3">
+      <summary className="min-w-0 cursor-pointer list-none">
+        <div className="flex min-w-0 flex-wrap items-center justify-between gap-3">
+          <div className="min-w-0 flex-1">
+            <p className="break-words text-xs font-bold uppercase tracking-[0.14em] text-violet-300">DX7 function parameters · 64–77</p>
+            <p className="mt-1 break-words text-xs text-slate-500">Primary-source Yamaha parameter changes with semantic range checks and per-send confirmation.</p>
           </div>
-          <span className={`rounded-lg border px-3 py-2 text-xs ${writesEnabled ? 'border-emerald-300/25 bg-emerald-300/10 text-emerald-200' : 'border-amber-300/25 bg-amber-300/10 text-amber-200'}`}>
+          <span className={`shrink-0 rounded-lg border px-3 py-2 text-xs ${writesEnabled ? 'border-emerald-300/25 bg-emerald-300/10 text-emerald-200' : 'border-amber-300/25 bg-amber-300/10 text-amber-200'}`}>
             {writesEnabled ? 'Writes enabled' : 'Writes locked'}
           </span>
         </div>
       </summary>
 
-      <div className="mt-4 grid gap-3">
-        <div className="flex flex-wrap items-center gap-2">
+      <div className="mt-4 grid min-w-0 gap-3">
+        <div className="flex min-w-0 flex-wrap items-center gap-2">
           {!writesEnabled ? (
             <button
               className="rounded-lg bg-violet-300 px-3 py-2 text-xs font-black text-slate-950 disabled:opacity-40"
@@ -150,14 +150,14 @@ export function Dx7FunctionControls({
               Lock writes
             </button>
           )}
-          <span className="text-xs text-slate-500">MIDI channel {midiChannel} · no dump-request message is sent</span>
+          <span className="min-w-0 break-words text-xs text-slate-500">MIDI channel {midiChannel} · no dump-request message is sent</span>
         </div>
 
-        <div className="grid gap-3 lg:grid-cols-[minmax(220px,1fr)_minmax(260px,1fr)_auto]">
-          <label className="grid gap-1.5 text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">
+        <div className="grid min-w-0 gap-3 lg:grid-cols-[minmax(220px,1fr)_minmax(260px,1fr)_auto]">
+          <label className="grid min-w-0 gap-1.5 text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">
             Function parameter
             <select
-              className="rounded-lg border border-white/10 bg-slate-950 px-3 py-2 text-sm normal-case tracking-normal text-white"
+              className="min-w-0 rounded-lg border border-white/10 bg-slate-950 px-3 py-2 text-sm normal-case tracking-normal text-white"
               disabled={disabled}
               onChange={(event) => selectParameter(Number(event.target.value) as Dx7FunctionParameterId)}
               value={parameter}
@@ -169,10 +169,10 @@ export function Dx7FunctionControls({
           </label>
 
           {valueOptions ? (
-            <label className="grid gap-1.5 text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">
+            <label className="grid min-w-0 gap-1.5 text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">
               Value
               <select
-                className="rounded-lg border border-white/10 bg-slate-950 px-3 py-2 text-sm normal-case tracking-normal text-white"
+                className="min-w-0 rounded-lg border border-white/10 bg-slate-950 px-3 py-2 text-sm normal-case tracking-normal text-white"
                 disabled={disabled || !writesEnabled}
                 onChange={(event) => setValue(Number(event.target.value))}
                 value={value}
@@ -181,10 +181,10 @@ export function Dx7FunctionControls({
               </select>
             </label>
           ) : assignmentParameter ? (
-            <label className="grid gap-1.5 text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">
+            <label className="grid min-w-0 gap-1.5 text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">
               Assignment mask
               <select
-                className="rounded-lg border border-white/10 bg-slate-950 px-3 py-2 text-sm normal-case tracking-normal text-white"
+                className="min-w-0 rounded-lg border border-white/10 bg-slate-950 px-3 py-2 text-sm normal-case tracking-normal text-white"
                 disabled={disabled || !writesEnabled}
                 onChange={(event) => setValue(Number(event.target.value))}
                 value={value}
@@ -212,10 +212,10 @@ export function Dx7FunctionControls({
           </button>
         </div>
 
-        <p className="text-[11px] leading-5 text-slate-500">
+        <p className="break-words text-[11px] leading-5 text-slate-500">
           Assignment masks use bit 0 = pitch, bit 1 = amplitude, and bit 2 = EG bias. Function state remains separate from voice files and bank payloads.
         </p>
-        {(status || error) && <p aria-live="polite" className={`text-xs ${error ? 'text-rose-300' : 'text-emerald-300'}`}>{error ?? status}</p>}
+        {(status || error) && <p aria-live="polite" className={`break-words text-xs ${error ? 'text-rose-300' : 'text-emerald-300'}`}>{error ?? status}</p>}
       </div>
     </details>
   )
