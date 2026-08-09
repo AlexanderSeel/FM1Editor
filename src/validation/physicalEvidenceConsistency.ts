@@ -29,6 +29,9 @@ export interface PhysicalEvidenceManifestLink {
   readonly matchedMidiMonitorName: string | null
   readonly matchedMidiMonitorSha256: string | null
   readonly summaryMismatchFields: readonly string[]
+  /** Present when an FM-1 raw capture containing a Yamaha 32-voice bank is byte-identical to exactly one retained .syx artifact. */
+  readonly matchedBankSysexName?: string | null
+  readonly matchedBankSysexSha256?: string | null
 }
 
 export interface PhysicalEvidenceConsistencyReport {
@@ -54,6 +57,19 @@ interface NamedJsonArtifact {
   readonly name: string
   readonly sha256: string
   readonly value: Record<string, unknown>
+}
+
+interface NamedMidiMonitor {
+  readonly name: string
+  readonly sha256: string
+  readonly entries: readonly MidiMonitorEntry[]
+  readonly summary: HardwareMidiCaptureSummary
+}
+
+interface NamedSysexArtifact {
+  readonly name: string
+  readonly sha256: string
+  readonly bytes: readonly number[]
 }
 
 interface NamedFm1Manifest {
@@ -96,6 +112,12 @@ function parseMidiMonitorExport(value: unknown): MidiMonitorExport | null {
   return value as unknown as MidiMonitorExport
 }
 
+function parseSysexBytes(input: PhysicalEvidenceArtifactInput): readonly number[] | null {
+  if (!input.name.toLowerCase().endsWith('.syx') || !Array.isArray(input.sysexBytes)) return null
+  if (!input.sysexBytes.every((byte) => Number.isInteger(byte) && byte >= 0 && byte <= 255)) return null
+  return input.sysexBytes
+}
+
 function sortedRecord(record: Readonly<Record<string, number>>): readonly [string, number][] {
   return Object.entries(record).sort(([left], [right]) => left.localeCompare(right))
 }
@@ -104,8 +126,29 @@ function equalStringArray(left: readonly string[], right: readonly string[]): bo
   return left.length === right.length && left.every((value, index) => value === right[index])
 }
 
+function equalBytes(left: readonly number[], right: readonly number[]): boolean {
+  return left.length === right.length && left.every((value, index) => value === right[index])
+}
+
 function normalizedHash(value: string): string {
   return value.trim().toLowerCase()
+}
+
+function isYamahaBankEntry(entry: MidiMonitorEntry): boolean {
+  return entry.direction === 'out'
+    && entry.data.length === 4104
+    && entry.data[0] === 0xf0
+    && entry.data[1] === 0x43
+    && entry.data[3] === 0x09
+    && entry.data[4] === 0x20
+    && entry.data[5] === 0x00
+    && entry.data[4103] === 0xf7
+}
+
+function distinctPayloads(payloads: readonly (readonly number[])[]): readonly (readonly number[])[] {
+  const result: (readonly number[])[] = []
+  for (const payload of payloads) if (!result.some((candidate) => equalBytes(candidate, payload))) result.push(payload)
+  return result
 }
 
 export function hardwareMidiSummaryMismatchFields(
@@ -180,6 +223,56 @@ function localManifestInvariantIssues(item: NamedHardwareManifest, issues: Physi
   }
 }
 
+function bindFm1BankSysex(
+  item: NamedFm1Manifest,
+  monitor: NamedMidiMonitor,
+  sysexArtifacts: readonly NamedSysexArtifact[],
+  issues: PhysicalEvidenceConsistencyIssue[],
+): Pick<PhysicalEvidenceManifestLink, 'matchedBankSysexName' | 'matchedBankSysexSha256'> | null {
+  if (item.manifest.midiCapture.yamahaBankOutputCount === 0) return null
+
+  const bankPayloads = monitor.entries.filter(isYamahaBankEntry).map((entry) => entry.data)
+  const uniquePayloads = distinctPayloads(bankPayloads)
+  if (uniquePayloads.length !== 1) {
+    addIssue(
+      issues,
+      'error',
+      'fm1-bank-payload-ambiguous',
+      [item.name, monitor.name],
+      `FM-1 manifest ${item.name} records bank output but the matched raw MIDI capture contains ${uniquePayloads.length} distinct Yamaha 4,104-byte bank payloads; retain a session with one unambiguous bank payload for delivery closure.`,
+    )
+    return { matchedBankSysexName: null, matchedBankSysexSha256: null }
+  }
+
+  const payload = uniquePayloads[0]!
+  const matches = sysexArtifacts.filter((artifact) => equalBytes(artifact.bytes, payload))
+  if (matches.length === 0) {
+    addIssue(
+      issues,
+      'error',
+      'fm1-bank-sysex-artifact-missing',
+      [item.name, monitor.name],
+      `FM-1 bank bytes captured in ${monitor.name} do not match any retained .syx artifact byte-for-byte.`,
+    )
+    return { matchedBankSysexName: null, matchedBankSysexSha256: null }
+  }
+  if (matches.length > 1) {
+    addIssue(
+      issues,
+      'error',
+      'fm1-bank-sysex-artifact-ambiguous',
+      [item.name, monitor.name, ...matches.map((match) => match.name)],
+      `FM-1 bank bytes captured in ${monitor.name} match more than one .syx artifact; retain one unambiguous transmitted-bank artifact for delivery closure.`,
+    )
+    return { matchedBankSysexName: null, matchedBankSysexSha256: null }
+  }
+
+  return {
+    matchedBankSysexName: matches[0]!.name,
+    matchedBankSysexSha256: matches[0]!.sha256,
+  }
+}
+
 export function validatePhysicalEvidenceConsistency(
   inputs: readonly PhysicalEvidenceArtifactInput[],
   packageTarget: PhysicalEvidenceTarget,
@@ -189,10 +282,20 @@ export function validatePhysicalEvidenceConsistency(
     .filter((input): input is PhysicalEvidenceArtifactInput & { readonly jsonValue: Record<string, unknown> } => isRecord(input.jsonValue))
     .map((input) => ({ name: input.name, sha256: normalizedHash(input.sha256), value: input.jsonValue }))
 
-  const monitors = jsonArtifacts
+  const monitors: NamedMidiMonitor[] = jsonArtifacts
     .map((artifact) => ({ ...artifact, parsed: parseMidiMonitorExport(artifact.value) }))
     .filter((artifact): artifact is NamedJsonArtifact & { readonly parsed: MidiMonitorExport } => artifact.parsed !== null)
-    .map((artifact) => ({ name: artifact.name, sha256: artifact.sha256, summary: summarizeHardwareMidiCapture(artifact.parsed.entries) }))
+    .map((artifact) => ({
+      name: artifact.name,
+      sha256: artifact.sha256,
+      entries: artifact.parsed.entries,
+      summary: summarizeHardwareMidiCapture(artifact.parsed.entries),
+    }))
+
+  const sysexArtifacts: NamedSysexArtifact[] = inputs.flatMap((input) => {
+    const bytes = parseSysexBytes(input)
+    return bytes ? [{ name: input.name, sha256: normalizedHash(input.sha256), bytes }] : []
+  })
 
   const manifests: NamedHardwareManifest[] = []
   for (const artifact of jsonArtifacts) {
@@ -220,7 +323,16 @@ export function validatePhysicalEvidenceConsistency(
     if (exact.length === 1) {
       const matched = exact[0]!.monitor
       usedMonitorNames.add(matched.name)
-      links.push({ manifestName: item.name, manifestSha256: item.sha256, target: item.target, matchedMidiMonitorName: matched.name, matchedMidiMonitorSha256: matched.sha256, summaryMismatchFields: [] })
+      const bankBinding = item.target === 'fm1' ? bindFm1BankSysex(item, matched, sysexArtifacts, issues) : null
+      links.push({
+        manifestName: item.name,
+        manifestSha256: item.sha256,
+        target: item.target,
+        matchedMidiMonitorName: matched.name,
+        matchedMidiMonitorSha256: matched.sha256,
+        summaryMismatchFields: [],
+        ...(bankBinding ?? {}),
+      })
     } else if (exact.length > 1) {
       const names = exact.map((comparison) => comparison.monitor.name).sort()
       addIssue(issues, 'error', 'midi-link-ambiguous', [item.name, ...names], `Manifest ${item.name} matches more than one raw MIDI export; retain a unique capture for deterministic evidence linkage.`)
@@ -249,7 +361,7 @@ export function validatePhysicalEvidenceConsistency(
     warningCount,
     structurallyConsistent: errorCount === 0,
     issues,
-    note: 'Structural correlation only. Matching manifest summaries to raw MIDI captures can detect mixed-up or incomplete evidence files, but it does not validate tester-entered PASS/FAIL observations, device behavior, audio content or PLAN closure.',
+    note: 'Structural correlation only. Matching manifest summaries to raw MIDI captures and, for FM-1 bank sessions, binding the captured Yamaha bank bytes to one exact .syx artifact can detect mixed-up or incomplete evidence files, but it does not validate tester-entered PASS/FAIL observations, device behavior, audio content or PLAN closure.',
   }
 }
 
