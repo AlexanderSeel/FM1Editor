@@ -32,6 +32,9 @@ export interface PhysicalEvidenceManifestLink {
   /** Present when an FM-1 raw capture containing a Yamaha 32-voice bank is byte-identical to exactly one retained .syx artifact. */
   readonly matchedBankSysexName?: string | null
   readonly matchedBankSysexSha256?: string | null
+  /** Present when a stock-DX7 manifest's recoveryBankSha256 resolves to exactly one retained .syx artifact. */
+  readonly matchedRecoveryBankSysexName?: string | null
+  readonly matchedRecoveryBankSysexSha256?: string | null
 }
 
 export interface PhysicalEvidenceConsistencyReport {
@@ -69,7 +72,7 @@ interface NamedMidiMonitor {
 interface NamedSysexArtifact {
   readonly name: string
   readonly sha256: string
-  readonly bytes: readonly number[]
+  readonly bytes: readonly number[] | null
 }
 
 interface NamedFm1Manifest {
@@ -113,7 +116,7 @@ function parseMidiMonitorExport(value: unknown): MidiMonitorExport | null {
 }
 
 function parseSysexBytes(input: PhysicalEvidenceArtifactInput): readonly number[] | null {
-  if (!input.name.toLowerCase().endsWith('.syx') || !Array.isArray(input.sysexBytes)) return null
+  if (!Array.isArray(input.sysexBytes)) return null
   if (!input.sysexBytes.every((byte) => Number.isInteger(byte) && byte >= 0 && byte <= 255)) return null
   return input.sysexBytes
 }
@@ -132,6 +135,10 @@ function equalBytes(left: readonly number[], right: readonly number[]): boolean 
 
 function normalizedHash(value: string): string {
   return value.trim().toLowerCase()
+}
+
+function isSha256(value: string): boolean {
+  return /^[0-9a-f]{64}$/i.test(value.trim())
 }
 
 function isYamahaBankEntry(entry: MidiMonitorEntry): boolean {
@@ -202,7 +209,7 @@ function manifestIdentityWarnings(item: NamedHardwareManifest, issues: PhysicalE
     if (!item.manifest.identity.firmwareVersion.trim()) addIssue(issues, 'warning', 'fm1-firmware-not-recorded', [item.name], 'FM-1 firmware identity is empty.')
   } else {
     if (!item.manifest.identity.modelRevision.trim()) addIssue(issues, 'warning', 'dx7-model-not-recorded', [item.name], 'DX7 model/revision identity is empty.')
-    if (!/^[0-9a-f]{64}$/i.test(item.manifest.identity.recoveryBankSha256.trim())) addIssue(issues, 'error', 'dx7-recovery-bank-hash-invalid', [item.name], 'DX7 evidence does not contain a valid 64-character recovery-bank SHA-256.')
+    if (!isSha256(item.manifest.identity.recoveryBankSha256)) addIssue(issues, 'error', 'dx7-recovery-bank-hash-invalid', [item.name], 'DX7 evidence does not contain a valid 64-character recovery-bank SHA-256.')
   }
 }
 
@@ -245,7 +252,7 @@ function bindFm1BankSysex(
   }
 
   const payload = uniquePayloads[0]!
-  const matches = sysexArtifacts.filter((artifact) => equalBytes(artifact.bytes, payload))
+  const matches = sysexArtifacts.filter((artifact) => artifact.bytes !== null && equalBytes(artifact.bytes, payload))
   if (matches.length === 0) {
     addIssue(
       issues,
@@ -273,6 +280,42 @@ function bindFm1BankSysex(
   }
 }
 
+function bindDx7RecoveryBankSysex(
+  item: NamedDx7Manifest,
+  sysexArtifacts: readonly NamedSysexArtifact[],
+  issues: PhysicalEvidenceConsistencyIssue[],
+): Pick<PhysicalEvidenceManifestLink, 'matchedRecoveryBankSysexName' | 'matchedRecoveryBankSysexSha256'> | null {
+  const expectedHash = normalizedHash(item.manifest.identity.recoveryBankSha256)
+  if (!isSha256(expectedHash)) return null
+
+  const matches = sysexArtifacts.filter((artifact) => artifact.sha256 === expectedHash)
+  if (matches.length === 0) {
+    addIssue(
+      issues,
+      'error',
+      'dx7-recovery-bank-artifact-missing',
+      [item.name],
+      `DX7 recoveryBankSha256 ${expectedHash} in ${item.name} does not match any retained .syx artifact in this evidence set.`,
+    )
+    return { matchedRecoveryBankSysexName: null, matchedRecoveryBankSysexSha256: null }
+  }
+  if (matches.length > 1) {
+    addIssue(
+      issues,
+      'error',
+      'dx7-recovery-bank-artifact-ambiguous',
+      [item.name, ...matches.map((match) => match.name)],
+      `DX7 recoveryBankSha256 ${expectedHash} in ${item.name} matches more than one retained .syx artifact; retain one unambiguous recovery-bank artifact.`,
+    )
+    return { matchedRecoveryBankSysexName: null, matchedRecoveryBankSysexSha256: null }
+  }
+
+  return {
+    matchedRecoveryBankSysexName: matches[0]!.name,
+    matchedRecoveryBankSysexSha256: matches[0]!.sha256,
+  }
+}
+
 export function validatePhysicalEvidenceConsistency(
   inputs: readonly PhysicalEvidenceArtifactInput[],
   packageTarget: PhysicalEvidenceTarget,
@@ -292,10 +335,13 @@ export function validatePhysicalEvidenceConsistency(
       summary: summarizeHardwareMidiCapture(artifact.parsed.entries),
     }))
 
-  const sysexArtifacts: NamedSysexArtifact[] = inputs.flatMap((input) => {
-    const bytes = parseSysexBytes(input)
-    return bytes ? [{ name: input.name, sha256: normalizedHash(input.sha256), bytes }] : []
-  })
+  const sysexArtifacts: NamedSysexArtifact[] = inputs
+    .filter((input) => input.name.toLowerCase().endsWith('.syx'))
+    .map((input) => ({
+      name: input.name,
+      sha256: normalizedHash(input.sha256),
+      bytes: parseSysexBytes(input),
+    }))
 
   const manifests: NamedHardwareManifest[] = []
   for (const artifact of jsonArtifacts) {
@@ -323,7 +369,9 @@ export function validatePhysicalEvidenceConsistency(
     if (exact.length === 1) {
       const matched = exact[0]!.monitor
       usedMonitorNames.add(matched.name)
-      const bankBinding = item.target === 'fm1' ? bindFm1BankSysex(item, matched, sysexArtifacts, issues) : null
+      const artifactBinding = item.target === 'fm1'
+        ? bindFm1BankSysex(item, matched, sysexArtifacts, issues)
+        : bindDx7RecoveryBankSysex(item, sysexArtifacts, issues)
       links.push({
         manifestName: item.name,
         manifestSha256: item.sha256,
@@ -331,7 +379,7 @@ export function validatePhysicalEvidenceConsistency(
         matchedMidiMonitorName: matched.name,
         matchedMidiMonitorSha256: matched.sha256,
         summaryMismatchFields: [],
-        ...(bankBinding ?? {}),
+        ...(artifactBinding ?? {}),
       })
     } else if (exact.length > 1) {
       const names = exact.map((comparison) => comparison.monitor.name).sort()
@@ -361,7 +409,7 @@ export function validatePhysicalEvidenceConsistency(
     warningCount,
     structurallyConsistent: errorCount === 0,
     issues,
-    note: 'Structural correlation only. Matching manifest summaries to raw MIDI captures and, for FM-1 bank sessions, binding the captured Yamaha bank bytes to one exact .syx artifact can detect mixed-up or incomplete evidence files, but it does not validate tester-entered PASS/FAIL observations, device behavior, audio content or PLAN closure.',
+    note: 'Structural correlation only. Matching manifest summaries to raw MIDI captures, binding FM-1 captured Yamaha bank bytes to one exact .syx artifact, and resolving a stock-DX7 recoveryBankSha256 to one retained .syx artifact can detect mixed-up or incomplete evidence files, but these checks do not validate tester-entered PASS/FAIL observations, device behavior, audio content or PLAN closure.',
   }
 }
 
