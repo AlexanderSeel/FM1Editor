@@ -9,18 +9,20 @@ Primary sources:
 - M-VAVE FM-1 product page: https://www.m-vave.com/product?id=fm-1
 - M-VAVE download center: https://www.m-vave.com/download
 - Official `FM-1 MIDI EN.docx` linked by the M-VAVE download center
-- Current reviewed firmware baseline: [`fm1-firmware-baseline.md`](./fm1-firmware-baseline.md)
+- Current reviewed firmware source snapshot: [`fm1-firmware-baseline.md`](./fm1-firmware-baseline.md)
 
 Interoperability references:
 
 - Yamaha DX7 SysEx format documentation and implementations
 - Yamaha Black Boxes DX7 patch archive: https://yamahablackboxes.com/collection/yamaha-dx7-synthesizer/patches/
 
-## Current firmware baseline
+## Current firmware source snapshot
 
-The official M-VAVE download center currently exposes FM-1 PC firmware **V15 dated 2026-07-30** and a separate Windows/Mac firmware grouping at V14 dated 2026-07-06. FM1 Editor treats V15 as the current reviewed PC-firmware baseline for new current-release physical delivery evidence; exact policy and source-review boundaries are recorded in [`fm1-firmware-baseline.md`](./fm1-firmware-baseline.md).
+The official M-VAVE download center currently exposes **two differently labelled FM-1 firmware tracks**: Windows/Mac firmware package **V14 dated 2026-07-06** and a separate **PC Firmware V09 dated 2026-06-24** entry. The page does not document how either download label maps to the firmware identity displayed by a physical FM-1. Exact source-review policy and this ambiguity are recorded in [`fm1-firmware-baseline.md`](./fm1-firmware-baseline.md).
 
-A firmware publication is not protocol evidence. V15 has not been physically validated by this repository, and no MIDI/audio behavior below is upgraded from blocked/unverified merely because a newer firmware exists. Physical sessions must record the exact firmware actually installed and should re-check the official download center before testing.
+FM1 Editor therefore does not infer a device firmware version from either public label. Physical sessions must re-check the official source and record the exact firmware actually shown by the device. Current-release delivery evidence requires that exact operator-entered device identity to match across Chrome and Edge.
+
+A firmware publication is not protocol evidence. No MIDI/audio behavior below is upgraded from blocked/unverified merely because a newer package exists.
 
 ## Documented channel behavior
 
@@ -114,7 +116,7 @@ Two approaches were tested on a physical FM-1 on 2026-08-05. Both left the activ
 1. a standard 163-byte Yamaha DX7 single-voice message;
 2. 155 individually paced FM-1 parameter-write messages populated from DX7 unpacked edit-buffer byte offsets 0–154.
 
-The exact FM-1 firmware version was not recorded and remains required for the compatibility record. Because current official firmware is V15 as of the 2026-08-09 review, the 2026-08-05 observation cannot be attributed to V14, V15 or treated as cross-version evidence. Regardless, both transports are removed from the normal UI and transfer module. They must not be reintroduced without a verified protocol; a firmware-version change alone is not a reason to repeat the unsafe/unsuccessful approach.
+The exact FM-1 firmware version was not recorded and remains required for the compatibility record. The current official download page exposes V14 and V09 under different firmware headings, but neither may be assigned to that 2026-08-05 device observation without a recorded device identity. Regardless, both transports are removed from the normal UI and transfer module. They must not be reintroduced without a verified protocol; a firmware-package change alone is not a reason to repeat the unsafe/unsuccessful approach.
 
 Recovery remains limited to documented Program Change preset recall and normal MIDI note testing.
 
@@ -157,7 +159,7 @@ Physical verification is still required for:
 - transfer acknowledgements or completion detection;
 - any device-originated bank dump capability.
 
-For current-release delivery evidence, re-check the official firmware baseline at test start and use the same exact current firmware in both Chrome and Edge sessions. Older firmware sessions may be retained as compatibility evidence but must not silently satisfy the current-release delivery gate.
+For current-release delivery evidence, re-check the official firmware source at test start, record the exact device firmware shown by the FM-1 and enter that same identity as the expected release-session firmware in the delivery gate. Chrome and Edge must use the same exact device firmware. Other firmware sessions may be retained as compatibility evidence but must not silently satisfy the current-release delivery gate.
 
 ## Sequencer boundary
 

@@ -154,12 +154,13 @@ async function checkDx7Layout(page, viewport, channel) {
   assert(await enableFunctionWrites.isDisabled(), `${channel}/${viewport.name} function writes must remain locked without output, SysEx and hardware confirmations.`)
   await assertInsideViewport(enableFunctionWrites, viewport, `${channel}/${viewport.name} enable function writes`)
 
-  const pianoHeading = page.getByText('Virtual piano', { exact: true })
+  const pianoHeading = page.locator('p:visible').filter({ hasText: /^Virtual piano$/ }).first()
   await pianoHeading.waitFor({ state: 'visible' })
   await assertInsideViewport(pianoHeading, viewport, `${channel}/${viewport.name} virtual piano heading`)
+  const pianoPanel = pianoHeading.locator('xpath=ancestor::div[contains(@class,"rounded-2xl")][1]')
 
-  const pianoKeys = page.getByRole('button', { name: /^Play / })
-  assert(await pianoKeys.count() === 25, `${channel}/${viewport.name} expected 25 virtual piano keys.`)
+  const pianoKeys = pianoPanel.getByRole('button', { name: /^Play / })
+  assert(await pianoKeys.count() === 25, `${channel}/${viewport.name} expected 25 virtual piano keys in the visible piano panel.`)
   const pianoFrame = pianoKeys.first().locator('xpath=ancestor::div[contains(@class,"relative")][1]')
   const frameBox = await pianoFrame.boundingBox()
   assert(frameBox !== null, `${channel}/${viewport.name} piano frame is not visible.`)

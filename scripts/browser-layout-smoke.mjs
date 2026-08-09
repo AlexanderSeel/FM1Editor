@@ -217,12 +217,13 @@ async function checkLayout(page, viewport, channel) {
     await assertInsideViewport(control, viewport, `${channel}/${viewport.name} bank control ${index + 1}`)
   }
 
-  const pianoLabel = page.getByText('Virtual piano', { exact: true })
+  const pianoLabel = page.locator('p:visible').filter({ hasText: /^Virtual piano$/ }).first()
   await pianoLabel.waitFor({ state: 'visible' })
   await assertInsideViewport(pianoLabel, viewport, `${channel}/${viewport.name} virtual piano heading`)
+  const pianoPanel = pianoLabel.locator('xpath=ancestor::div[contains(@class,"rounded-2xl")][1]')
 
-  const pianoKeys = page.getByRole('button', { name: /^Play / })
-  assert(await pianoKeys.count() === 25, `${channel}/${viewport.name} expected 25 virtual piano keys.`)
+  const pianoKeys = pianoPanel.getByRole('button', { name: /^Play / })
+  assert(await pianoKeys.count() === 25, `${channel}/${viewport.name} expected 25 virtual piano keys in the visible piano panel.`)
   const pianoFrame = pianoKeys.first().locator('xpath=ancestor::div[contains(@class,"relative")][1]')
   const frameBox = await pianoFrame.boundingBox()
   assert(frameBox !== null, `${channel}/${viewport.name} piano frame is not visible.`)

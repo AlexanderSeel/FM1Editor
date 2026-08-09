@@ -1,25 +1,20 @@
 # FM-1 firmware-baseline delivery gate acceptance
 
-Reviewed firmware source date: 2026-08-09  
-Current reviewed FM-1 PC-firmware baseline: **V15 · 2026-07-30**
+Status: **SUPERSEDED — public-source baseline corrected 2026-08-09**
 
-Software acceptance: **SUCCESS**
+This receipt is retained as CI history for the implementation that introduced an explicit firmware constraint, but its original source interpretation is no longer accepted.
 
-## Validated implementation
+## Why it is superseded
 
-The current-release delivery path now distinguishes a reviewed firmware baseline from general compatibility evidence:
+The original acceptance treated **V15 · 2026-07-30** as the current official FM-1 PC-firmware baseline. A fresh review of the live M-VAVE download center on 2026-08-09 instead shows:
 
-- `src/validation/fm1FirmwareBaseline.ts` records the reviewed V15 identity and review metadata;
-- `evaluateFm1DeliveryEvidence()` accepts an optional `expectedFirmwareVersion` and fails a current-release manifest when its recorded firmware does not match that baseline;
-- omitting the option preserves historical/compatibility evaluation behavior;
-- Chrome and Edge still have to share the same firmware/editor/Windows tuple;
-- v2 raw-MIDI integrity and v3 physical-package integrity continue to compose the v1 result unchanged;
-- `Fm1DeliveryEvidenceGatePanel` supplies the reviewed V15 baseline for production current-release delivery evaluation;
-- historical v1 receipt-shaped callers remain source-compatible because `expectedFirmwareVersion` is optional in the receipt interface.
+- Firmware → FM-1 Windows: **V14 · 2026-07-06**;
+- Firmware → FM-1 Mac: **V14 · 2026-07-06**;
+- PC Firmware → FM-1: **V09 · 2026-06-24**.
 
-This changes evidence admission only. It does **not** claim that V15 has been installed, physically tested or shown to change any MIDI/audio protocol behavior.
+The official page does not explain how those differently labelled download tracks map to the firmware identity shown by a physical FM-1. The repository therefore no longer hard-codes any of those public labels as the device firmware required for delivery.
 
-## Executed CI evidence
+## Historical CI evidence
 
 Validation PR: **#2 — Validate V15 delivery baseline on normal CI**  
 PR head: `cb122edcf640d62098cbbc6a19521db2a963ad60`  
@@ -28,25 +23,17 @@ GitHub Actions workflow: **CI #1184**
 Workflow run ID: `31296462671`  
 Job: `validate` (`93202220425`)
 
-The normal repository PR CI completed with conclusion **success**. Recorded successful steps:
+That run genuinely completed successfully for install, source/provenance audits, typecheck, lint/accessibility, full tests and production build. The CI result remains valid for the code it tested; only the external-source interpretation that selected V15 as a current device baseline is withdrawn.
 
-| Stage | Result |
-| --- | --- |
-| Install dependencies | SUCCESS |
-| Audit virtual DX7 source boundary | SUCCESS |
-| Audit reconstruction research boundary | SUCCESS |
-| Audit learned asset provenance | SUCCESS |
-| Typecheck | SUCCESS |
-| Lint and accessibility | SUCCESS |
-| Full test suite | SUCCESS |
-| Production build | SUCCESS |
+## Replacement policy
 
-The PR delta itself only synchronized `docs/research/fm1-midi-protocol.md`; therefore the normal PR merge checkout validated the firmware-baseline implementation already present on the target `main` plus that documentation synchronization.
+The corrected policy is documented in `docs/research/fm1-firmware-baseline.md`:
 
-## Delivery boundary
+- retain the official download-page entries as a reviewed source snapshot;
+- do not infer the physical device firmware from either public download label;
+- require the tester to record and explicitly enter the exact device firmware for a current-release delivery session;
+- require Chrome and Edge to match that explicit device identity plus all existing v2/v3 evidence integrity requirements.
 
-A current-release v3 READY receipt must now be built from Chrome and Edge physical sessions that satisfy the reviewed firmware baseline supplied by the production panel, in addition to all existing manifest, raw-MIDI correlation, package, WAV, SysEx and observation requirements.
+A new acceptance receipt should supersede this document once the corrected fail-closed delivery behavior has passed normal repository CI.
 
-Evidence from another firmware may still be retained and evaluated as compatibility evidence, but it cannot silently make the current-release production delivery gate READY.
-
-Physical FM-1 verification remains required for every hardware-dependent `PLAN.md` item.
+This document never represented a physical FM-1 PASS and does not close any hardware-dependent `PLAN.md` item.
