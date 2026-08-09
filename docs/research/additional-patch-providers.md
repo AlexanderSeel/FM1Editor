@@ -1,6 +1,6 @@
 # Additional DX7 patch-provider review
 
-Last reviewed: 2026-08-08
+Last reviewed: 2026-08-09
 
 ## Admission criteria
 
@@ -132,14 +132,20 @@ Positive findings:
 
 Blocking findings:
 
-- no public, documented, versioned catalog API was found during this review;
+- no public, documented, versioned catalog API was found during the 2026-08-09 follow-up review;
 - no redistribution terms for mirroring the complete patch catalog were found;
 - integrating through presentation-page scraping would not satisfy the stability requirement.
 
 Decision: **no adapter** unless the provider publishes an API/data feed and explicit catalog-use terms.
 
-## Current decision
+## 2026-08-09 follow-up search
 
-No additional provider qualifies as of 2026-08-08. FM1 Editor should retain the tracked `sysexFinal.zip` source and Yamaha Black Boxes overlay already described in [`patch-catalog.md`](./patch-catalog.md).
+A fresh public search for DX7 SysEx catalogs with explicit CC0/Creative-Commons-style data licensing, stable machine-readable feeds and traceable patch provenance did not identify a new candidate that satisfies the admission criteria. The active projects/results still point back to mixed-provenance historical archives, software-licensed projects whose licenses do not establish rights over every patch, or download-oriented sites without a documented redistribution/API contract.
 
-The plan item remains unresolved by design. A future candidate should be evaluated against the admission criteria above before implementation begins. A new provider should not be added merely because a repository/site is public, downloadable or software-licensed; the patch data itself needs compatible redistribution/use terms and traceable provenance.
+This is a completed admission decision, not an unfinished implementation task. FM1 Editor keeps the tracked `sysexFinal.zip` source and Yamaha Black Boxes overlay described in [`patch-catalog.md`](./patch-catalog.md). No additional provider adapter should be implemented now.
+
+## Standing future trigger
+
+Provider discovery is now a **standing admission policy**, not a permanent `PLAN.md` checkbox. Re-open implementation work only when a concrete candidate is identified that satisfies all six criteria above. At that point the candidate review must record the exact source/version, patch-data license/terms, provenance model and synchronization contract before an adapter is merged.
+
+A new provider must not be added merely because a repository/site is public, downloadable or software-licensed; the patch data itself needs compatible redistribution/use terms and traceable provenance.
