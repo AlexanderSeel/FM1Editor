@@ -32,6 +32,14 @@ The learned row is intentionally not CMA-refined. It is not a full 155-parameter
 
 Older exported receipts created before learned-model admission may still contain the explicit unavailable learned row. The aggregator accepts those for provenance/history, but they cannot satisfy current closure readiness. The final retained 2+2+2 evidence set must be rerun with successful current learned rows so all three approaches are measured on the same references.
 
+## In-app 2+2+2 evidence runner
+
+For the final retained minimum set, the **2+2+2 final evidence run** panel can execute the six references as one controlled local session. Choose exactly two already-isolated clips in each evidence category; clips must be no longer than 30 seconds because the batch path deliberately refuses to choose a sub-region silently. Optional manual pitch can be supplied per clip. Full bundled-catalog scope is the default for final evidence.
+
+The runner loads the catalog once, reuses the same local renderer/fingerprint cache, processes references sequentially, and preserves completed receipts if a later case fails or the run is cancelled. After each run it keeps the prepared reference PCM only in browser memory so the operator can compare **Reference A** against the exact retrieval, CMA and learned winner voices retained in that receipt. Structured listening verdicts and notes are collected in the same panel.
+
+The **Export evidence ZIP** convenience action contains the six unchanged receipt JSON files and aggregate JSON and, only when closure-ready, the generated hash-bound closure Markdown. It never contains the source WAV/MP3 files. The individual JSON/Markdown files inside the ZIP remain the canonical repository artifacts; the ZIP itself is optional transport convenience.
+
 ## Per-reference procedure
 
 1. Open the audio-to-FM reference workspace and prepare the desired region.
