@@ -8,6 +8,10 @@ on:
 permissions:
   contents: write
 
+concurrency:
+  group: validate-fm1-firmware-baseline-gate
+  cancel-in-progress: true
+
 jobs:
   validate:
     runs-on: ubuntu-latest
@@ -67,6 +71,7 @@ Software acceptance: **SUCCESS**
 - manifests on another firmware remain parseable compatibility evidence but cannot satisfy that current-release gate;
 - Chrome and Edge must still match firmware/editor/Windows identity and all v2/v3 raw-MIDI/package requirements;
 - the production delivery panel supplies V15 as the reviewed baseline;
+- historical v1 receipt-shaped callers remain source-compatible because the new expected-firmware field is optional in the receipt interface;
 - this is software/evidence-gate acceptance only and does not claim that V15 has been physically tested.
 ''', encoding='utf-8')
           Path('.github/workflows/validate-fm1-firmware-baseline-gate.yml').unlink()
