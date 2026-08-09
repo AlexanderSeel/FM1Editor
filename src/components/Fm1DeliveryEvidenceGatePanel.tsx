@@ -75,8 +75,8 @@ export function Fm1DeliveryEvidenceGatePanel() {
   const normalizedExpectedFirmware = normalizeFm1FirmwareVersion(expectedFirmwareVersion)
   const gate = useMemo(() => evaluateFm1DeliveryEvidencePackageIntegrity(files, {
     expectedOrigin,
-    expectedFirmwareVersion: normalizedExpectedFirmware || undefined,
     requireExpectedFirmwareVersion: true,
+    ...(normalizedExpectedFirmware ? { expectedFirmwareVersion: normalizedExpectedFirmware } : {}),
   }), [expectedOrigin, files, normalizedExpectedFirmware])
 
   const importFiles = async (selected: FileList | null) => {
