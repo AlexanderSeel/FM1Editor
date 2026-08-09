@@ -21,16 +21,27 @@ That correctness gap was resolved and accepted by PR #3. See:
 
 Final PR #3 acceptance used the exact head `5fa4995b59eb7b6113f608846972aa3b1cf60e6c` and merged as `db4f3b9fe352b5ecbd966a3fbd71ee578abcf911`. GitHub CI **#1195** (run `31297845775`) and Windows browser-layout CI **#267** (run `31297845785`) both completed successfully.
 
-A subsequent integrity review found one more repository-side delivery-evidence ambiguity: v3 required a `.syx` artifact and independently required raw MIDI evidence of outgoing Yamaha bank traffic, but did not prove that the retained `.syx` contained the exact bytes captured on MIDI.
+A subsequent integrity review found one more repository-side FM-1 delivery-evidence ambiguity: v3 required a `.syx` artifact and independently required raw MIDI evidence of outgoing Yamaha bank traffic, but did not prove that the retained `.syx` contained the exact bytes captured on MIDI.
 
-That gap is now also resolved and accepted by PR #4. See:
+That gap was resolved and accepted by PR #4. See:
 
 - `docs/validation/physical-evidence-package.md`;
 - `docs/validation/fm1-bank-sysex-evidence-binding.md`.
 
-PR #4 used final head `d9cea8e5f22e31ccdeb862703dcb0b6f22f0f6d3` and merged as `bc43e5271d7d6ae1be81573a9680cd4671c6e681`. Normal CI **#1200** (run `31307038435`) completed successfully for dependency installation, virtual-DX7/reconstruction/learned-source audits, typecheck, lint/accessibility, full tests and production build. Browser-layout CI **#269** (run `31307038434`) also completed successfully.
+PR #4 used final head `d9cea8e5f22e31ccdeb862703dcb0b6f22f0f6d3` and merged as `bc43e5271d7d6ae1be81573a9680cd4671c6e681`. Normal CI **#1200** (run `31307038435`) and browser-layout CI **#269** (run `31307038434`) both completed successfully.
 
 The physical correlation helper now byte-compares outgoing recognized FM-1 Yamaha 4,104-byte bank traffic with locally selected `.syx` artifacts, stores only the exact matching artifact filename/SHA-256 in the receipt and blocks ambiguous/mismatched bank evidence. Delivery v2 remains backward-compatible; final v3 requires that exact bank binding and requires the selected package index to contain the same filename/SHA-256. This is evidence-integrity logic only and does not infer device acceptance or a physical PASS.
+
+A final stock-DX7 integrity review found the analogous recovery-artifact gap: the DX7 hardware manifest required a `recoveryBankSha256`, but structural consistency only verified the string format rather than proving the actual recovery `.syx` was retained in the selected evidence set.
+
+That gap is resolved and accepted by PR #5. See:
+
+- `docs/validation/physical-evidence-package.md`;
+- `docs/validation/dx7-recovery-bank-evidence-binding.md`.
+
+PR #5 used final head `c627749a80af622e2b0eb38b3122f562fe84e557` and merged as `08a8ff5a43e9538046092961a7fb4380f36ed0d4`. Normal CI **#1205** (run `31307475922`) completed successfully for dependency installation, virtual-DX7/reconstruction/learned-source audits, typecheck, lint/accessibility, full tests and production build. Browser-layout CI **#271** (run `31307475913`) also completed successfully.
+
+The stock-DX7 physical correlation helper now requires a valid manifest `recoveryBankSha256` to resolve to exactly one retained `.syx` artifact and records its filename/SHA-256. Missing and duplicate matches fail structural consistency. This proves recovery-artifact identity only; it does not prove that a physical DX7 accepted or successfully restored the bank.
 
 The repository-side boundary is therefore re-established: no hardware PASS is inferred, and no remaining `PLAN.md` checkbox can be completed from repository code, synthetic fixtures, public firmware metadata or invented observations alone.
 
@@ -67,6 +78,14 @@ The final delivery evidence chain is now explicitly:
 Chrome and Edge must still retain distinct manifest, raw-MIDI, package-index and WAV identities. The deliberately controlled merged-bank `.syx` may be shared when the same exact bank is intentionally sent in both browser sessions.
 
 The byte binding proves only that the retained `.syx` corresponds to the outgoing captured Yamaha bank bytes. It does not prove the FM-1 accepted, stored or played that bank correctly.
+
+### Stock-DX7 recovery artifact integrity
+
+For destructive stock-DX7 bank validation, the evidence chain now also includes:
+
+`DX7 manifest recoveryBankSha256 → exactly one retained recovery .syx filename/SHA`
+
+The binding ensures the recovery file named before destructive testing actually exists in the selected evidence set. It does not prove the recovery bank is correct for the device or that physical restoration succeeded.
 
 ## Remaining boundary
 
