@@ -1,22 +1,26 @@
 # Non-hardware roadmap closure
 
-Roadmap boundary source: `d2b04526a0fd74380e574136237cd1e76daef206`
+Original roadmap boundary source: `d2b04526a0fd74380e574136237cd1e76daef206`
 
 Status: **REPOSITORY-SIDE NON-EXTERNAL WORK CLOSED**
 
 ## Scope
 
-This receipt records a roadmap/acceptance decision, not a new physical or listening test result.
+This receipt records a roadmap/acceptance boundary, not a physical or listening test result.
 
-The last application-code acceptance before this closure is the validated 2+2+2 evidence-runner receipt at commit `2ed077268368fc0b64ee8416a03db74dc3581a4f`, which recorded successful source audits, typecheck, lint, focused runner testing, the full test suite and production build.
+The original 2026-08-09 cleanup established that the then-current repository had no remaining actionable implementation work that could be completed without new external evidence. At that point the last application-code acceptance was the validated 2+2+2 evidence-runner commit `2ed077268368fc0b64ee8416a03db74dc3581a4f`; the cleanup itself changed only roadmap/research/validation documentation.
 
-The exact Git comparison from `2ed077268368fc0b64ee8416a03db74dc3581a4f` through `d2b04526a0fd74380e574136237cd1e76daef206` contains only these effective file changes:
+Later on 2026-08-09, a fresh review of M-VAVE's official download center exposed a newer current PC-firmware baseline, **FM-1 V15 dated 2026-07-30**. That new external public information created one legitimate repository-side follow-up: prevent otherwise-complete Chrome/Edge delivery evidence on a stale firmware from silently becoming current-release READY.
 
-- `PLAN.md`;
-- `docs/research/additional-patch-providers.md`;
-- `docs/validation/reconstruction-accelerator-contract.md`.
+That follow-up is now implemented and accepted. See:
 
-No application source, test, package, build configuration or generated runtime asset changed in that range. A temporary one-shot roadmap workflow was created/adjusted while attempting a fresh acceptance receipt, did not emit a receipt, and was removed; no fresh CI result is claimed for the documentation-only closure. The subsequent commits add this receipt and link it from `PLAN.md` only.
+- `docs/research/fm1-firmware-baseline.md`;
+- `docs/research/fm1-midi-protocol.md`;
+- `docs/validation/fm1-firmware-baseline-delivery-gate.md`.
+
+Normal GitHub PR CI **#1184** (run `31296462671`) validated the current implementation with successful dependency installation, virtual-DX7/reconstruction/learned-source audits, typecheck, lint/accessibility, full tests and production build. The protocol-document synchronization PR was merged as `4be483f8c2afd7cbc348e4edc23c16ec02e2a2a7`; the permanent acceptance receipt was then committed on `main`.
+
+The repository-side boundary is therefore re-established after the V15 admission hardening: no hardware PASS is inferred, and no remaining `PLAN.md` checkbox can be completed from repository code or public firmware-version metadata alone.
 
 ## Closed non-external roadmap items
 
@@ -32,13 +36,19 @@ The local reconstruction path is complete for the current scope: retrieval, cons
 
 A remote service is not an active implementation/deployment task. Re-open it only if committed closure-ready real-reference evidence demonstrates a material local runtime or quality limitation and the future-service gate in `docs/validation/reconstruction-accelerator-contract.md` is satisfied.
 
+### Current-release FM-1 firmware admission
+
+The production delivery evidence gate now supplies the reviewed V15 firmware baseline when deciding current-release READY. Evidence recorded on another firmware remains usable compatibility evidence when evaluated without a current-release requirement, but it cannot silently satisfy the production current-release gate.
+
+The baseline guard is an evidence-integrity mechanism only. V15 has not been physically validated by this repository, and the prior 2026-08-05 silent edit-buffer observation did not record firmware, so it cannot be attributed to V14, V15 or treated as cross-version behavior.
+
 ## Remaining boundary
 
-`PLAN.md` now contains only:
+`PLAN.md` contains only:
 
 1. work requiring physical FM-1 or stock Yamaha DX7 observations, including downstream features that cannot be implemented safely before those semantics are known; and
 2. one non-hardware external-evidence item: genuine 2+2+2 real isolated recordings plus structured human listening judgments and the resulting committed evidence artifacts.
 
 The second item is intentionally not auto-closed. Synthetic fixtures, objective metrics or invented listening verdicts are not substitutes for the acceptance evidence defined by `docs/validation/real-reference-benchmark-protocol.md`.
 
-This document does not claim a physical-device pass, a human listening result, or a fresh CI execution for the documentation-only roadmap cleanup.
+This document does not claim a physical-device pass or a human listening result.
