@@ -21,6 +21,7 @@ export interface Fm1DeliveryEvidenceGate {
   readonly schema: typeof FM1_DELIVERY_EVIDENCE_SCHEMA
   readonly evaluatedAt: string
   readonly expectedOrigin: string
+  readonly expectedFirmwareVersion: string | null
   readonly ready: boolean
   readonly importedCount: number
   readonly chromePassingCount: number
@@ -39,6 +40,8 @@ export interface Fm1DeliveryEvidenceGate {
 
 export interface EvaluateFm1DeliveryEvidenceOptions {
   readonly expectedOrigin: string
+  /** Optional reviewed current-release firmware identity. When set, compatibility sessions on other firmware remain importable but cannot make the delivery gate READY. */
+  readonly expectedFirmwareVersion?: string
   readonly evaluatedAt?: () => Date
 }
 
@@ -70,6 +73,11 @@ function isNullableString(value: unknown): value is string | null {
 
 function normalizedOrigin(value: string): string {
   return value.trim().replace(/\/+$/, '')
+}
+
+function normalizedFirmware(value: string | undefined): string | null {
+  const normalized = value?.trim().toUpperCase() ?? ''
+  return normalized || null
 }
 
 function isPositiveNumber(value: unknown): value is number {
@@ -123,6 +131,7 @@ function evaluateManifest(
   value: unknown,
   index: number,
   expectedOrigin: string,
+  expectedFirmwareVersion: string | null,
 ): { manifest: HardwareEvidenceManifest | null; evaluation: Fm1DeliveryManifestEvaluation } {
   const manifest = parseManifest(value)
   if (!manifest) {
@@ -143,6 +152,7 @@ function evaluateManifest(
   const family = browserFamily(`${manifest.identity.browserVersion} ${manifest.browser.userAgent}`)
   const blockers: string[] = []
   const firmware = manifest.identity.firmwareVersion.trim()
+  const normalizedManifestFirmware = firmware.toUpperCase()
   const editorCommit = manifest.identity.editorCommit.trim()
   const windowsVersion = manifest.identity.windowsVersion.trim()
 
@@ -155,6 +165,9 @@ function evaluateManifest(
   if (manifest.midiCapture.yamahaBankOutputCount < 1) blockers.push('No outgoing standard Yamaha 4,104-byte bank was captured.')
 
   if (!firmware) blockers.push('FM-1 firmware version is missing.')
+  if (firmware && expectedFirmwareVersion && normalizedManifestFirmware !== expectedFirmwareVersion) {
+    blockers.push(`FM-1 firmware ${firmware} does not match the required current-release baseline ${expectedFirmwareVersion}.`)
+  }
   if (!/^[0-9a-f]{40}$/i.test(editorCommit)) blockers.push('Editor commit must be a full 40-character Git SHA.')
   if (!windowsVersion) blockers.push('Windows edition/build is missing.')
   if (!manifest.identity.driverVersion.trim()) blockers.push('FM-1 driver version is missing.')
@@ -188,7 +201,7 @@ function evaluateManifest(
 }
 
 function compatiblePair(left: HardwareEvidenceManifest, right: HardwareEvidenceManifest): boolean {
-  return left.identity.firmwareVersion.trim() === right.identity.firmwareVersion.trim()
+  return left.identity.firmwareVersion.trim().toUpperCase() === right.identity.firmwareVersion.trim().toUpperCase()
     && left.identity.editorCommit.trim().toLowerCase() === right.identity.editorCommit.trim().toLowerCase()
     && left.identity.windowsVersion.trim() === right.identity.windowsVersion.trim()
 }
@@ -198,7 +211,8 @@ export function evaluateFm1DeliveryEvidence(
   options: EvaluateFm1DeliveryEvidenceOptions,
 ): Fm1DeliveryEvidenceGate {
   const expectedOrigin = normalizedOrigin(options.expectedOrigin)
-  const evaluated = values.map((value, index) => evaluateManifest(value, index, expectedOrigin))
+  const expectedFirmwareVersion = normalizedFirmware(options.expectedFirmwareVersion)
+  const evaluated = values.map((value, index) => evaluateManifest(value, index, expectedOrigin, expectedFirmwareVersion))
   const passing = evaluated.filter(({ manifest, evaluation }) => manifest !== null && evaluation.blockers.length === 0)
   const chrome = passing.filter(({ evaluation }) => evaluation.browser === 'chrome')
   const edge = passing.filter(({ evaluation }) => evaluation.browser === 'edge')
@@ -230,6 +244,7 @@ export function evaluateFm1DeliveryEvidence(
     schema: FM1_DELIVERY_EVIDENCE_SCHEMA,
     evaluatedAt: (options.evaluatedAt ?? (() => new Date()))().toISOString(),
     expectedOrigin,
+    expectedFirmwareVersion,
     ready: blockers.length === 0 && selected !== null,
     importedCount: values.length,
     chromePassingCount: chrome.length,
@@ -237,6 +252,8 @@ export function evaluateFm1DeliveryEvidence(
     selected,
     blockers,
     manifests: evaluated.map(({ evaluation }) => evaluation),
-    note: 'A ready gate means the required Chrome/Edge FM-1 physical delivery evidence is complete for the recorded origin/firmware/editor/Windows tuple. It does not validate device readback, live-parameter semantics, sequencer transfer, BLE MIDI availability or virtual-synth equivalence.',
+    note: expectedFirmwareVersion
+      ? `A ready gate means the required Chrome/Edge FM-1 physical delivery evidence is complete for the recorded origin/${expectedFirmwareVersion}/editor/Windows tuple. Sessions on other firmware remain importable compatibility evidence but cannot make this current-release gate READY. It does not validate device readback, live-parameter semantics, sequencer transfer, BLE MIDI availability or virtual-synth equivalence.`
+      : 'A ready gate means the required Chrome/Edge FM-1 physical delivery evidence is complete for the recorded origin/firmware/editor/Windows tuple. It does not validate device readback, live-parameter semantics, sequencer transfer, BLE MIDI availability or virtual-synth equivalence.',
   }
 }
