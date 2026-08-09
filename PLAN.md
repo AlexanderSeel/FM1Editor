@@ -20,7 +20,7 @@ Use [`docs/validation/fm1-hardware-test-protocol.md`](./docs/validation/fm1-hard
 
 ## 2. Device target modes
 
-Execute [`docs/validation/dx7-hardware-test-protocol.md`](./docs/validation/dx7-hardware-test-protocol.md) against a stock Yamaha DX7 and attach sanitized captures before closing either target-mode item.
+Execute [`docs/validation/dx7-hardware-test-protocol.md`](./docs/validation/dx7-hardware-test-protocol.md) against a stock Yamaha DX7 and attach sanitized captures before closing either target-mode item. The physical evidence package must include the exact recovery-bank `.syx` whose SHA-256 is recorded in the DX7 manifest before destructive testing; structural correlation now requires that `recoveryBankSha256` resolve to exactly one retained `.syx` artifact. Software acceptance for this evidence-integrity rule is recorded in [`docs/validation/dx7-recovery-bank-evidence-binding.md`](./docs/validation/dx7-recovery-bank-evidence-binding.md). This proves recovery-artifact identity only, not successful physical restoration.
 
 - [ ] Hardware-validate stock DX7 single-voice edit-buffer reception and destructive 32-voice bank reception, including MIDI channel matching, System Info, Memory Protect guidance and recovery from interrupted transfers.
 - [ ] Hardware-validate guarded voice parameters `0–155` and function parameters `64–77` on a stock DX7, including operator mask, live-change throttling, mono/poly, pitch bend, portamento and controller assignments. No programmatic dump-request frame is constructed because Yamaha's original MIDI Data Format documents none.
