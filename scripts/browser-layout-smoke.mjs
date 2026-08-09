@@ -217,7 +217,7 @@ async function checkLayout(page, viewport, channel) {
     await assertInsideViewport(control, viewport, `${channel}/${viewport.name} bank control ${index + 1}`)
   }
 
-  const pianoLabel = page.getByText('Virtual piano', { exact: true })
+  const pianoLabel = page.locator('p:visible').filter({ hasText: /^Virtual piano$/ }).first()
   await pianoLabel.waitFor({ state: 'visible' })
   await assertInsideViewport(pianoLabel, viewport, `${channel}/${viewport.name} virtual piano heading`)
 
