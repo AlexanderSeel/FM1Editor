@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react'
 import { HARDWARE_EVIDENCE_SCHEMA } from '../validation/hardwareEvidence'
+import { FM1_REVIEWED_FIRMWARE_BASELINE } from '../validation/fm1FirmwareBaseline'
 import {
   type Fm1DeliveryEvidenceFile,
 } from '../validation/fm1DeliveryEvidenceIntegrity'
@@ -66,7 +67,10 @@ export function Fm1DeliveryEvidenceGatePanel() {
   const [files, setFiles] = useState<readonly ImportedEvidence[]>([])
   const [loadError, setLoadError] = useState<string | null>(null)
   const manifestFiles = useMemo(() => files.filter((file) => isFm1HardwareManifest(file.value)), [files])
-  const gate = useMemo(() => evaluateFm1DeliveryEvidencePackageIntegrity(files, { expectedOrigin }), [expectedOrigin, files])
+  const gate = useMemo(() => evaluateFm1DeliveryEvidencePackageIntegrity(files, {
+    expectedOrigin,
+    expectedFirmwareVersion: FM1_REVIEWED_FIRMWARE_BASELINE.version,
+  }), [expectedOrigin, files])
 
   const importFiles = async (selected: FileList | null) => {
     if (!selected) return
@@ -88,7 +92,7 @@ export function Fm1DeliveryEvidenceGatePanel() {
       </summary>
       <div className="mt-3 grid gap-3">
         <p className="text-[11px] leading-5 text-slate-400">
-          Import the sanitized Chrome/Edge FM-1 manifests, their raw-MIDI correlation receipts and one physical-evidence package index per browser session. Final v3 READY requires the physical manifest checks, unique manifest-to-raw-MIDI SHA bindings and package coverage for that same manifest/raw capture plus WAV, SysEx and screen/recovery evidence. Files are hashed and inspected locally.
+          Import the sanitized Chrome/Edge FM-1 manifests, their raw-MIDI correlation receipts and one physical-evidence package index per browser session. Final v3 READY requires the physical manifest checks, unique manifest-to-raw-MIDI SHA bindings and package coverage for that same manifest/raw capture plus WAV, SysEx and screen/recovery evidence. Current-release readiness additionally requires the reviewed official FM-1 PC-firmware baseline {FM1_REVIEWED_FIRMWARE_BASELINE.version} ({FM1_REVIEWED_FIRMWARE_BASELINE.releasedAt}); evidence on other firmware remains compatibility evidence only. Files are hashed and inspected locally.
         </p>
 
         <label className="grid gap-1 text-[10px] text-slate-400">
@@ -103,6 +107,7 @@ export function Fm1DeliveryEvidenceGatePanel() {
         {loadError && <p className="rounded-lg border border-rose-300/20 bg-rose-300/5 p-2 text-[10px] text-rose-200">{loadError}</p>}
 
         <div className="rounded-lg border border-white/10 bg-black/20 p-2 text-[10px] leading-4 text-slate-400">
+          Required firmware baseline {v2.baseGate.expectedFirmwareVersion ?? 'not enforced'} · reviewed {FM1_REVIEWED_FIRMWARE_BASELINE.reviewedAt}<br />
           Imported {files.length} JSON files · FM-1 manifests {v2.manifestFileCount} · correlation receipts {v2.correlationReceiptCount} · package indexes {gate.packageIndexCount}<br />
           Manifest-complete Chrome {v2.baseGate.chromePassingCount} · Edge {v2.baseGate.edgePassingCount}<br />
           Final result <strong className={gate.ready ? 'text-emerald-200' : 'text-amber-200'}>{gate.ready ? 'READY' : 'BLOCKED'}</strong>
@@ -151,7 +156,7 @@ export function Fm1DeliveryEvidenceGatePanel() {
           <button className="rounded-lg border border-emerald-300/20 px-3 py-2 text-xs font-semibold text-emerald-200 disabled:opacity-40" disabled={files.length === 0} onClick={() => saveGate(gate, files)} type="button">Export v3 gate receipt</button>
           <button className="rounded-lg border border-white/10 px-3 py-2 text-xs font-semibold text-slate-300 disabled:opacity-40" disabled={files.length === 0} onClick={() => { setFiles([]); setLoadError(null) }} type="button">Clear imported evidence</button>
         </div>
-        <p className="text-[10px] leading-4 text-slate-500">The exported v3 receipt contains validation results, source filenames, SHA-256 identities and package artifact identities only. Imported manifests, raw MIDI payloads, SysEx bytes and WAV content are not embedded. Package/hash correlation proves evidence linkage and coverage, not hardware behavior.</p>
+        <p className="text-[10px] leading-4 text-slate-500">The exported v3 receipt contains validation results, required firmware baseline, source filenames, SHA-256 identities and package artifact identities only. Imported manifests, raw MIDI payloads, SysEx bytes and WAV content are not embedded. Package/hash correlation proves evidence linkage and coverage, not hardware behavior.</p>
       </div>
     </details>
   )
