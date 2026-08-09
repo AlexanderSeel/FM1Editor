@@ -98,9 +98,36 @@ describe('FM-1 delivery evidence gate', () => {
 
     expect(gate.ready).toBe(true)
     expect(gate.blockers).toEqual([])
+    expect(gate.expectedFirmwareVersion).toBeNull()
     expect(gate.chromePassingCount).toBe(1)
     expect(gate.edgePassingCount).toBe(1)
     expect(gate.selected).toMatchObject({ firmwareVersion: '1.0.0', editorCommit: COMMIT })
+  })
+
+  it('requires the reviewed current-release firmware when an expected baseline is supplied', () => {
+    const chromeV14 = manifest('chrome', { identity: { ...manifest('chrome').identity, firmwareVersion: 'V14' } })
+    const edgeV14 = manifest('edge', { identity: { ...manifest('edge').identity, firmwareVersion: 'v14' } })
+    const blocked = evaluateFm1DeliveryEvidence([chromeV14, edgeV14], {
+      expectedOrigin: ORIGIN,
+      expectedFirmwareVersion: ' v15 ',
+    })
+
+    expect(blocked.ready).toBe(false)
+    expect(blocked.expectedFirmwareVersion).toBe('V15')
+    expect(blocked.chromePassingCount).toBe(0)
+    expect(blocked.edgePassingCount).toBe(0)
+    expect(blocked.manifests[0]?.blockers).toContain('FM-1 firmware V14 does not match the required current-release baseline V15.')
+
+    const chromeV15 = manifest('chrome', { identity: { ...manifest('chrome').identity, firmwareVersion: 'V15' } })
+    const edgeV15 = manifest('edge', { identity: { ...manifest('edge').identity, firmwareVersion: 'v15' } })
+    const ready = evaluateFm1DeliveryEvidence([chromeV15, edgeV15], {
+      expectedOrigin: ORIGIN,
+      expectedFirmwareVersion: 'V15',
+    })
+
+    expect(ready.ready).toBe(true)
+    expect(ready.expectedFirmwareVersion).toBe('V15')
+    expect(ready.selected?.firmwareVersion).toBe('V15')
   })
 
   it('rejects browser sessions that do not share the same tested editor commit', () => {
