@@ -11,6 +11,7 @@ import {
 } from '../validation/physicalEvidenceConsistency'
 
 const JSON_INSPECTION_LIMIT_BYTES = 16 * 1024 * 1024
+const SYSEX_INSPECTION_LIMIT_BYTES = 1024 * 1024
 
 function bytesToHex(bytes: Uint8Array): string {
   return Array.from(bytes, (value) => value.toString(16).padStart(2, '0')).join('')
@@ -33,15 +34,22 @@ async function inspectJson(file: File): Promise<unknown | undefined> {
   }
 }
 
+async function inspectSysex(file: File): Promise<readonly number[] | undefined> {
+  if (!file.name.toLowerCase().endsWith('.syx') || file.size > SYSEX_INSPECTION_LIMIT_BYTES) return undefined
+  return Array.from(new Uint8Array(await file.arrayBuffer()))
+}
+
 async function prepareArtifact(file: File): Promise<PhysicalEvidenceArtifactInput> {
   const sha256 = await sha256File(file)
   const jsonValue = await inspectJson(file)
+  const sysexBytes = await inspectSysex(file)
   return {
     name: file.name,
     sizeBytes: file.size,
     mimeType: file.type,
     sha256,
     ...(jsonValue === undefined ? {} : { jsonValue }),
+    ...(sysexBytes === undefined ? {} : { sysexBytes }),
   }
 }
 
@@ -86,7 +94,7 @@ export function PhysicalEvidencePackagePanel() {
       </summary>
       <div className="mt-3 grid gap-3">
         <p className="text-[11px] leading-5 text-slate-400">
-          Hash a sanitized physical-test file set locally and export a reproducible package index. File bytes are never uploaded or embedded in the manifest; only filename, size, MIME type, SHA-256, classification and schema hints are retained.
+          Hash a sanitized physical-test file set locally and export a reproducible package index. File bytes are never uploaded or embedded in the manifest; only filename, size, MIME type, SHA-256, classification and schema hints are retained. Small .syx files are inspected in browser memory only so an FM-1 merged-bank capture can be bound to the exact transmitted payload.
         </p>
 
         <div className="grid gap-2 sm:grid-cols-[150px_1fr]">
@@ -150,6 +158,7 @@ export function PhysicalEvidencePackagePanel() {
                 {consistency.links.map((link) => (
                   <p className="text-[9px] leading-4 text-slate-400" key={`${link.target}-${link.manifestName}`}>
                     <span className="font-semibold text-slate-300">{link.manifestName}</span> → {link.matchedMidiMonitorName ?? 'no unique raw capture'}
+                    {link.matchedBankSysexName ? ` → bank ${link.matchedBankSysexName}` : ''}
                     {link.summaryMismatchFields.length > 0 ? ` · differs: ${link.summaryMismatchFields.join(', ')}` : ''}
                   </p>
                 ))}
@@ -164,7 +173,7 @@ export function PhysicalEvidencePackagePanel() {
                 ))}
               </ul>
             )}
-            <p className="mt-2 text-[9px] leading-4 text-slate-500">Structural consistency only: matching raw MIDI summary metadata can catch mixed-up files, but it cannot validate tester observations, device-screen behavior, audio content or a PLAN item.</p>
+            <p className="mt-2 text-[9px] leading-4 text-slate-500">Structural consistency only: matching raw MIDI summary metadata and exact bank bytes can catch mixed-up files, but it cannot validate tester observations, device-screen behavior, audio content or a PLAN item.</p>
           </div>
         )}
 
@@ -203,7 +212,7 @@ export function PhysicalEvidencePackagePanel() {
             Clear package
           </button>
         </div>
-        <p className="text-[10px] leading-4 text-slate-500">Export both the package index and correlation receipt for closure evidence. Warnings describe package coverage only. A complete-looking or structurally consistent file set is not proof that any physical check passed; the target-specific evidence manifests and protocols remain authoritative.</p>
+        <p className="text-[10px] leading-4 text-slate-500">Export both the package index and correlation receipt for closure evidence. For FM-1 sessions containing an outgoing standard Yamaha bank, the receipt must bind that captured payload to one exact .syx artifact. Warnings describe package coverage only. A complete-looking or structurally consistent file set is not proof that any physical check passed; the target-specific evidence manifests and protocols remain authoritative.</p>
       </div>
     </details>
   )
