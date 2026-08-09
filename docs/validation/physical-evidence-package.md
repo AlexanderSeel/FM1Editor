@@ -14,7 +14,7 @@ Physical sessions can produce several artifacts that should remain correlated ev
 - parameter/function matrices and failure/recovery notes;
 - the compact FM-1 Chrome/Edge delivery-gate receipt when applicable.
 
-Select the sanitized files in **MIDI monitor → Physical evidence package** and choose `FM-1`, `Stock DX7` or `Mixed`. The browser hashes files locally with Web Crypto SHA-256. Nothing is uploaded. Small `.syx` files are also read locally into browser memory so an FM-1 outgoing 4,104-byte Yamaha bank message can be compared byte-for-byte with the retained transmitted-bank artifact. Those temporary bytes are not serialized into either exported receipt.
+Select the sanitized files in **MIDI monitor → Physical evidence package** and choose `FM-1`, `Stock DX7` or `Mixed`. The browser hashes files locally with Web Crypto SHA-256. Nothing is uploaded. Small `.syx` files are also read locally into browser memory so an FM-1 outgoing 4,104-byte Yamaha bank message can be compared byte-for-byte with the retained transmitted-bank artifact. Stock-DX7 recovery binding relies on the file SHA-256 and therefore does not require interpreting the recovery payload. Temporary bytes are not serialized into either exported receipt.
 
 ## Exported schemas
 
@@ -35,7 +35,7 @@ The raw-MIDI structural correlation receipt uses schema:
 
 `fm1-editor.physical-evidence-consistency.v1`
 
-It records only the selected package target, structural issue codes/messages, summary mismatch field names, the filename/SHA-256 pairs for target manifests and uniquely matched raw MIDI exports, and—when an FM-1 session contains outgoing Yamaha bank traffic—the filename/SHA-256 of the one retained `.syx` artifact whose bytes exactly match that captured bank payload. It does **not** contain MIDI event IDs, raw message bytes, SysEx payload bytes, audio, screenshots or parsed hardware-manifest payloads.
+It records only the selected package target, structural issue codes/messages, summary mismatch field names and filename/SHA-256 identities. For an FM-1 session containing outgoing Yamaha bank traffic it can record the one retained `.syx` artifact whose bytes exactly match that captured bank payload. For a stock-DX7 session it records the one retained `.syx` artifact whose SHA-256 exactly matches the manifest `recoveryBankSha256`. It does **not** contain MIDI event IDs, raw message bytes, SysEx payload bytes, audio, screenshots or parsed hardware-manifest payloads.
 
 Both exports are evidence metadata. Neither proves physical device behavior.
 
@@ -70,8 +70,10 @@ It also checks manifest-local invariants written by the recorder:
 
 - FM-1 target identity, `sysexEnabled`, and selected input/output strings must agree with the embedded MIDI summary;
 - stock-DX7 selected input/output arrays must agree with the embedded MIDI summary;
-- DX7 recovery-bank SHA-256 must remain valid;
+- DX7 recovery-bank SHA-256 must be a valid SHA-256 identity **and resolve to exactly one selected `.syx` artifact with that hash**;
 - editor commit identity and FM-1 firmware / DX7 model identity are flagged when they are missing or not sufficiently pinned.
+
+### FM-1 transmitted-bank binding
 
 For an FM-1 manifest whose MIDI summary records one or more recognized outgoing Yamaha 32-voice banks, the correlation review additionally requires an unambiguous bank payload:
 
@@ -80,11 +82,20 @@ For an FM-1 manifest whose MIDI summary records one or more recognized outgoing 
 - the unique captured bank payload must match exactly one selected `.syx` artifact byte-for-byte;
 - zero matching `.syx` artifacts or duplicate matching artifacts are reported as structural errors.
 
+### Stock-DX7 recovery-bank binding
+
+Every stock-DX7 hardware manifest records `identity.recoveryBankSha256` before destructive bank testing. Structural consistency now requires that identity to resolve to **exactly one** retained `.syx` artifact in the selected evidence set:
+
+- no matching `.syx` is an error because the recorded recovery identity is not backed by the actual recovery artifact;
+- more than one `.syx` with that same hash is treated as ambiguous so the receipt cannot silently choose a filename;
+- exactly one match records its filename and SHA-256 in the correlation link;
+- the validator does not infer whether that bank is correct for the device or whether restoration succeeded—the stock-DX7 physical `bank-recovery` check remains authoritative.
+
 If no raw export matches, the helper shows the closest candidate and the summary fields that differ. If more than one raw export matches the same manifest, linkage is considered ambiguous rather than silently choosing one. Unlinked raw MIDI exports are also reported.
 
-The **Export correlation receipt** action persists this result and binds each successful manifest/raw-capture link to the SHA-256 values calculated from the currently selected files. For FM-1 bank sessions it also persists the exact matching bank `.syx` filename/SHA-256. The receipt may also be exported for a failed or incomplete session so the inconsistency itself remains reviewable.
+The **Export correlation receipt** action persists this result and binds each successful manifest/raw-capture link to the SHA-256 values calculated from the currently selected files. For FM-1 bank sessions it also persists the exact matching transmitted-bank `.syx` filename/SHA-256. For stock-DX7 sessions it persists the exact recovery-bank `.syx` filename/SHA-256. The receipt may also be exported for a failed or incomplete session so the inconsistency itself remains reviewable.
 
-This is **structural correlation only**. Matching summaries and bank bytes are evidence that the selected files correspond to the same captured data; they do not prove what the hardware did, that the device accepted a message, that audio is correct, or that a tester-entered PASS is valid.
+This is **structural correlation only**. Matching summaries and artifact identities are evidence that the selected evidence set is internally consistent; they do not prove what the hardware did, that the device accepted/restored a message, that audio is correct, or that a tester-entered PASS is valid.
 
 ## FM-1 delivery gate v2/v3 linkage
 
@@ -120,7 +131,7 @@ Warnings are coverage hints, not physical failures. Depending on the selected ta
 - an FM-1 WAV artifact for FM-1/mixed packages;
 - a screenshot or text timeline/notes artifact.
 
-Identical SHA-256 values under multiple filenames are also reported for duplicate review.
+Identical SHA-256 values under multiple filenames are also reported for duplicate review. For stock-DX7 evidence, duplicate files matching the declared recovery hash are additionally a structural ambiguity until one canonical recovery artifact remains in the selected set.
 
 A package may legitimately retain warnings or correlation errors when it covers only one protocol section or records a failed session. Conversely, a warning-free and structurally consistent package does not prove that any hardware check passed.
 
@@ -129,8 +140,8 @@ A package may legitimately retain warnings or correlation errors when it covers 
 1. Keep unsanitized physical captures outside the repository while testing.
 2. Review filenames, tester/device identifiers, screenshots and notes for privacy-sensitive content.
 3. Export the target-specific hardware manifest **without clearing the MIDI monitor**, then export the raw MIDI JSON from that same captured session.
-4. Add the exact transmitted `.syx`, WAV, screenshots/timeline and matrices/notes to a sanitized folder. For FM-1 merged-bank delivery, the `.syx` must be the exact file whose bytes were sent in the captured session.
-5. Run **Physical evidence package** over that exact sanitized file set and review package-coverage warnings, the raw-MIDI correlation result and the FM-1 bank→`.syx` binding when bank output is present.
+4. Add the relevant `.syx`, WAV, screenshots/timeline and matrices/notes to a sanitized folder. For FM-1 merged-bank delivery, the `.syx` must be the exact file whose bytes were sent in the captured session. For stock-DX7 destructive bank testing, include the exact recovery `.syx` whose SHA-256 was recorded in the manifest before testing.
+5. Run **Physical evidence package** over that exact sanitized file set and review package-coverage warnings, raw-MIDI correlation, FM-1 bank→`.syx` binding when bank output is present, and stock-DX7 recovery-bank binding when applicable.
 6. Resolve accidental mixed-session, multiple-bank-payload or ambiguous raw-capture/artifact errors before proposing closure. Do not alter legitimate failed observations merely to make the package look green.
 7. Export **both** the package index and the correlation receipt from the same selected file set. Retain the raw sanitized files with those receipts externally, or commit only the artifacts appropriate for the repository.
 8. For FM-1 Chrome/Edge delivery, repeat this for both browser sessions and then export the final **v3 delivery gate receipt** from both manifests, both correlation receipts and both package indexes.
@@ -138,4 +149,4 @@ A package may legitimately retain warnings or correlation errors when it covers 
 
 ## Security and evidence boundary
 
-Hashing, JSON inspection and temporary `.syx` byte comparison happen locally in the browser. The helper does not upload selected files, does not serialize raw `.syx` bytes into the metadata receipts, does not decode unknown FM-1 SysEx semantics and does not claim that an FM-1/DX7 accepted any message. Physical support status changes only from repeatable observations collected under the corresponding hardware protocol.
+Hashing, JSON inspection and temporary `.syx` byte comparison happen locally in the browser. The helper does not upload selected files, does not serialize raw `.syx` bytes into metadata receipts, does not decode unknown FM-1/DX7 SysEx semantics and does not claim that an FM-1/DX7 accepted or restored any message. Physical support status changes only from repeatable observations collected under the corresponding hardware protocol.
