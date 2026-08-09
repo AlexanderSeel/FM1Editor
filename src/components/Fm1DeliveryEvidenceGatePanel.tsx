@@ -18,7 +18,6 @@ interface ImportedEvidence extends Fm1DeliveryEvidenceFile {
 }
 
 const DEFAULT_PAGES_ORIGIN = 'https://alexanderseel.github.io'
-const MISSING_FIRMWARE_BLOCKER = 'Expected FM-1 device firmware is required for current-release delivery. Re-check the official download center, then enter the exact firmware identity shown by the device under test.'
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
@@ -74,20 +73,11 @@ export function Fm1DeliveryEvidenceGatePanel() {
   const [loadError, setLoadError] = useState<string | null>(null)
   const manifestFiles = useMemo(() => files.filter((file) => isFm1HardwareManifest(file.value)), [files])
   const normalizedExpectedFirmware = normalizeFm1FirmwareVersion(expectedFirmwareVersion)
-  const gate = useMemo(() => {
-    const evaluated = evaluateFm1DeliveryEvidencePackageIntegrity(files, {
-      expectedOrigin,
-      expectedFirmwareVersion: normalizedExpectedFirmware || undefined,
-    })
-    if (normalizedExpectedFirmware) return evaluated
-    return {
-      ...evaluated,
-      ready: false,
-      selected: null,
-      blockers: [MISSING_FIRMWARE_BLOCKER, ...evaluated.blockers],
-      note: `${MISSING_FIRMWARE_BLOCKER} ${evaluated.note}`,
-    }
-  }, [expectedOrigin, files, normalizedExpectedFirmware])
+  const gate = useMemo(() => evaluateFm1DeliveryEvidencePackageIntegrity(files, {
+    expectedOrigin,
+    expectedFirmwareVersion: normalizedExpectedFirmware || undefined,
+    requireExpectedFirmwareVersion: true,
+  }), [expectedOrigin, files, normalizedExpectedFirmware])
 
   const importFiles = async (selected: FileList | null) => {
     if (!selected) return
@@ -119,7 +109,7 @@ export function Fm1DeliveryEvidenceGatePanel() {
 
         <label className="grid gap-1 text-[10px] text-slate-400">
           Expected FM-1 device firmware for this release session
-          <input className="rounded-lg border border-white/10 bg-black/20 px-2 py-1.5 text-xs text-white" onChange={(event) => setExpectedFirmwareVersion(event.target.value)} placeholder="Enter exact device firmware, e.g. V14" spellCheck={false} value={expectedFirmwareVersion} />
+          <input className="rounded-lg border border-white/10 bg-black/20 px-2 py-1.5 text-xs text-white" onChange={(event) => setExpectedFirmwareVersion(event.target.value)} placeholder="Enter exact device firmware shown by the unit" spellCheck={false} value={expectedFirmwareVersion} />
           <span className="text-[9px] leading-4 text-slate-500">Required for current-release READY. Official snapshot reviewed {FM1_REVIEWED_FIRMWARE_SNAPSHOT.reviewedAt}: {officialFm1FirmwareSnapshotSummary()}. Do not infer the device version from either download label.</span>
         </label>
 
