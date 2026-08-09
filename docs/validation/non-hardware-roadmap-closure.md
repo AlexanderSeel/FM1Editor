@@ -1,6 +1,6 @@
 # Non-hardware roadmap closure
 
-Roadmap boundary head: `d2b04526a0fd74380e574136237cd1e76daef206`
+Roadmap boundary source: `d2b04526a0fd74380e574136237cd1e76daef206`
 
 Status: **REPOSITORY-SIDE NON-EXTERNAL WORK CLOSED**
 
@@ -16,7 +16,7 @@ The exact Git comparison from `2ed077268368fc0b64ee8416a03db74dc3581a4f` through
 - `docs/research/additional-patch-providers.md`;
 - `docs/validation/reconstruction-accelerator-contract.md`.
 
-No application source, test, package, build configuration or generated runtime asset changed in that range. A temporary one-shot roadmap workflow was created/adjusted while attempting a fresh acceptance receipt, did not emit a receipt, and was removed; no fresh CI result is claimed for the documentation-only closure.
+No application source, test, package, build configuration or generated runtime asset changed in that range. A temporary one-shot roadmap workflow was created/adjusted while attempting a fresh acceptance receipt, did not emit a receipt, and was removed; no fresh CI result is claimed for the documentation-only closure. The subsequent commits add this receipt and link it from `PLAN.md` only.
 
 ## Closed non-external roadmap items
 
