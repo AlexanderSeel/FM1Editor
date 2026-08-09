@@ -15,6 +15,7 @@ const A = 'a'.repeat(64)
 const B = 'b'.repeat(64)
 const C = 'c'.repeat(64)
 const D = 'd'.repeat(64)
+const RECOVERY_SHA = 'f'.repeat(64)
 
 function entry(
   id: string,
@@ -34,7 +35,7 @@ function artifact(name: string, sha256: string, jsonValue: unknown) {
   return { name, sizeBytes: 123, mimeType: 'application/json', sha256, jsonValue }
 }
 
-function sysexArtifact(name: string, sha256: string, bytes: readonly number[]) {
+function sysexArtifact(name: string, sha256: string, bytes: readonly number[] = []) {
   return { name, sizeBytes: bytes.length, mimeType: 'application/octet-stream', sha256, sysexBytes: bytes }
 }
 
@@ -93,6 +94,35 @@ function fm1Manifest(entries: readonly MidiMonitorEntry[]): HardwareEvidenceMani
     checks: {},
     sessionNotes: '',
     disclaimer: 'Physical evidence manifest only; check statuses are tester observations and are not software-derived hardware passes.',
+  }
+}
+
+function dx7Manifest(entries: readonly MidiMonitorEntry[], overrides: { selectedOutputs?: readonly string[]; recoveryBankSha256?: string } = {}) {
+  const midiCapture = summarizeHardwareMidiCapture(entries)
+  return {
+    schema: DX7_HARDWARE_EVIDENCE_SCHEMA,
+    createdAt: '2026-08-08T12:00:00.000Z',
+    identity: {
+      tester: 'AS',
+      modelRevision: 'Yamaha DX7',
+      hardwareIdentity: 'unit-a',
+      romVersion: '1.8',
+      editorCommit: '1234567',
+      windowsVersion: 'Windows 11',
+      browserVersion: 'Edge 151',
+      midiInterface: 'USB MIDI',
+      driverVersion: 'class compliant',
+      receiveChannel: 1,
+      systemInfoState: 'enabled' as const,
+      memoryProtectState: 'enabled' as const,
+      recoveryBankSha256: overrides.recoveryBankSha256 ?? RECOVERY_SHA,
+    },
+    selectedMidiInputs: midiCapture.inputPorts,
+    selectedMidiOutputs: overrides.selectedOutputs ?? midiCapture.outputPorts,
+    midiCapture,
+    checks: { 'bank-reception': { status: 'fail' as const, notes: '' } },
+    sessionNotes: '',
+    disclaimer: 'Stock DX7 physical evidence manifest only; result states are tester observations and are not software-derived hardware passes.' as const,
   }
 }
 
@@ -224,41 +254,71 @@ describe('physical evidence consistency', () => {
     expect(report.issues.some((issue) => issue.code === 'midi-link-ambiguous')).toBe(true)
   })
 
-  it('checks DX7 selected ports and recovery-bank identity without interpreting physical PASS states', () => {
+  it('binds a stock-DX7 recoveryBankSha256 to exactly one retained sysex artifact', () => {
     const entries = [entry('1', 1000, 'out', 'DX7 Interface', [0x90, 60, 100])]
-    const midiCapture = summarizeHardwareMidiCapture(entries)
-    const dx7 = {
-      schema: DX7_HARDWARE_EVIDENCE_SCHEMA,
-      createdAt: '2026-08-08T12:00:00.000Z',
-      identity: {
-        tester: 'AS',
-        modelRevision: 'Yamaha DX7',
-        hardwareIdentity: 'unit-a',
-        romVersion: '1.8',
-        editorCommit: '1234567',
-        windowsVersion: 'Windows 11',
-        browserVersion: 'Edge 151',
-        midiInterface: 'USB MIDI',
-        driverVersion: 'class compliant',
-        receiveChannel: 1,
-        systemInfoState: 'enabled',
-        memoryProtectState: 'enabled',
-        recoveryBankSha256: 'f'.repeat(64),
-      },
-      selectedMidiInputs: [],
-      selectedMidiOutputs: ['WRONG PORT'],
-      midiCapture,
-      checks: { 'bank-reception': { status: 'fail', notes: '' } },
-      sessionNotes: '',
-      disclaimer: 'Stock DX7 physical evidence manifest only; result states are tester observations and are not software-derived hardware passes.',
-    }
     const report = validatePhysicalEvidenceConsistency([
-      artifact('dx7.json', A, dx7),
+      artifact('dx7.json', A, dx7Manifest(entries)),
+      artifact('capture.json', B, monitor(entries)),
+      sysexArtifact('recovery-bank.syx', RECOVERY_SHA),
+    ], 'dx7')
+
+    expect(report.structurallyConsistent).toBe(true)
+    expect(report.links[0]).toMatchObject({
+      matchedRecoveryBankSysexName: 'recovery-bank.syx',
+      matchedRecoveryBankSysexSha256: RECOVERY_SHA,
+    })
+  })
+
+  it('blocks stock-DX7 evidence when the declared recovery bank artifact is missing', () => {
+    const entries = [entry('1', 1000, 'out', 'DX7 Interface', [0x90, 60, 100])]
+    const report = validatePhysicalEvidenceConsistency([
+      artifact('dx7.json', A, dx7Manifest(entries)),
       artifact('capture.json', B, monitor(entries)),
     ], 'dx7')
 
-    expect(report.issues.some((issue) => issue.code === 'dx7-selected-output-mismatch')).toBe(true)
+    expect(report.structurallyConsistent).toBe(false)
+    expect(report.issues.some((issue) => issue.code === 'dx7-recovery-bank-artifact-missing')).toBe(true)
+    expect(report.links[0]).toMatchObject({ matchedRecoveryBankSysexName: null, matchedRecoveryBankSysexSha256: null })
+  })
+
+  it('blocks stock-DX7 evidence when the recovery hash resolves to duplicate sysex artifacts', () => {
+    const entries = [entry('1', 1000, 'out', 'DX7 Interface', [0x90, 60, 100])]
+    const report = validatePhysicalEvidenceConsistency([
+      artifact('dx7.json', A, dx7Manifest(entries)),
+      artifact('capture.json', B, monitor(entries)),
+      sysexArtifact('recovery-a.syx', RECOVERY_SHA),
+      sysexArtifact('recovery-b.syx', RECOVERY_SHA),
+    ], 'dx7')
+
+    expect(report.structurallyConsistent).toBe(false)
+    expect(report.issues.some((issue) => issue.code === 'dx7-recovery-bank-artifact-ambiguous')).toBe(true)
+  })
+
+  it('records DX7 recovery artifact identity without embedding sysex bytes or interpreting physical PASS states', () => {
+    const entries = [entry('raw-dx7-id', 1000, 'out', 'DX7 Interface', [0x90, 60, 100])]
+    const report = validatePhysicalEvidenceConsistency([
+      artifact('dx7.json', A, dx7Manifest(entries)),
+      artifact('capture.json', B, monitor(entries)),
+      sysexArtifact('recovery-bank.syx', RECOVERY_SHA, [0xf0, 0x43, 0xf7]),
+    ], 'dx7')
+    const serialized = serializePhysicalEvidenceConsistencyReport(report)
+
+    expect(report.structurallyConsistent).toBe(true)
+    expect(serialized).toContain(`"matchedRecoveryBankSysexSha256": "${RECOVERY_SHA}"`)
+    expect(serialized).not.toContain('raw-dx7-id')
+    expect(serialized).not.toContain('240,67,247')
     expect(report.issues.some((issue) => issue.message.includes('PASS'))).toBe(false)
+  })
+
+  it('still detects DX7 selected-port mismatches independently of recovery artifact identity', () => {
+    const entries = [entry('1', 1000, 'out', 'DX7 Interface', [0x90, 60, 100])]
+    const report = validatePhysicalEvidenceConsistency([
+      artifact('dx7.json', A, dx7Manifest(entries, { selectedOutputs: ['WRONG PORT'] })),
+      artifact('capture.json', B, monitor(entries)),
+      sysexArtifact('recovery-bank.syx', RECOVERY_SHA),
+    ], 'dx7')
+
+    expect(report.issues.some((issue) => issue.code === 'dx7-selected-output-mismatch')).toBe(true)
   })
 
   it('requires target-specific manifests and a structurally valid raw MIDI export', () => {
