@@ -154,7 +154,7 @@ async function checkDx7Layout(page, viewport, channel) {
   assert(await enableFunctionWrites.isDisabled(), `${channel}/${viewport.name} function writes must remain locked without output, SysEx and hardware confirmations.`)
   await assertInsideViewport(enableFunctionWrites, viewport, `${channel}/${viewport.name} enable function writes`)
 
-  const pianoHeading = page.getByText('Virtual piano', { exact: true })
+  const pianoHeading = page.locator('p:visible').filter({ hasText: /^Virtual piano$/ }).first()
   await pianoHeading.waitFor({ state: 'visible' })
   await assertInsideViewport(pianoHeading, viewport, `${channel}/${viewport.name} virtual piano heading`)
 
