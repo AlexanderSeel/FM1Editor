@@ -21,7 +21,8 @@ export interface Fm1DeliveryEvidenceGate {
   readonly schema: typeof FM1_DELIVERY_EVIDENCE_SCHEMA
   readonly evaluatedAt: string
   readonly expectedOrigin: string
-  readonly expectedFirmwareVersion: string | null
+  /** Present on current evaluator output. Optional so historical v1 receipt-shaped callers remain source-compatible. */
+  readonly expectedFirmwareVersion?: string | null
   readonly ready: boolean
   readonly importedCount: number
   readonly chromePassingCount: number
