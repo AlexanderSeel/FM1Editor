@@ -162,9 +162,10 @@ function Get-PackageVersion([string]$PackageJsonPath) {
 
 function Repair-WindowsNativePackages {
     $requirements = @(
-        @{ Path = 'node_modules/@rollup/rollup-win32-x64-msvc'; Package = '@rollup/rollup-win32-x64-msvc'; VersionFile = 'node_modules/rollup/package.json' },
-        @{ Path = 'node_modules/@tailwindcss/oxide-win32-x64-msvc'; Package = '@tailwindcss/oxide-win32-x64-msvc'; VersionFile = 'node_modules/@tailwindcss/oxide/package.json' },
-        @{ Path = 'node_modules/@esbuild/win32-x64'; Package = '@esbuild/win32-x64'; VersionFile = 'node_modules/esbuild/package.json' }
+        # Vite 8 uses Rolldown rather than Rollup. Keep these in sync with the
+        # optionalDependencies of the installed build tools.
+        @{ Path = 'node_modules/@rolldown/binding-win32-x64-msvc'; Package = '@rolldown/binding-win32-x64-msvc'; VersionFile = 'node_modules/rolldown/package.json' },
+        @{ Path = 'node_modules/@tailwindcss/oxide-win32-x64-msvc'; Package = '@tailwindcss/oxide-win32-x64-msvc'; VersionFile = 'node_modules/@tailwindcss/oxide/package.json' }
     )
 
     $missing = @($requirements | Where-Object { -not (Test-Path -LiteralPath $_.Path -PathType Container) })
@@ -252,7 +253,9 @@ function New-DistArchive {
     $resolvedDist = (Resolve-Path -LiteralPath $LocalDistDir).Path
     $archive = Join-Path ([System.IO.Path]::GetTempPath()) ("fm1editor-dist-{0}.tar.gz" -f [guid]::NewGuid().ToString('N'))
     Write-Info "Packaging $LocalDistDir..."
-    Invoke-Native tar -czf $archive -C $resolvedDist .
+    # Pass tar flags as an array: otherwise PowerShell binds tar's -C option to
+    # Invoke-Native's -Command parameter before the native command is invoked.
+    Invoke-Native 'tar' @('-czf', $archive, '-C', $resolvedDist, '.')
     Write-Success 'Distribution archive created.'
     return $archive
 }
